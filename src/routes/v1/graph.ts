@@ -1,6 +1,20 @@
 import type { FastifyPluginAsync } from "fastify";
 import { all, run } from "../../lib/duckdb.js";
 
+function toSafeNumber(value: unknown): number {
+  if (typeof value === "bigint") {
+    return Number(value);
+  }
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
 export const graphRoutes: FastifyPluginAsync = async (app) => {
   const storageBackend = (app as any).storageBackend ?? "duckdb";
   const duck = (app as any).duck as { conn: unknown } | undefined;
@@ -18,8 +32,8 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const nodeRows = await all((duck as any).conn, "SELECT COUNT(*) as c FROM events WHERE kind = 'graph.node'");
     const edgeRows = await all((duck as any).conn, "SELECT COUNT(*) as c FROM events WHERE kind = 'graph.edge'");
     return {
-      nodeCount: (nodeRows[0] as any)?.c ?? 0,
-      edgeCount: (edgeRows[0] as any)?.c ?? 0,
+      nodeCount: toSafeNumber((nodeRows[0] as any)?.c),
+      edgeCount: toSafeNumber((edgeRows[0] as any)?.c),
       storageBackend: "duckdb",
     };
   });

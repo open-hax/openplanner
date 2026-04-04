@@ -214,3 +214,65 @@ test("ChatGPT import job ingests events into DuckDB and is searchable", async ()
     }
   });
 });
+
+test("graph stats serializes DuckDB counts as JSON-safe numbers", async () => {
+  await withTempDir(async (dir) => {
+    const cfg = testConfig(dir);
+    const app = await buildApp(cfg);
+    try {
+      const ingestRes = await app.inject({
+        method: "POST",
+        url: "/v1/events",
+        headers: {
+          ...authHeader(cfg.apiKey),
+          "content-type": "application/json",
+        },
+        payload: JSON.stringify({
+          events: [
+            {
+              schema: "openplanner.event.v1",
+              id: "graph.node:test",
+              ts: "2026-04-04T18:00:00Z",
+              source: "test-suite",
+              kind: "graph.node",
+              text: "hello graph",
+              extra: {
+                url: "https://example.com/test",
+                title: "test",
+              },
+            },
+            {
+              schema: "openplanner.event.v1",
+              id: "graph.edge:test",
+              ts: "2026-04-04T18:00:00Z",
+              source: "test-suite",
+              kind: "graph.edge",
+              text: "https://example.com/test -> https://example.com/next",
+              extra: {
+                source: "https://example.com/test",
+                target: "https://example.com/next",
+              },
+            },
+          ],
+        }),
+      });
+
+      assert.equal(ingestRes.statusCode, 200);
+
+      const statsRes = await app.inject({
+        method: "GET",
+        url: "/v1/graph/stats",
+        headers: authHeader(cfg.apiKey),
+      });
+
+      assert.equal(statsRes.statusCode, 200);
+      const body = statsRes.json();
+      assert.equal(typeof body.nodeCount, "number");
+      assert.equal(typeof body.edgeCount, "number");
+      assert.equal(body.nodeCount, 1);
+      assert.equal(body.edgeCount, 1);
+    } finally {
+      await app.close();
+    }
+  });
+});
