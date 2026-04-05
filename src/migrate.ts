@@ -16,6 +16,7 @@
 
 import { loadConfig } from "./lib/config.js";
 import { openDuckDB, type Duck } from "./lib/duckdb.js";
+import { paths } from "./lib/paths.js";
 import { openMongoDB, closeMongoDB, type MongoConnection } from "./lib/mongodb.js";
 import {
   exportDuckDBToJsonl,
@@ -32,6 +33,7 @@ async function main(): Promise<void> {
   const command = args[0] ?? "status";
   const dryRun = args.includes("--dry-run");
   const cfg = loadConfig();
+  const pathConfig = paths(cfg.dataDir);
 
   console.log(`[migrate] Storage backend: ${cfg.storageBackend}`);
   console.log(`[migrate] Data directory: ${cfg.dataDir}`);
@@ -50,7 +52,7 @@ async function main(): Promise<void> {
 
     try {
       if (cfg.storageBackend === "duckdb" || args.includes("--from-duckdb")) {
-        duck = await openDuckDB(`${cfg.dataDir}/openplanner.duckdb`);
+        duck = await openDuckDB(pathConfig.dbPath);
       }
       if (cfg.storageBackend === "mongodb" || args.includes("--to-mongo")) {
         mongo = await openMongoDB(cfg.mongodb);
@@ -79,7 +81,7 @@ async function main(): Promise<void> {
 
   if (command === "export-jsonl") {
     const outputDir = args[1] ?? `${cfg.dataDir}/export`;
-    const duck = await openDuckDB(`${cfg.dataDir}/openplanner.duckdb`);
+    const duck = await openDuckDB(pathConfig.dbPath);
     try {
       const result = await exportDuckDBToJsonl(duck, outputDir);
       console.log(`[migrate] Export complete: events=${result.eventsFile} memories=${result.memoriesFile}`);
@@ -96,8 +98,8 @@ async function main(): Promise<void> {
 
   try {
     if (needsDuck) {
-      duck = await openDuckDB(`${cfg.dataDir}/openplanner.duckdb`);
-      console.log(`[migrate] DuckDB opened: ${cfg.dataDir}/openplanner.duckdb`);
+      duck = await openDuckDB(pathConfig.dbPath);
+      console.log(`[migrate] DuckDB opened: ${pathConfig.dbPath}`);
     }
     if (needsMongo) {
       mongo = await openMongoDB(cfg.mongodb);

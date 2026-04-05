@@ -133,7 +133,7 @@ export async function migrateDuckDBToMongoDB(
     const rows = await all(duck.conn, `
       SELECT id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
       FROM events
-      ORDER BY ts ASC
+      ORDER BY ts ASC, id ASC
       LIMIT ? OFFSET ?
     `, [batchSize, offset]);
 
@@ -160,7 +160,22 @@ export async function migrateDuckDBToMongoDB(
         updatedAt: new Date(),
       }));
 
-      await mongo.events.insertMany(docs, { ordered: false });
+      await mongo.events.bulkWrite(
+        docs.map((doc) => {
+          const { createdAt, ...docWithoutCreatedAt } = doc;
+          return {
+            updateOne: {
+              filter: { _id: doc._id },
+              update: {
+                $set: docWithoutCreatedAt,
+                $setOnInsert: { createdAt },
+              },
+              upsert: true,
+            },
+          };
+        }),
+        { ordered: false },
+      );
     }
 
     eventsCount += rows.length;
@@ -174,7 +189,7 @@ export async function migrateDuckDBToMongoDB(
     const rows = await all(duck.conn, `
       SELECT id, ts, source, kind, project, session, seed_id, member_count, char_count, embedding_model, text, members, extra
       FROM compacted_memories
-      ORDER BY ts ASC
+      ORDER BY ts ASC, id ASC
       LIMIT ? OFFSET ?
     `, [batchSize, offset]);
 
@@ -200,7 +215,22 @@ export async function migrateDuckDBToMongoDB(
         updatedAt: new Date(),
       }));
 
-      await mongo.compacted.insertMany(docs, { ordered: false });
+      await mongo.compacted.bulkWrite(
+        docs.map((doc) => {
+          const { createdAt, ...docWithoutCreatedAt } = doc;
+          return {
+            updateOne: {
+              filter: { _id: doc._id },
+              update: {
+                $set: docWithoutCreatedAt,
+                $setOnInsert: { createdAt },
+              },
+              upsert: true,
+            },
+          };
+        }),
+        { ordered: false },
+      );
     }
 
     memoriesCount += rows.length;
@@ -234,7 +264,7 @@ export async function migrateMongoDBToDuckDB(
   const totalMemoriesCount = await mongo.compacted.countDocuments();
 
   for (let offset = 0; offset < totalEventsCount; offset += batchSize) {
-    const rows = await mongo.events.find({}).sort({ ts: 1 }).skip(offset).limit(batchSize).toArray();
+    const rows = await mongo.events.find({}).sort({ ts: 1, _id: 1 }).skip(offset).limit(batchSize).toArray();
     if (!dryRun) {
       for (const row of rows) {
         await run(duck.conn, `
@@ -278,7 +308,7 @@ export async function migrateMongoDBToDuckDB(
   }
 
   for (let offset = 0; offset < totalMemoriesCount; offset += batchSize) {
-    const rows = await mongo.compacted.find({}).sort({ ts: 1 }).skip(offset).limit(batchSize).toArray();
+    const rows = await mongo.compacted.find({}).sort({ ts: 1, _id: 1 }).skip(offset).limit(batchSize).toArray();
     if (!dryRun) {
       for (const row of rows) {
         await run(duck.conn, `
@@ -375,7 +405,19 @@ async function migrateChromaCollectionToMongo(
   } = {},
 ): Promise<number> {
   const batchSize = options.batchSize ?? 500;
-  const collection = await client.getCollection({ name: collectionName } as any);
+  let collection: Awaited<ReturnType<ChromaClient["getCollection"]>>;
+
+  try {
+    collection = await client.getCollection({ name: collectionName } as any);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message.includes("The requested resource could not be found")) {
+      console.warn(`[migration] Chroma collection missing, skipping ${collectionName}`);
+      return 0;
+    }
+    throw error;
+  }
+
   let offset = 0;
   let count = 0;
 
@@ -441,7 +483,7 @@ async function migrateMongoVectorsToChromaCollection(
   let migrated = 0;
 
   for (let offset = 0; offset < total; offset += batchSize) {
-    const rows = await source.find({}).sort({ ts: 1 }).skip(offset).limit(batchSize).toArray();
+    const rows = await source.find({}).sort({ ts: 1, _id: 1 }).skip(offset).limit(batchSize).toArray();
     if (!options.dryRun && rows.length > 0) {
       await collection.upsert({
         ids: rows.map((row) => row._id),
@@ -519,7 +561,7 @@ export async function exportDuckDBToJsonl(
     const rows = await all(duck.conn, `
       SELECT id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
       FROM events
-      ORDER BY ts ASC
+      ORDER BY ts ASC, id ASC
       LIMIT ? OFFSET ?
     `, [batchSize, offset]);
 
@@ -562,7 +604,7 @@ export async function exportDuckDBToJsonl(
     const rows = await all(duck.conn, `
       SELECT id, ts, source, kind, project, session, seed_id, member_count, char_count, embedding_model, text, members, extra
       FROM compacted_memories
-      ORDER BY ts ASC
+      ORDER BY ts ASC, id ASC
       LIMIT ? OFFSET ?
     `, [batchSize, offset]);
 

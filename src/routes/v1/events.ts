@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { run } from "../../lib/duckdb.js";
 import { upsertEvent } from "../../lib/mongodb.js";
+import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
+import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import { counterInc, histogramObserve } from "../../lib/metrics.js";
 import type { EventIngestRequest, EventEnvelopeV1 } from "../../lib/types.js";
 
@@ -105,16 +107,41 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
             kind: ev.kind,
             project: norm((sr as any).project) ?? undefined
           };
-          const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
-          const embeddingModel = app.chroma.resolveEmbeddingModel?.(embeddingScope);
-          const collection = await app.chroma.client.getCollection({ 
-            name: app.chroma.collectionName, 
-            embeddingFunction: embeddingFunction as any
-          });
-          await collection.add({
-            ids: [ev.id],
-            documents: [ev.text],
-            metadatas: [{
+
+          if (storageBackend === "mongodb") {
+            const embeddingRuntime = (app as any).embeddingRuntime;
+            const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+            const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+            await indexTextInMongoVectors({
+              mongo: app.mongo,
+              tier: "hot",
+              parentId: ev.id,
+              text: ev.text,
+              extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+              metadata: {
+                ts: ev.ts,
+                source: ev.source,
+                kind: ev.kind,
+                project: (sr as any).project,
+                session: (sr as any).session,
+                author: author ?? "",
+                role: role ?? "",
+                model: model ?? "",
+                embedding_model: embeddingModel ?? "",
+                search_tier: "hot",
+                visibility: (ev.extra as Record<string, unknown> | undefined)?.visibility ?? "internal",
+                title: (ev.extra as Record<string, unknown> | undefined)?.title ?? (sr as any).message ?? ev.id,
+              },
+              embeddingFunction,
+            });
+          } else if (app.chroma?.enabled !== false) {
+            const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
+            const embeddingModel = app.chroma.resolveEmbeddingModel?.(embeddingScope);
+            const collection = await app.chroma.client.getCollection({
+              name: app.chroma.collectionName,
+              embeddingFunction: embeddingFunction as any
+            });
+            const baseMetadata = {
               ts: ev.ts,
               source: ev.source,
               kind: ev.kind,
@@ -125,10 +152,76 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
               model: model ?? "",
               embedding_model: embeddingModel ?? "",
               search_tier: "hot"
-            }] as any
-          });
+            } as Record<string, unknown>;
+
+            const upsertPrepared = async (preparedDoc: ReturnType<typeof prepareIndexDocument>) => {
+              if (typeof collection.delete === "function") {
+                await collection.delete({ where: { parent_id: ev.id } });
+              }
+
+              for (const batch of batchPreparedChunks(preparedDoc.chunks)) {
+                const ids = batch.map((chunk) => chunk.id);
+                const documents = batch.map((chunk) => chunk.text);
+                const metadatas = batch.map((chunk) => ({
+                  ...baseMetadata,
+                  parent_id: ev.id,
+                  chunk_id: chunk.id,
+                  chunk_index: chunk.chunkIndex,
+                  chunk_count: chunk.chunkCount,
+                  normalized_format: preparedDoc.normalizedFormat,
+                  normalized_estimated_tokens: preparedDoc.normalizedEstimatedTokens,
+                  raw_estimated_tokens: preparedDoc.rawEstimatedTokens,
+                })) as any;
+
+                if (typeof collection.upsert === "function") {
+                  await collection.upsert({ ids, documents, metadatas });
+                  continue;
+                }
+
+                try {
+                  if (typeof collection.update === "function") {
+                    await collection.update({ ids, documents, metadatas });
+                    continue;
+                  }
+                } catch {}
+
+                await collection.add({ ids, documents, metadatas });
+              }
+            };
+
+            const prepared = prepareIndexDocument({
+              parentId: ev.id,
+              text: ev.text,
+              extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+            });
+
+            try {
+              await upsertPrepared(prepared);
+            } catch (error) {
+              if (!prepared.chunked && isContextOverflowError(error)) {
+                const retryPrepared = prepareIndexDocument({
+                  parentId: ev.id,
+                  text: ev.text,
+                  extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+                  forceChunking: true,
+                });
+                await upsertPrepared(retryPrepared);
+              } else {
+                throw error;
+              }
+            }
+          }
         } catch (err) {
-          app.log.error(err, "Failed to index event into ChromaDB");
+          app.log.error(err, storageBackend === "mongodb" ? "Failed to index event into MongoDB vectors" : "Failed to index event into ChromaDB");
+          const detail = err instanceof Error ? err.message : String(err);
+          return reply.status(503).send({
+            ok: false,
+            error: "embedding_index_failed",
+            detail,
+            persisted_ids: [...ids],
+            failed_id: ev.id,
+            storageBackend,
+          });
         }
       }
     }
@@ -142,6 +235,14 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       counterInc("openplanner_events_by_kind", { kind: ev.kind, backend: storageBackend });
     }
     
-    return { ok: true, count: ids.length, ids, ftsEnabled, storageBackend };
+    return {
+      ok: true,
+      count: ids.length,
+      ids,
+      ftsEnabled,
+      storageBackend,
+      indexed: storageBackend === "mongodb" ? true : app.chroma?.enabled !== false,
+      indexing: storageBackend === "mongodb" ? "required" : (app.chroma?.enabled === false ? "disabled" : "required"),
+    };
   });
 };
