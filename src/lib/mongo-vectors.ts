@@ -29,6 +29,10 @@ const VEXX_BASE_URL = String(process.env.VEXX_BASE_URL ?? "").trim();
 const VEXX_API_KEY = String(process.env.VEXX_API_KEY ?? "").trim();
 const VEXX_DEVICE = String(process.env.VEXX_DEVICE ?? "AUTO").trim() || "AUTO";
 const VEXX_REQUIRE_ACCEL = /^(1|true|yes|on)$/i.test(String(process.env.VEXX_REQUIRE_ACCEL ?? ""));
+const VEXX_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.VEXX_TIMEOUT_MS ?? "1500");
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1500;
+})();
 const VEXX_MIN_CANDIDATES = (() => {
   const parsed = Number(process.env.VEXX_MIN_CANDIDATES ?? "256");
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 256;
@@ -136,20 +140,28 @@ async function queryPartitionWithVexxTopK(params: {
   );
   if (validCandidates.length < Math.max(params.k, VEXX_MIN_CANDIDATES)) return null;
 
-  const response = await fetch(`${VEXX_BASE_URL.replace(/\/$/, "")}/v1/cosine/topk`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(VEXX_API_KEY ? { Authorization: `Bearer ${VEXX_API_KEY}` } : {}),
-    },
-    body: JSON.stringify({
-      query: params.queryEmbedding,
-      candidates: validCandidates.map((doc) => ({ id: doc._id, embedding: doc.embedding })),
-      k: Math.max(1, params.k),
-      device: VEXX_DEVICE,
-      requireAccel: VEXX_REQUIRE_ACCEL,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), VEXX_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${VEXX_BASE_URL.replace(/\/$/, "")}/v1/cosine/topk`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(VEXX_API_KEY ? { Authorization: `Bearer ${VEXX_API_KEY}` } : {}),
+      },
+      body: JSON.stringify({
+        query: params.queryEmbedding,
+        candidates: validCandidates.map((doc) => ({ id: doc._id, embedding: doc.embedding })),
+        k: Math.max(1, params.k),
+        device: VEXX_DEVICE,
+        requireAccel: VEXX_REQUIRE_ACCEL,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) return null;
 

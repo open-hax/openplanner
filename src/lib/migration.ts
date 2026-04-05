@@ -549,13 +549,14 @@ async function migrateMongoVectorsToChromaCollection(
 ): Promise<number> {
   const batchSize = options.batchSize ?? 500;
   await assertSingleChromaEmbeddingProfile(source, collectionName);
-  const collection = await client.getOrCreateCollection({ name: collectionName } as any);
   const total = await source.countDocuments();
   let migrated = 0;
+  let collection: Awaited<ReturnType<ChromaClient["getOrCreateCollection"]>> | null = null;
 
   for (let offset = 0; offset < total; offset += batchSize) {
     const rows = await source.find({}).sort({ ts: 1, _id: 1 }).skip(offset).limit(batchSize).toArray();
     if (!options.dryRun && rows.length > 0) {
+      collection ??= await client.getOrCreateCollection({ name: collectionName } as any);
       await collection.upsert({
         ids: rows.map((row) => row._id),
         documents: rows.map((row) => row.text),
