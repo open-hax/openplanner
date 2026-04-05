@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
 import sensible from "@fastify/sensible";
 import type { OpenPlannerConfig } from "./lib/config.js";
+import { createEmbeddingRuntime } from "./lib/embedding-runtime.js";
 import { authPlugin } from "./plugins/auth.js";
 import { duckdbPlugin } from "./plugins/duckdb.js";
 import { mongodbPlugin } from "./plugins/mongodb.js";
@@ -17,6 +18,7 @@ export async function buildApp(cfg: OpenPlannerConfig): Promise<FastifyInstance>
 
   (app as any).openplannerConfig = cfg;
   (app as any).storageBackend = cfg.storageBackend;
+  (app as any).embeddingRuntime = createEmbeddingRuntime(cfg);
 
   await app.register(sensible as any);
   await app.register(multipart as any, {
@@ -32,7 +34,9 @@ export async function buildApp(cfg: OpenPlannerConfig): Promise<FastifyInstance>
     await app.register(duckdbPlugin as any, cfg);
   }
 
-  await app.register(chromaPlugin as any, cfg);
+  if (cfg.storageBackend !== "mongodb") {
+    await app.register(chromaPlugin as any, cfg);
+  }
 
   await app.register(v1Routes, { prefix: "/v1" });
 

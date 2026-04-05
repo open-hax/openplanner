@@ -29,22 +29,33 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
     (async () => {
       try {
         await (app as any).jobs.update(job.id, { status: "running" });
-        const { importChatGPTZip } = await import("../../lib/importers/chatgpt.js");
+        const { importChatGPTZip, importChatGPTZipToSink } = await import("../../lib/importers/chatgpt.js");
         
         // Assume input has 'filePath'
         const filePath = body.filePath;
         if (!filePath) throw new Error("filePath required in job input");
 
-        const duck = (app as any).duck; // Access duck plugin instance
-        
-        if (!duck) {
-           console.error("DuckDB instance missing on app. Has decorator:", app.hasDecorator("duck"));
-           throw new Error("DuckDB instance not available");
-        }
-
-        const result = await importChatGPTZip(filePath, duck, async (count) => {
-           await (app as any).jobs.update(job.id, { output: { processed: count } });
-        });
+        const storageBackend = (app as any).storageBackend ?? "duckdb";
+        const result = storageBackend === "mongodb"
+          ? await importChatGPTZipToSink(filePath, async (events) => {
+              const response = await app.inject({
+                method: "POST",
+                url: "/v1/events",
+                headers: {
+                  authorization: `Bearer ${(app as any).openplannerConfig.apiKey}`,
+                  "content-type": "application/json",
+                },
+                payload: JSON.stringify({ events }),
+              });
+              if (response.statusCode >= 400) {
+                throw new Error(`failed to ingest imported events into mongodb backend: ${response.body}`);
+              }
+            }, async (count) => {
+              await (app as any).jobs.update(job.id, { output: { processed: count } });
+            })
+          : await importChatGPTZip(filePath, (app as any).duck, async (count) => {
+              await (app as any).jobs.update(job.id, { output: { processed: count } });
+            });
 
         await (app as any).jobs.update(job.id, { status: "done", output: result });
       } catch (err: any) {
@@ -75,9 +86,12 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
     (async () => {
       try {
         await (app as any).jobs.update(job.id, { status: "running" });
-        const { runSemanticCompaction } = await import("../../lib/semantic-compaction.js");
+        const { runSemanticCompaction, runSemanticCompactionMongo } = await import("../../lib/semantic-compaction.js");
         const cfg = (app as any).openplannerConfig;
-        const output = await runSemanticCompaction(app.duck, app.chroma, cfg, body);
+        const storageBackend = (app as any).storageBackend ?? "duckdb";
+        const output = storageBackend === "mongodb"
+          ? await runSemanticCompactionMongo(app.mongo, cfg, body, (app as any).embeddingRuntime)
+          : await runSemanticCompaction(app.duck, app.chroma, cfg, body);
         await (app as any).jobs.update(job.id, { status: "done", output });
       } catch (err: any) {
         await (app as any).jobs.update(job.id, { status: "error", error: err?.message ?? String(err) });

@@ -9,6 +9,7 @@ export type ChromaBinding = {
 };
 
 export type Chroma = {
+  enabled: boolean;
   client: ChromaClient;
   collectionName: string;
   compactCollectionName: string;
@@ -39,6 +40,7 @@ export async function openChroma(
   if (chromaUrl === "disabled") {
     const client = new ChromaClient({ path: "http://127.0.0.1:0" });
     return {
+      enabled: false,
       client,
       collectionName: hot.collectionName,
       compactCollectionName: compact.collectionName,
@@ -58,6 +60,7 @@ export async function openChroma(
   await ensureCollection(client, compact);
 
   return {
+    enabled: true,
     client,
     collectionName: hot.collectionName,
     compactCollectionName: compact.collectionName,

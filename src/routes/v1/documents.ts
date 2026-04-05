@@ -1,6 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { all, run } from "../../lib/duckdb.js";
 import { upsertEvent } from "../../lib/mongodb.js";
+import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
+import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import type {
   DocumentPatchRequest,
   DocumentRecord,
@@ -95,15 +97,19 @@ function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventE
   };
 }
 
-async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ indexed: boolean; warning?: string }> {
+async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ indexed: boolean; warning?: string; indexing?: string }> {
   await persistEvent(app, ev);
+  const storageBackend = app.storageBackend ?? "duckdb";
+  if (storageBackend !== "mongodb" && app.chroma?.enabled === false) {
+    return { indexed: false, indexing: "disabled" };
+  }
   try {
     await indexDocument(app, ev);
-    return { indexed: true };
+    return { indexed: true, indexing: "required" };
   } catch (error) {
-    app.log.error(error, "Failed to index document into ChromaDB");
+    app.log.error(error, storageBackend === "mongodb" ? "Failed to index document into MongoDB vectors" : "Failed to index document into ChromaDB");
     const warning = error instanceof Error ? error.message : String(error);
-    return { indexed: false, warning };
+    return { indexed: false, warning, indexing: "required" };
   }
 }
 
@@ -180,12 +186,6 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
     kind: ev.kind,
     project: sr.project ? String(sr.project) : undefined,
   };
-  const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
-  const embeddingModel = app.chroma.resolveEmbeddingModel?.(embeddingScope);
-  const collection: any = await app.chroma.client.getCollection({
-    name: app.chroma.collectionName,
-    embeddingFunction,
-  });
   const metadata = {
     ts: ev.ts,
     source: ev.source,
@@ -195,25 +195,91 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
     author: meta.author ? String(meta.author) : "",
     role: meta.role ? String(meta.role) : "",
     model: meta.model ? String(meta.model) : "",
-    embedding_model: embeddingModel ?? "",
     search_tier: "hot",
     visibility: (ev.extra as Record<string, unknown> | undefined)?.visibility ?? "internal",
     title: (ev.extra as Record<string, unknown> | undefined)?.title ?? sr.message ?? ev.id,
   } as Record<string, unknown>;
 
-  if (typeof collection.upsert === "function") {
-    await collection.upsert({ ids: [ev.id], documents: [ev.text], metadatas: [metadata] });
+  if ((app.storageBackend ?? "duckdb") === "mongodb") {
+    const embeddingRuntime = (app as any).embeddingRuntime;
+    const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+    const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+    await indexTextInMongoVectors({
+      mongo: app.mongo,
+      tier: "hot",
+      parentId: ev.id,
+      text: ev.text,
+      extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+      metadata: { ...metadata, embedding_model: embeddingModel ?? "" },
+      embeddingFunction,
+    });
     return;
   }
 
+  const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
+  const embeddingModel = app.chroma.resolveEmbeddingModel?.(embeddingScope);
+  const collection: any = await app.chroma.client.getCollection({
+    name: app.chroma.collectionName,
+    embeddingFunction,
+  });
+  const preparedMetadata = { ...metadata, embedding_model: embeddingModel ?? "" } as Record<string, unknown>;
+
+  const prepared = prepareIndexDocument({
+    parentId: ev.id,
+    text: ev.text,
+    extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+  });
+
+  const upsertPrepared = async (preparedDoc: ReturnType<typeof prepareIndexDocument>) => {
+    if (typeof collection.delete === "function") {
+      await collection.delete({ where: { parent_id: ev.id } });
+    }
+
+    for (const batch of batchPreparedChunks(preparedDoc.chunks)) {
+      const ids = batch.map((chunk) => chunk.id);
+      const documents = batch.map((chunk) => chunk.text);
+      const metadatas = batch.map((chunk) => ({
+        ...preparedMetadata,
+        parent_id: ev.id,
+        chunk_id: chunk.id,
+        chunk_index: chunk.chunkIndex,
+        chunk_count: chunk.chunkCount,
+        normalized_format: preparedDoc.normalizedFormat,
+        normalized_estimated_tokens: preparedDoc.normalizedEstimatedTokens,
+        raw_estimated_tokens: preparedDoc.rawEstimatedTokens,
+      })) as any;
+
+      if (typeof collection.upsert === "function") {
+        await collection.upsert({ ids, documents, metadatas });
+        continue;
+      }
+
+      try {
+        if (typeof collection.update === "function") {
+          await collection.update({ ids, documents, metadatas });
+          continue;
+        }
+      } catch {}
+
+      await collection.add({ ids, documents, metadatas });
+    }
+  };
+
   try {
-    if (typeof collection.update === "function") {
-      await collection.update({ ids: [ev.id], documents: [ev.text], metadatas: [metadata] });
+    await upsertPrepared(prepared);
+  } catch (error) {
+    if (!prepared.chunked && isContextOverflowError(error)) {
+      const retryPrepared = prepareIndexDocument({
+        parentId: ev.id,
+        text: ev.text,
+        extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+        forceChunking: true,
+      });
+      await upsertPrepared(retryPrepared);
       return;
     }
-  } catch {}
-
-  await collection.add({ ids: [ev.id], documents: [ev.text], metadatas: [metadata] });
+    throw error;
+  }
 }
 
 async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
@@ -251,6 +317,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(normalized);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: normalized,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: normalized, ...result };
   });
 
@@ -310,6 +386,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(next, existing);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: next,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: next, ...result };
   });
 
@@ -325,6 +411,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(next, existing);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: next,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: next, ...result };
   });
 
@@ -339,6 +435,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(next, existing);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: next,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: next, ...result };
   });
 };

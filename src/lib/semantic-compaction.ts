@@ -3,6 +3,9 @@ import type { Duck } from "./duckdb.js";
 import { all, run } from "./duckdb.js";
 import type { Chroma } from "./chroma.js";
 import type { OpenPlannerConfig } from "./config.js";
+import { createEmbeddingRuntime, type EmbeddingRuntime } from "./embedding-runtime.js";
+import { upsertCompactedMemory, type MongoConnection } from "./mongodb.js";
+import { indexTextInMongoVectors, queryMongoVectorsByText } from "./mongo-vectors.js";
 import { extractTieredVectorHits } from "./vector-search.js";
 
 export type CompactableEvent = {
@@ -216,6 +219,35 @@ async function loadExistingCompactedMemberIds(duck: Duck): Promise<Set<string>> 
   return ids;
 }
 
+async function loadCompactableEventsFromMongo(mongo: MongoConnection): Promise<CompactableEvent[]> {
+  const rows = await mongo.events.find({ text: { $type: "string", $ne: "" } }).sort({ ts: 1 }).toArray();
+  return rows.map((row) => ({
+    id: row.id,
+    ts: row.ts.toISOString(),
+    source: row.source,
+    kind: row.kind,
+    project: row.project,
+    session: row.session,
+    message: row.message,
+    role: row.role,
+    author: row.author,
+    model: row.model,
+    text: row.text ?? "",
+  }));
+}
+
+async function loadExistingCompactedMemberIdsFromMongo(mongo: MongoConnection): Promise<Set<string>> {
+  const rows = await mongo.compacted.find({}, { projection: { members: 1 } }).toArray();
+  const ids = new Set<string>();
+  for (const row of rows) {
+    const members = Array.isArray(row.members) ? row.members : [];
+    for (const member of members) {
+      if (typeof member === "string" && member.length > 0) ids.add(member);
+    }
+  }
+  return ids;
+}
+
 async function upsertSemanticPack(duck: Duck, chroma: Chroma, pack: SemanticPack): Promise<void> {
   const compactCollection = await chroma.client.getCollection({
     name: chroma.compactCollectionName,
@@ -271,6 +303,51 @@ async function upsertSemanticPack(duck: Duck, chroma: Chroma, pack: SemanticPack
     JSON.stringify(pack.memberIds),
     JSON.stringify(pack.extra),
   ]);
+}
+
+async function upsertSemanticPackMongo(
+  mongo: MongoConnection,
+  runtime: EmbeddingRuntime,
+  pack: SemanticPack,
+): Promise<void> {
+  await upsertCompactedMemory(mongo.compacted, {
+    id: pack.id,
+    ts: new Date(pack.ts),
+    source: pack.source,
+    kind: pack.kind,
+    project: pack.project ?? null,
+    session: pack.session ?? null,
+    seed_id: pack.seedId,
+    member_count: pack.memberCount,
+    char_count: pack.charCount,
+    embedding_model: pack.embeddingModel,
+    text: pack.text,
+    members: pack.memberIds,
+    extra: pack.extra,
+  });
+
+  await indexTextInMongoVectors({
+    mongo,
+    tier: "compact",
+    parentId: pack.id,
+    text: pack.text,
+    extra: pack.extra,
+    metadata: {
+      ts: pack.ts,
+      source: pack.source,
+      kind: pack.kind,
+      project: pack.project ?? "",
+      session: pack.session ?? "",
+      embedding_model: pack.embeddingModel,
+      search_tier: "compact",
+      seed_id: pack.seedId,
+      member_count: pack.memberCount,
+      char_count: pack.charCount,
+      visibility: "internal",
+      title: pack.id,
+    },
+    embeddingFunction: runtime.compact.getEmbeddingFunction(),
+  });
 }
 
 export async function runSemanticCompaction(
@@ -360,6 +437,102 @@ export async function runSemanticCompaction(
     compactedMembers,
     hotCollection: chroma.collectionName,
     compactCollection: chroma.compactCollectionName,
+    compactEmbedModel: cfg.compactEmbedModel,
+    packIds,
+  };
+}
+
+export async function runSemanticCompactionMongo(
+  mongo: MongoConnection,
+  cfg: OpenPlannerConfig,
+  input: Record<string, unknown> = {},
+  embeddingRuntime: EmbeddingRuntime = createEmbeddingRuntime(cfg),
+): Promise<SemanticCompactionSummary> {
+  if (!cfg.semanticCompaction.enabled) {
+    throw new Error("semantic compaction disabled by config");
+  }
+
+  const options = resolveCompactionOptions(cfg, input);
+  const events = await loadCompactableEventsFromMongo(mongo);
+  const byId = new Map(events.map((event) => [event.id, event]));
+  const usedIds = await loadExistingCompactedMemberIdsFromMongo(mongo);
+
+  if (events.length < options.minEventCount && input.force !== true) {
+    return {
+      ok: true,
+      scannedEvents: events.length,
+      skippedEvents: events.length,
+      existingCompactedMembers: usedIds.size,
+      packsCreated: 0,
+      compactedMembers: 0,
+      hotCollection: mongo.hotVectors.collectionName,
+      compactCollection: mongo.compactVectors.collectionName,
+      compactEmbedModel: cfg.compactEmbedModel,
+      packIds: [],
+    };
+  }
+
+  const packIds: string[] = [];
+  let packsCreated = 0;
+  let compactedMembers = 0;
+  let skippedEvents = 0;
+
+  for (const seed of events) {
+    if (packsCreated >= options.maxPacksPerRun) break;
+    if (usedIds.has(seed.id)) {
+      skippedEvents += 1;
+      continue;
+    }
+
+    const where = typeof seed.project === "string" && seed.project.length > 0
+      ? { project: seed.project }
+      : undefined;
+
+    const query = await queryMongoVectorsByText({
+      mongo,
+      tier: "hot",
+      q: seed.text,
+      k: Math.max(options.maxNeighbors, options.minClusterSize),
+      where,
+      getEmbeddingFunctionForModel: (model: string) => embeddingRuntime.hot.getEmbeddingFunctionForModel(model),
+    });
+
+    const neighbors = extractTieredVectorHits(query, "hot")
+      .map((hit) => {
+        const parentId = typeof hit.metadata.parent_id === "string" && hit.metadata.parent_id.length > 0
+          ? hit.metadata.parent_id
+          : hit.id;
+        return { hit, parentId };
+      })
+      .filter(({ parentId }) => parentId !== seed.id)
+      .filter(({ parentId }) => !usedIds.has(parentId))
+      .filter(({ hit }) => typeof hit.distance === "number" && (hit.distance as number) <= options.distanceThreshold)
+      .map(({ parentId }) => byId.get(parentId))
+      .filter((event): event is CompactableEvent => Boolean(event));
+
+    const pack = buildSemanticPack(seed, neighbors, options, cfg.compactEmbedModel);
+    if (!pack) {
+      skippedEvents += 1;
+      continue;
+    }
+
+    await upsertSemanticPackMongo(mongo, embeddingRuntime, pack);
+
+    for (const memberId of pack.memberIds) usedIds.add(memberId);
+    packsCreated += 1;
+    compactedMembers += pack.memberIds.length;
+    packIds.push(pack.id);
+  }
+
+  return {
+    ok: true,
+    scannedEvents: events.length,
+    skippedEvents,
+    existingCompactedMembers: usedIds.size - compactedMembers,
+    packsCreated,
+    compactedMembers,
+    hotCollection: mongo.hotVectors.collectionName,
+    compactCollection: mongo.compactVectors.collectionName,
     compactEmbedModel: cfg.compactEmbedModel,
     packIds,
   };

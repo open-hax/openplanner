@@ -38,6 +38,14 @@ export async function importChatGPTZip(
   duck: Duck,
   onProgress: (count: number) => Promise<void>
 ): Promise<{ count: number; errors: string[] }> {
+  return importChatGPTZipToSink(zipPath, async (events) => upsertEvents(duck, events), onProgress);
+}
+
+export async function importChatGPTZipToSink(
+  zipPath: string,
+  sink: (events: EventEnvelopeV1[]) => Promise<void>,
+  onProgress: (count: number) => Promise<void>
+): Promise<{ count: number; errors: string[] }> {
   return new Promise((resolve, reject) => {
     yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
       if (err) return reject(err);
@@ -47,11 +55,11 @@ export async function importChatGPTZip(
 
       zipfile.on("entry", (entry) => {
         if (entry.fileName === "conversations.json") {
-          zipfile.openReadStream(entry, (err, readStream) => {
-            if (err) return reject(err);
+          zipfile.openReadStream(entry, (streamError, readStream) => {
+            if (streamError) return reject(streamError);
             if (!readStream) return reject(new Error("Failed to read stream"));
 
-            processStream(readStream, duck, onProgress)
+            processStream(readStream, sink, onProgress)
               .then(resolve)
               .catch(reject)
               .finally(() => zipfile.close());
@@ -60,19 +68,13 @@ export async function importChatGPTZip(
           zipfile.readEntry();
         }
       });
-
-      zipfile.on("end", () => {
-        // "end" means we scanned all entries and didn't open a stream (or logic elsewhere handled it).
-        // Since we resolve inside the stream processor, we just ignore "end" if we found it.
-        // We could track "found" state if needed.
-      });
     });
   });
 }
 
 async function processStream(
   readStream: Readable,
-  duck: Duck,
+  sink: (events: EventEnvelopeV1[]) => Promise<void>,
   onProgress: (count: number) => Promise<void>
 ): Promise<{ count: number; errors: string[] }> {
   let totalEvents = 0;
@@ -87,17 +89,15 @@ async function processStream(
 
   for await (const { value: conv } of pipeline) {
     const c = conv as ChatGPTConversation;
-    // Iterate all nodes in 'mapping' that have a message.
     for (const nodeId in c.mapping) {
       const node = c.mapping[nodeId];
       if (!node.message) continue;
 
       const msg = node.message;
       if (!msg.content) continue;
-      
+
       const parts = msg.content.parts || [];
-      const textContent = parts.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join("\n");
-      
+      const textContent = parts.map((p) => (typeof p === "string" ? p : JSON.stringify(p))).join("\n");
       if (!textContent.trim()) continue;
 
       const event: EventEnvelopeV1 = {
@@ -126,7 +126,7 @@ async function processStream(
       eventsBatch.push(event);
 
       if (eventsBatch.length >= 500) {
-        await upsertEvents(duck, eventsBatch);
+        await sink(eventsBatch);
         totalEvents += eventsBatch.length;
         eventsBatch.length = 0;
         await onProgress(totalEvents);
@@ -135,7 +135,7 @@ async function processStream(
   }
 
   if (eventsBatch.length > 0) {
-    await upsertEvents(duck, eventsBatch);
+    await sink(eventsBatch);
     totalEvents += eventsBatch.length;
     await onProgress(totalEvents);
   }
@@ -144,7 +144,6 @@ async function processStream(
 }
 
 async function upsertEvents(duck: Duck, events: EventEnvelopeV1[]) {
-  // Batch insert loop
   for (const e of events) {
     await run(duck.conn, `
       INSERT OR REPLACE INTO events (
@@ -163,9 +162,9 @@ async function upsertEvents(duck: Duck, events: EventEnvelopeV1[]) {
       e.meta?.role ?? null,
       e.meta?.author_name ?? null,
       e.meta?.model ?? null,
-      null, // tags
+      null,
       e.text ?? null,
-      null, // attachments
+      null,
       JSON.stringify(e.extra || {})
     ]);
   }

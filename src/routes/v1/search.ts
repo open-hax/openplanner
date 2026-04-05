@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { all } from "../../lib/duckdb.js";
 import { ftsSearch as mongoFtsSearch, ilikeSearch as mongoIlikeSearch } from "../../lib/mongodb.js";
+import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import type { FtsSearchRequest, VectorSearchRequest } from "../../lib/types.js";
 import { extractTieredVectorHits, mergeTieredVectorHits } from "../../lib/vector-search.js";
 
@@ -182,6 +183,38 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
     const limit = Math.max(1, Math.min(200, Number(k)));
 
     const tieredHits = [];
+    const storageBackend = (app as any).storageBackend ?? "duckdb";
+
+    if (storageBackend === "mongodb") {
+      const embeddingRuntime = (app as any).embeddingRuntime;
+
+      if (includeHot) {
+        const result = await queryMongoVectorsByText({
+          mongo: app.mongo,
+          tier: "hot",
+          q,
+          k: limit,
+          where: whereClause,
+          getEmbeddingFunctionForModel: (model: string) => embeddingRuntime.hot.getEmbeddingFunctionForModel(model),
+        });
+        tieredHits.push(extractTieredVectorHits(result, "hot"));
+      }
+
+      if (includeCompact) {
+        const result = await queryMongoVectorsByText({
+          mongo: app.mongo,
+          tier: "compact",
+          q,
+          k: limit,
+          where: whereClause,
+          getEmbeddingFunctionForModel: (model: string) => embeddingRuntime.compact.getEmbeddingFunctionForModel(model),
+        });
+        tieredHits.push(extractTieredVectorHits(result, "compact"));
+      }
+
+      const result = mergeTieredVectorHits(tieredHits, limit);
+      return { ok: true, result, tier, storageBackend };
+    }
 
     if (includeHot) {
       const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
@@ -216,7 +249,6 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const result = mergeTieredVectorHits(tieredHits, limit);
-    const storageBackend = (app as any).storageBackend ?? "duckdb";
     return { ok: true, result, tier, storageBackend };
   });
 };

@@ -18,6 +18,8 @@ export type MongoConfig = {
   dbName: string;
   eventsCollection: string;
   compactedCollection: string;
+  vectorHotCollection: string;
+  vectorCompactCollection: string;
 };
 
 export type OpenPlannerConfig = {
@@ -107,6 +109,8 @@ export function loadConfig(): OpenPlannerConfig {
     dbName: mustGet("MONGODB_DB", "openplanner"),
     eventsCollection: mustGet("MONGODB_EVENTS_COLLECTION", "events"),
     compactedCollection: mustGet("MONGODB_COMPACTED_COLLECTION", "compacted_memories"),
+    vectorHotCollection: mustGet("MONGODB_VECTOR_HOT_COLLECTION", "event_chunks"),
+    vectorCompactCollection: mustGet("MONGODB_VECTOR_COMPACT_COLLECTION", "compacted_vectors"),
   };
 
   return {

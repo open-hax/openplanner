@@ -4,56 +4,56 @@
  *
  * Commands:
  *   node dist/migrate.js status            - Show migration status
- *   node dist/migrate.js run               - Run pending migrations
- *   node dist/migrate.js duckdb-to-mongo   - Migrate DuckDB data to MongoDB
+ *   node dist/migrate.js run               - Run pending schema/index migrations
+ *   node dist/migrate.js duckdb-to-mongo   - Migrate DuckDB structured data to MongoDB
+ *   node dist/migrate.js mongo-to-duckdb   - Migrate MongoDB structured data back to DuckDB
+ *   node dist/migrate.js chroma-to-mongo   - Migrate Chroma vectors to MongoDB vector collections
+ *   node dist/migrate.js mongo-to-chroma   - Migrate MongoDB vector collections back to Chroma
+ *   node dist/migrate.js legacy-to-mongo   - Migrate DuckDB + Chroma into MongoDB
+ *   node dist/migrate.js mongo-to-legacy   - Migrate MongoDB back into DuckDB + Chroma
  *   node dist/migrate.js export-jsonl      - Export DuckDB data to JSONL
- *
- * Environment:
- *   OPENPLANNER_DATA_DIR          - Data directory (default: ./openplanner-lake)
- *   OPENPLANNER_STORAGE_BACKEND    - Storage backend: duckdb or mongodb
- *   MONGODB_URI                    - MongoDB connection string
- *   MONGODB_DB                     - Database name
  */
 
 import { loadConfig } from "./lib/config.js";
 import { openDuckDB, type Duck } from "./lib/duckdb.js";
 import { openMongoDB, closeMongoDB, type MongoConnection } from "./lib/mongodb.js";
-import { runMigrations, migrateDuckDBToMongoDB, exportDuckDBToJsonl, type MigrationContext } from "./lib/migration.js";
+import {
+  exportDuckDBToJsonl,
+  migrateChromaToMongoDB,
+  migrateDuckDBToMongoDB,
+  migrateMongoDBToChroma,
+  migrateMongoDBToDuckDB,
+  runMigrations,
+  type MigrationContext,
+} from "./lib/migration.js";
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0] ?? "status";
-
+  const dryRun = args.includes("--dry-run");
   const cfg = loadConfig();
+
   console.log(`[migrate] Storage backend: ${cfg.storageBackend}`);
   console.log(`[migrate] Data directory: ${cfg.dataDir}`);
+  console.log(`[migrate] MongoDB DB: ${cfg.mongodb.dbName}`);
+  console.log(`[migrate] MongoDB collections: ${cfg.mongodb.eventsCollection}, ${cfg.mongodb.compactedCollection}, ${cfg.mongodb.vectorHotCollection}, ${cfg.mongodb.vectorCompactCollection}`);
+  console.log(`[migrate] Chroma collections: ${cfg.chromaCollection}, ${cfg.chromaCompactCollection}`);
 
   if (command === "status") {
-    console.log(`[migrate] MongoDB URI: ${cfg.mongodb.uri}`);
-    console.log(`[migrate] MongoDB DB: ${cfg.mongodb.dbName}`);
-    console.log(`[migrate] MongoDB collections: ${cfg.mongodb.eventsCollection}, ${cfg.mongodb.compactedCollection}`);
-    console.log(`[migrate] Run 'node migrate.js run' to apply pending migrations`);
+    console.log("[migrate] Available commands: status, run, duckdb-to-mongo, mongo-to-duckdb, chroma-to-mongo, mongo-to-chroma, legacy-to-mongo, mongo-to-legacy, export-jsonl");
     return;
   }
 
   if (command === "run") {
-    console.log("[migrate] Opening databases...");
-
     let duck: Duck | undefined;
     let mongo: MongoConnection | undefined;
 
     try {
-      // Open DuckDB if using it or migrating from it
       if (cfg.storageBackend === "duckdb" || args.includes("--from-duckdb")) {
-        const dbPath = `${cfg.dataDir}/openplanner.duckdb`;
-        duck = await openDuckDB(dbPath);
-        console.log(`[migrate] DuckDB opened: ${dbPath}`);
+        duck = await openDuckDB(`${cfg.dataDir}/openplanner.duckdb`);
       }
-
-      // Open MongoDB if using it or migrating to it
       if (cfg.storageBackend === "mongodb" || args.includes("--to-mongo")) {
         mongo = await openMongoDB(cfg.mongodb);
-        console.log(`[migrate] MongoDB connected: ${cfg.mongodb.dbName}`);
       }
 
       const ctx: MigrationContext = {
@@ -68,9 +68,7 @@ async function main(): Promise<void> {
       console.log(`[migrate] Applied ${applied.length} migrations: ${applied.join(", ") || "none"}`);
     } finally {
       if (duck) {
-        await new Promise<void>((resolve) => {
-          duck!.conn.close(() => resolve());
-        });
+        await new Promise<void>((resolve) => duck!.conn.close(() => resolve()));
       }
       if (mongo) {
         await closeMongoDB(mongo);
@@ -79,62 +77,100 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (command === "duckdb-to-mongo") {
-    console.log("[migrate] Migrating DuckDB data to MongoDB...");
-
-    const dbPath = `${cfg.dataDir}/openplanner.duckdb`;
-    const duck = await openDuckDB(dbPath);
-    console.log(`[migrate] DuckDB opened: ${dbPath}`);
-
-    const mongo = await openMongoDB(cfg.mongodb);
-    console.log(`[migrate] MongoDB connected: ${cfg.mongodb.dbName}`);
-
-    try {
-      const dryRun = args.includes("--dry-run");
-      const result = await migrateDuckDBToMongoDB(duck, mongo, { dryRun });
-
-      console.log(`[migrate] Migration complete:`);
-      console.log(`[migrate]   Events: ${result.eventsCount}`);
-      console.log(`[migrate]   Memories: ${result.memoriesCount}`);
-      console.log(`[migrate]   Duration: ${(result.duration / 1000).toFixed(2)}s`);
-    } finally {
-      await new Promise<void>((resolve) => {
-        duck.conn.close(() => resolve());
-      });
-      await closeMongoDB(mongo);
-    }
-    return;
-  }
-
   if (command === "export-jsonl") {
-    console.log("[migrate] Exporting DuckDB data to JSONL...");
-
     const outputDir = args[1] ?? `${cfg.dataDir}/export`;
-    const dbPath = `${cfg.dataDir}/openplanner.duckdb`;
-
-    const duck = await openDuckDB(dbPath);
-    console.log(`[migrate] DuckDB opened: ${dbPath}`);
-    console.log(`[migrate] Output directory: ${outputDir}`);
-
+    const duck = await openDuckDB(`${cfg.dataDir}/openplanner.duckdb`);
     try {
       const result = await exportDuckDBToJsonl(duck, outputDir);
-      console.log(`[migrate] Export complete:`);
-      console.log(`[migrate]   Events: ${result.eventsFile}`);
-      console.log(`[migrate]   Memories: ${result.memoriesFile}`);
+      console.log(`[migrate] Export complete: events=${result.eventsFile} memories=${result.memoriesFile}`);
     } finally {
-      await new Promise<void>((resolve) => {
-        duck.conn.close(() => resolve());
-      });
+      await new Promise<void>((resolve) => duck.conn.close(() => resolve()));
     }
     return;
   }
 
-  console.log(`[migrate] Unknown command: ${command}`);
-  console.log(`[migrate] Available commands: status, run, duckdb-to-mongo, export-jsonl`);
-  process.exit(1);
+  const needsDuck = ["duckdb-to-mongo", "legacy-to-mongo", "mongo-to-duckdb", "mongo-to-legacy"].includes(command);
+  const needsMongo = ["duckdb-to-mongo", "mongo-to-duckdb", "chroma-to-mongo", "mongo-to-chroma", "legacy-to-mongo", "mongo-to-legacy"].includes(command);
+  let duck: Duck | undefined;
+  let mongo: MongoConnection | undefined;
+
+  try {
+    if (needsDuck) {
+      duck = await openDuckDB(`${cfg.dataDir}/openplanner.duckdb`);
+      console.log(`[migrate] DuckDB opened: ${cfg.dataDir}/openplanner.duckdb`);
+    }
+    if (needsMongo) {
+      mongo = await openMongoDB(cfg.mongodb);
+      console.log(`[migrate] MongoDB connected: ${cfg.mongodb.dbName}`);
+    }
+
+    if (command === "duckdb-to-mongo") {
+      const result = await migrateDuckDBToMongoDB(duck!, mongo!, { dryRun });
+      console.log(`[migrate] DuckDB → MongoDB complete: events=${result.eventsCount} memories=${result.memoriesCount} duration=${(result.duration / 1000).toFixed(2)}s`);
+      return;
+    }
+
+    if (command === "mongo-to-duckdb") {
+      const result = await migrateMongoDBToDuckDB(mongo!, duck!, { dryRun });
+      console.log(`[migrate] MongoDB → DuckDB complete: events=${result.eventsCount} memories=${result.memoriesCount} duration=${(result.duration / 1000).toFixed(2)}s`);
+      return;
+    }
+
+    if (command === "chroma-to-mongo") {
+      const result = await migrateChromaToMongoDB(mongo!, {
+        url: cfg.chromaUrl,
+        hotCollection: cfg.chromaCollection,
+        compactCollection: cfg.chromaCompactCollection,
+      }, { dryRun });
+      console.log(`[migrate] Chroma → MongoDB complete: hot=${result.hotCount} compact=${result.compactCount} duration=${(result.duration / 1000).toFixed(2)}s`);
+      return;
+    }
+
+    if (command === "mongo-to-chroma") {
+      const result = await migrateMongoDBToChroma(mongo!, {
+        url: cfg.chromaUrl,
+        hotCollection: cfg.chromaCollection,
+        compactCollection: cfg.chromaCompactCollection,
+      }, { dryRun });
+      console.log(`[migrate] MongoDB → Chroma complete: hot=${result.hotCount} compact=${result.compactCount} duration=${(result.duration / 1000).toFixed(2)}s`);
+      return;
+    }
+
+    if (command === "legacy-to-mongo") {
+      const structured = await migrateDuckDBToMongoDB(duck!, mongo!, { dryRun });
+      const vectors = await migrateChromaToMongoDB(mongo!, {
+        url: cfg.chromaUrl,
+        hotCollection: cfg.chromaCollection,
+        compactCollection: cfg.chromaCompactCollection,
+      }, { dryRun });
+      console.log(`[migrate] Legacy → MongoDB complete: events=${structured.eventsCount} memories=${structured.memoriesCount} hotVectors=${vectors.hotCount} compactVectors=${vectors.compactCount}`);
+      return;
+    }
+
+    if (command === "mongo-to-legacy") {
+      const structured = await migrateMongoDBToDuckDB(mongo!, duck!, { dryRun });
+      const vectors = await migrateMongoDBToChroma(mongo!, {
+        url: cfg.chromaUrl,
+        hotCollection: cfg.chromaCollection,
+        compactCollection: cfg.chromaCompactCollection,
+      }, { dryRun });
+      console.log(`[migrate] MongoDB → legacy complete: events=${structured.eventsCount} memories=${structured.memoriesCount} hotVectors=${vectors.hotCount} compactVectors=${vectors.compactCount}`);
+      return;
+    }
+
+    console.log(`[migrate] Unknown command: ${command}`);
+    process.exit(1);
+  } finally {
+    if (duck) {
+      await new Promise<void>((resolve) => duck!.conn.close(() => resolve()));
+    }
+    if (mongo) {
+      await closeMongoDB(mongo);
+    }
+  }
 }
 
 main().catch((error) => {
-  console.error(`[migrate] Error: ${error.message}`);
+  console.error(`[migrate] Error: ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 });

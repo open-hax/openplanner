@@ -22,10 +22,56 @@ export interface MongoConfig {
   dbName: string;
   eventsCollection: string;
   compactedCollection: string;
+  vectorHotCollection: string;
+  vectorCompactCollection: string;
   /** TTL for events in seconds (0 = no TTL) */
   eventsTtlSeconds?: number;
   /** TTL for compacted memories in seconds (0 = no TTL) */
   compactedTtlSeconds?: number;
+}
+
+export interface MongoVectorDocument {
+  _id: string;
+  parent_id: string;
+  text: string;
+  embedding: number[];
+  ts: Date;
+  source: string;
+  kind: string;
+  project: string | null;
+  session: string | null;
+  author: string | null;
+  role: string | null;
+  model: string | null;
+  visibility: string | null;
+  title: string | null;
+  embedding_model: string | null;
+  embedding_dimensions: number | null;
+  search_tier: "hot" | "compact";
+  chunk_id: string | null;
+  chunk_index: number | null;
+  chunk_count: number | null;
+  normalized_format: string | null;
+  normalized_estimated_tokens: number | null;
+  raw_estimated_tokens: number | null;
+  seed_id: string | null;
+  member_count: number | null;
+  char_count: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MongoVectorPartitionDocument {
+  _id: string;
+  tier: "hot" | "compact";
+  model: string;
+  dimensions: number;
+  collectionName: string;
+  searchIndexName: string;
+  searchIndexStatus: "pending" | "ready" | "error";
+  lastError: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface EventDocument {
@@ -72,6 +118,9 @@ export interface MongoConnection {
   db: Db;
   events: Collection<EventDocument>;
   compacted: Collection<CompactedMemoryDocument>;
+  hotVectors: Collection<MongoVectorDocument>;
+  compactVectors: Collection<MongoVectorDocument>;
+  vectorPartitions: Collection<MongoVectorPartitionDocument>;
   ftsEnabled: boolean; // MongoDB has text search, always true
 }
 
@@ -90,6 +139,9 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
 
   const events = db.collection<EventDocument>(config.eventsCollection);
   const compacted = db.collection<CompactedMemoryDocument>(config.compactedCollection);
+  const hotVectors = db.collection<MongoVectorDocument>(config.vectorHotCollection);
+  const compactVectors = db.collection<MongoVectorDocument>(config.vectorCompactCollection);
+  const vectorPartitions = db.collection<MongoVectorPartitionDocument>("vector_partitions");
 
   // Create indexes for events
   await events.createIndex({ ts: -1 });
@@ -105,6 +157,27 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await compacted.createIndex({ kind: 1, ts: -1 });
   await compacted.createIndex({ project: 1, ts: -1 });
   await compacted.createIndex({ "text": "text" }); // Full-text search index
+
+  await hotVectors.createIndex({ parent_id: 1, chunk_index: 1 });
+  await hotVectors.createIndex({ ts: -1 });
+  await hotVectors.createIndex({ source: 1, ts: -1 });
+  await hotVectors.createIndex({ kind: 1, ts: -1 });
+  await hotVectors.createIndex({ project: 1, ts: -1 });
+  await hotVectors.createIndex({ session: 1, ts: -1 });
+  await hotVectors.createIndex({ visibility: 1, ts: -1 });
+  await hotVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
+
+  await compactVectors.createIndex({ parent_id: 1 });
+  await compactVectors.createIndex({ ts: -1 });
+  await compactVectors.createIndex({ source: 1, ts: -1 });
+  await compactVectors.createIndex({ kind: 1, ts: -1 });
+  await compactVectors.createIndex({ project: 1, ts: -1 });
+  await compactVectors.createIndex({ session: 1, ts: -1 });
+  await compactVectors.createIndex({ visibility: 1, ts: -1 });
+  await compactVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
+
+  await vectorPartitions.createIndex({ collectionName: 1 }, { unique: true });
+  await vectorPartitions.createIndex({ tier: 1, model: 1, dimensions: 1 }, { unique: true });
 
   // TTL index for events (auto-expire old signals)
   const eventsTtl = config.eventsTtlSeconds ?? DEFAULT_EVENTS_TTL_SECONDS;
@@ -140,6 +213,9 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     db,
     events,
     compacted,
+    hotVectors,
+    compactVectors,
+    vectorPartitions,
     ftsEnabled: true, // MongoDB always has text search
   };
 }

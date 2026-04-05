@@ -1,9 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import fp from "fastify-plugin";
 import type { OpenPlannerConfig } from "../lib/config.js";
-import { resolveEmbeddingModel } from "../lib/embedding-models.js";
+import type { EmbeddingRuntime } from "../lib/embedding-runtime.js";
 import { openChroma, type Chroma } from "../lib/chroma.js";
-import { OllamaEmbeddingFunction } from "../lib/embeddings.js";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -12,39 +11,10 @@ declare module "fastify" {
 }
 
 export const chromaPlugin = fp<OpenPlannerConfig>(async (app, cfg) => {
-  const hotEmbeddingCache = new Map<string, OllamaEmbeddingFunction>();
-  const compactEmbeddingCache = new Map<string, OllamaEmbeddingFunction>();
-
-  const getModelForScope = (scope: { source?: string; kind?: string; project?: string }): string =>
-    resolveEmbeddingModel(cfg.embeddingModels, scope);
-
-  const getEmbeddingFunctionFor = (scope: { source?: string; kind?: string; project?: string }): OllamaEmbeddingFunction => {
-    const model = getModelForScope(scope);
-    const cached = hotEmbeddingCache.get(model);
-    if (cached) return cached;
-
-    const created = new OllamaEmbeddingFunction(model, cfg.ollamaBaseUrl, {
-      truncate: cfg.ollamaEmbedTruncate,
-      numCtx: cfg.ollamaEmbedNumCtx,
-      apiKey: cfg.ollamaApiKey,
-    });
-    hotEmbeddingCache.set(model, created);
-    return created;
-  };
-
-  const getCompactEmbeddingFunction = (): OllamaEmbeddingFunction => {
-    const model = cfg.compactEmbedModel;
-    const cached = compactEmbeddingCache.get(model);
-    if (cached) return cached;
-
-    const created = new OllamaEmbeddingFunction(model, cfg.ollamaBaseUrl, {
-      truncate: cfg.ollamaEmbedTruncate,
-      numCtx: cfg.ollamaEmbedNumCtx,
-      apiKey: cfg.ollamaApiKey,
-    });
-    compactEmbeddingCache.set(model, created);
-    return created;
-  };
+  const embeddingRuntime = (app as any).embeddingRuntime as EmbeddingRuntime;
+  const getModelForScope = embeddingRuntime.hot.getModel;
+  const getEmbeddingFunctionFor = embeddingRuntime.hot.getEmbeddingFunction;
+  const getCompactEmbeddingFunction = embeddingRuntime.compact.getEmbeddingFunction;
 
   const chroma = await openChroma(
     cfg.chromaUrl,

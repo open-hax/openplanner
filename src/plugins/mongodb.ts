@@ -34,18 +34,23 @@ export const mongodbPlugin = fp<OpenPlannerConfig>(async (app, cfg) => {
 
   app.log.info({ uri: mongoUri, db: mongoDbName }, "connecting to mongodb");
 
+  const vectorHotCollection = process.env.MONGODB_VECTOR_HOT_COLLECTION ?? cfg.mongodb.vectorHotCollection;
+  const vectorCompactCollection = process.env.MONGODB_VECTOR_COMPACT_COLLECTION ?? cfg.mongodb.vectorCompactCollection;
+
   const mongo = await openMongoDB({
     uri: mongoUri,
     dbName: mongoDbName,
     eventsCollection,
     compactedCollection,
+    vectorHotCollection,
+    vectorCompactCollection,
     eventsTtlSeconds: isNaN(eventsTtlSeconds) ? 0 : eventsTtlSeconds,
     compactedTtlSeconds: isNaN(compactedTtlSeconds) ? 0 : compactedTtlSeconds,
   });
 
   app.decorate("mongo", mongo);
   app.log.info({ 
-    collections: { events: eventsCollection, compacted: compactedCollection },
+    collections: { events: eventsCollection, compacted: compactedCollection, hotVectors: vectorHotCollection, compactVectors: vectorCompactCollection },
     ttl: { events: eventsTtlSeconds || "disabled", compacted: compactedTtlSeconds || "disabled" },
   }, "mongodb ready");
 
