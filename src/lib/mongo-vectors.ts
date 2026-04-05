@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { Collection, Filter } from "mongodb";
+import type { ClientSession, Collection, Filter } from "mongodb";
 import type { IEmbeddingFunction } from "chromadb";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "./indexing.js";
 import type { MongoConnection, MongoVectorDocument, MongoVectorPartitionDocument } from "./mongodb.js";
@@ -309,6 +309,53 @@ async function ensureVectorPartition(
   return { partition: { ...partition, collectionName }, collection };
 }
 
+function isTransactionUnsupported(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Transaction numbers are only allowed|transactions are not supported|replica set member|mongos/i.test(message);
+}
+
+async function withMongoTransaction<T>(
+  mongo: MongoConnection,
+  work: (session: ClientSession | undefined) => Promise<T>,
+): Promise<T> {
+  const session = mongo.client.startSession();
+  try {
+    return await session.withTransaction(async () => work(session));
+  } catch (error) {
+    if (isTransactionUnsupported(error)) {
+      return await work(undefined);
+    }
+    throw error;
+  } finally {
+    await session.endSession();
+  }
+}
+
+async function bulkWriteVectorDocuments(
+  collection: Collection<MongoVectorDocument>,
+  documents: ReadonlyArray<MongoVectorDocument>,
+  now: Date,
+  session?: ClientSession,
+): Promise<void> {
+  if (documents.length === 0) return;
+  await collection.bulkWrite(
+    documents.map((doc) => {
+      const { createdAt, ...docWithoutCreatedAt } = doc;
+      return {
+        updateOne: {
+          filter: { _id: doc._id },
+          update: {
+            $set: { ...docWithoutCreatedAt, updatedAt: now },
+            $setOnInsert: { createdAt },
+          },
+          upsert: true,
+        },
+      };
+    }),
+    { ordered: false, ...(session ? { session } : {}) },
+  );
+}
+
 export async function listMongoVectorPartitions(
   mongo: MongoConnection,
   tier: MongoVectorTier,
@@ -358,25 +405,7 @@ export async function upsertMongoVectorDocuments(
   if (entries.length === 0) return;
 
   const now = new Date();
-  const flatCollection = getFlatCollection(mongo, tier);
   const documents = entries.map((entry) => toMongoVectorDocument(entry, tier, now));
-
-  await flatCollection.bulkWrite(
-    documents.map((doc) => {
-      const { createdAt, ...docWithoutCreatedAt } = doc;
-      return {
-        updateOne: {
-          filter: { _id: doc._id },
-          update: {
-            $set: { ...docWithoutCreatedAt, updatedAt: now },
-            $setOnInsert: { createdAt },
-          },
-          upsert: true,
-        },
-      };
-    }),
-    { ordered: false },
-  );
 
   const groups = new Map<string, { model: string; dimensions: number; documents: MongoVectorDocument[] }>();
   for (const doc of documents) {
@@ -388,35 +417,31 @@ export async function upsertMongoVectorDocuments(
     groups.set(key, existing);
   }
 
-  for (const group of groups.values()) {
+  const partitionCollections = new Map<string, Collection<MongoVectorDocument>>();
+  for (const [key, group] of groups.entries()) {
     const { collection } = await ensureVectorPartition(mongo, tier, group.model, group.dimensions);
-    await collection.bulkWrite(
-      group.documents.map((doc) => {
-        const { createdAt, ...docWithoutCreatedAt } = doc;
-        return {
-          updateOne: {
-            filter: { _id: doc._id },
-            update: {
-              $set: { ...docWithoutCreatedAt, updatedAt: now },
-              $setOnInsert: { createdAt },
-            },
-            upsert: true,
-          },
-        };
-      }),
-      { ordered: false },
-    );
+    partitionCollections.set(key, collection);
   }
+
+  await withMongoTransaction(mongo, async (session) => {
+    await bulkWriteVectorDocuments(getFlatCollection(mongo, tier), documents, now, session);
+    for (const [key, group] of groups.entries()) {
+      const collection = partitionCollections.get(key);
+      if (!collection) continue;
+      await bulkWriteVectorDocuments(collection, group.documents, now, session);
+    }
+  });
 }
 
 async function deleteMongoVectorEntriesByParent(
   mongo: MongoConnection,
   tier: MongoVectorTier,
   parentId: string,
+  session?: ClientSession,
 ): Promise<void> {
-  await getFlatCollection(mongo, tier).deleteMany({ parent_id: parentId });
+  await getFlatCollection(mongo, tier).deleteMany({ parent_id: parentId }, session ? { session } : undefined);
   const partitions = await listMongoVectorPartitions(mongo, tier);
-  await Promise.all(partitions.map((partition) => mongo.db.collection<MongoVectorDocument>(partition.collectionName).deleteMany({ parent_id: parentId })));
+  await Promise.all(partitions.map((partition) => mongo.db.collection<MongoVectorDocument>(partition.collectionName).deleteMany({ parent_id: parentId }, session ? { session } : undefined)));
 }
 
 export async function deleteMongoVectorEntriesByFilter(
@@ -425,9 +450,11 @@ export async function deleteMongoVectorEntriesByFilter(
   where: Record<string, unknown>,
 ): Promise<void> {
   const filter = buildMongoFilter(where);
-  await getFlatCollection(mongo, tier).deleteMany(filter);
   const partitions = await listMongoVectorPartitions(mongo, tier);
-  await Promise.all(partitions.map((partition) => mongo.db.collection<MongoVectorDocument>(partition.collectionName).deleteMany(filter)));
+  await withMongoTransaction(mongo, async (session) => {
+    await getFlatCollection(mongo, tier).deleteMany(filter, session ? { session } : undefined);
+    await Promise.all(partitions.map((partition) => mongo.db.collection<MongoVectorDocument>(partition.collectionName).deleteMany(filter, session ? { session } : undefined)));
+  });
 }
 
 export async function replaceMongoVectorEntries(
@@ -436,8 +463,33 @@ export async function replaceMongoVectorEntries(
   parentId: string,
   entries: ReadonlyArray<MongoVectorEntry>,
 ): Promise<void> {
-  await deleteMongoVectorEntriesByParent(mongo, tier, parentId);
-  await upsertMongoVectorDocuments(mongo, tier, entries);
+  const now = new Date();
+  const documents = entries.map((entry) => toMongoVectorDocument(entry, tier, now));
+  const groups = new Map<string, { model: string; dimensions: number; documents: MongoVectorDocument[] }>();
+  for (const doc of documents) {
+    const model = doc.embedding_model ?? "unknown-model";
+    const dimensions = doc.embedding.length;
+    const key = `${model}::${dimensions}`;
+    const existing = groups.get(key) ?? { model, dimensions, documents: [] };
+    existing.documents.push(doc);
+    groups.set(key, existing);
+  }
+
+  const partitionCollections = new Map<string, Collection<MongoVectorDocument>>();
+  for (const [key, group] of groups.entries()) {
+    const { collection } = await ensureVectorPartition(mongo, tier, group.model, group.dimensions);
+    partitionCollections.set(key, collection);
+  }
+
+  await withMongoTransaction(mongo, async (session) => {
+    await deleteMongoVectorEntriesByParent(mongo, tier, parentId, session);
+    await bulkWriteVectorDocuments(getFlatCollection(mongo, tier), documents, now, session);
+    for (const [key, group] of groups.entries()) {
+      const collection = partitionCollections.get(key);
+      if (!collection) continue;
+      await bulkWriteVectorDocuments(collection, group.documents, now, session);
+    }
+  });
 }
 
 export async function indexTextInMongoVectors(params: {
