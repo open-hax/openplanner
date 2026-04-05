@@ -207,6 +207,10 @@ function makePartitionCollectionName(baseCollectionName: string, model: string, 
   return `${baseCollectionName}__${sanitizeModelName(model)}__d${dimensions}__${hashModelName(model)}`;
 }
 
+function makePartitionKey(model: string, dimensions: number): string {
+  return `${model}::${dimensions}`;
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -393,6 +397,24 @@ async function bulkWriteVectorDocuments(
   );
 }
 
+async function deletePartitionDocuments(
+  mongo: MongoConnection,
+  partitionCollectionNames: ReadonlyArray<string>,
+  filter: Filter<MongoVectorDocument>,
+  session?: ClientSession,
+): Promise<void> {
+  if (session) {
+    for (const collectionName of partitionCollectionNames) {
+      await mongo.db.collection<MongoVectorDocument>(collectionName).deleteMany(filter, { session });
+    }
+    return;
+  }
+
+  await Promise.all(
+    partitionCollectionNames.map((collectionName) => mongo.db.collection<MongoVectorDocument>(collectionName).deleteMany(filter)),
+  );
+}
+
 export async function listMongoVectorPartitions(
   mongo: MongoConnection,
   tier: MongoVectorTier,
@@ -442,13 +464,14 @@ export async function upsertMongoVectorDocuments(
   if (entries.length === 0) return;
 
   const now = new Date();
+  const flatCollection = getFlatCollection(mongo, tier);
   const documents = entries.map((entry) => toMongoVectorDocument(entry, tier, now));
 
   const groups = new Map<string, { model: string; dimensions: number; documents: MongoVectorDocument[] }>();
   for (const doc of documents) {
     const model = doc.embedding_model ?? "unknown-model";
     const dimensions = doc.embedding.length;
-    const key = `${model}::${dimensions}`;
+    const key = makePartitionKey(model, dimensions);
     const existing = groups.get(key) ?? { model, dimensions, documents: [] };
     existing.documents.push(doc);
     groups.set(key, existing);
@@ -461,7 +484,36 @@ export async function upsertMongoVectorDocuments(
   }
 
   await withMongoTransaction(mongo, async (session) => {
-    await bulkWriteVectorDocuments(getFlatCollection(mongo, tier), documents, now, session);
+    const existingDocs = await flatCollection.find(
+      { _id: { $in: documents.map((doc) => doc._id) } },
+      session ? { session } : undefined,
+    ).project<{ _id: string; embedding_model?: string | null; embedding_dimensions?: number | null }>({
+      _id: 1,
+      embedding_model: 1,
+      embedding_dimensions: 1,
+    }).toArray();
+
+    const stalePartitionIds = new Map<string, { model: string; dimensions: number; ids: string[] }>();
+    const nextPartitionById = new Map(documents.map((doc) => [doc._id, makePartitionKey(doc.embedding_model ?? "unknown-model", doc.embedding.length)]));
+    for (const existing of existingDocs) {
+      const previousModel = existing.embedding_model ?? "unknown-model";
+      const previousDimensions = Number(existing.embedding_dimensions ?? 0);
+      if (!Number.isFinite(previousDimensions) || previousDimensions <= 0) continue;
+      const previousKey = makePartitionKey(previousModel, previousDimensions);
+      if (previousKey === nextPartitionById.get(existing._id)) continue;
+      const stale = stalePartitionIds.get(previousKey) ?? { model: previousModel, dimensions: previousDimensions, ids: [] };
+      stale.ids.push(existing._id);
+      stalePartitionIds.set(previousKey, stale);
+    }
+
+    for (const stale of stalePartitionIds.values()) {
+      await mongo.db.collection<MongoVectorDocument>(makePartitionCollectionName(flatCollection.collectionName, stale.model, stale.dimensions)).deleteMany(
+        { _id: { $in: stale.ids } },
+        session ? { session } : undefined,
+      );
+    }
+
+    await bulkWriteVectorDocuments(flatCollection, documents, now, session);
     for (const [key, group] of groups.entries()) {
       const collection = partitionCollections.get(key);
       if (!collection) continue;
@@ -478,7 +530,12 @@ async function deleteMongoVectorEntriesByParent(
 ): Promise<void> {
   await getFlatCollection(mongo, tier).deleteMany({ parent_id: parentId }, session ? { session } : undefined);
   const partitions = await listMongoVectorPartitions(mongo, tier);
-  await Promise.all(partitions.map((partition) => mongo.db.collection<MongoVectorDocument>(partition.collectionName).deleteMany({ parent_id: parentId }, session ? { session } : undefined)));
+  await deletePartitionDocuments(
+    mongo,
+    partitions.map((partition) => partition.collectionName),
+    { parent_id: parentId },
+    session,
+  );
 }
 
 export async function deleteMongoVectorEntriesByFilter(
@@ -493,7 +550,12 @@ export async function deleteMongoVectorEntriesByFilter(
   const partitions = await listMongoVectorPartitions(mongo, tier);
   await withMongoTransaction(mongo, async (session) => {
     await getFlatCollection(mongo, tier).deleteMany(filter, session ? { session } : undefined);
-    await Promise.all(partitions.map((partition) => mongo.db.collection<MongoVectorDocument>(partition.collectionName).deleteMany(filter, session ? { session } : undefined)));
+    await deletePartitionDocuments(
+      mongo,
+      partitions.map((partition) => partition.collectionName),
+      filter,
+      session,
+    );
   });
 }
 
@@ -509,7 +571,7 @@ export async function replaceMongoVectorEntries(
   for (const doc of documents) {
     const model = doc.embedding_model ?? "unknown-model";
     const dimensions = doc.embedding.length;
-    const key = `${model}::${dimensions}`;
+    const key = makePartitionKey(model, dimensions);
     const existing = groups.get(key) ?? { model, dimensions, documents: [] };
     existing.documents.push(doc);
     groups.set(key, existing);
