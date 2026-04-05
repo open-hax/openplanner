@@ -24,6 +24,15 @@ export type MongoVectorEntry = {
 
 const VECTOR_SEARCH_INDEX_NAME = "vs_embedding";
 const FILTERABLE_PATHS = ["source", "kind", "project", "session", "visibility", "parent_id", "embedding_model"] as const;
+const FILTERABLE_PATH_SET = new Set<string>(FILTERABLE_PATHS);
+const VEXX_BASE_URL = String(process.env.VEXX_BASE_URL ?? "").trim();
+const VEXX_API_KEY = String(process.env.VEXX_API_KEY ?? "").trim();
+const VEXX_DEVICE = String(process.env.VEXX_DEVICE ?? "AUTO").trim() || "AUTO";
+const VEXX_REQUIRE_ACCEL = /^(1|true|yes|on)$/i.test(String(process.env.VEXX_REQUIRE_ACCEL ?? ""));
+const VEXX_MIN_CANDIDATES = (() => {
+  const parsed = Number(process.env.VEXX_MIN_CANDIDATES ?? "256");
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 256;
+})();
 
 function emptyResult(): RawQueryResult {
   return { ids: [[]], documents: [[]], metadatas: [[]], distances: [[]], include: ["documents", "metadatas", "distances"] };
@@ -65,7 +74,8 @@ function buildMongoFilter(where: Record<string, unknown> | undefined): Filter<Mo
   if (!where) return filter;
 
   for (const [key, rawValue] of Object.entries(where)) {
-    if (rawValue === undefined || key === "search_tier") continue;
+    if (rawValue === undefined || key === "search_tier" || key.startsWith("$") || key.includes(".")) continue;
+    if (!FILTERABLE_PATH_SET.has(key)) continue;
 
     if (typeof rawValue === "object" && rawValue !== null && !Array.isArray(rawValue)) {
       const record = rawValue as Record<string, unknown>;
@@ -94,7 +104,8 @@ function buildMongoFilter(where: Record<string, unknown> | undefined): Filter<Mo
 
 function dot(left: readonly number[], right: readonly number[]): number {
   let total = 0;
-  for (let index = 0; index < left.length; index += 1) {
+  const length = Math.min(left.length, right.length);
+  for (let index = 0; index < length; index += 1) {
     total += left[index]! * right[index]!;
   }
   return total;
@@ -110,6 +121,48 @@ function cosineSimilarity(left: readonly number[], right: readonly number[]): nu
   const rightMagnitude = magnitude(right);
   if (leftMagnitude === 0 || rightMagnitude === 0) return Number.NEGATIVE_INFINITY;
   return dot(left, right) / (leftMagnitude * rightMagnitude);
+}
+
+async function queryPartitionWithVexxTopK(params: {
+  candidates: MongoVectorDocument[];
+  queryEmbedding: number[];
+  k: number;
+}): Promise<Array<{ doc: MongoVectorDocument; score: number }> | null> {
+  if (!VEXX_BASE_URL) return null;
+  const validCandidates = params.candidates.filter(
+    (doc) => Array.isArray(doc.embedding) && doc.embedding.length === params.queryEmbedding.length,
+  );
+  if (validCandidates.length < Math.max(params.k, VEXX_MIN_CANDIDATES)) return null;
+
+  const response = await fetch(`${VEXX_BASE_URL.replace(/\/$/, "")}/v1/cosine/topk`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(VEXX_API_KEY ? { Authorization: `Bearer ${VEXX_API_KEY}` } : {}),
+    },
+    body: JSON.stringify({
+      query: params.queryEmbedding,
+      candidates: validCandidates.map((doc) => ({ id: doc._id, embedding: doc.embedding })),
+      k: Math.max(1, params.k),
+      device: VEXX_DEVICE,
+      requireAccel: VEXX_REQUIRE_ACCEL,
+    }),
+  });
+
+  if (!response.ok) return null;
+
+  const payload = await response.json() as { matches?: Array<{ id?: string; score?: number }> };
+  if (!Array.isArray(payload.matches)) return null;
+
+  const docsById = new Map(validCandidates.map((doc) => [doc._id, doc]));
+  return payload.matches
+    .map((match) => {
+      const id = typeof match.id === "string" ? match.id : "";
+      const score = typeof match.score === "number" ? match.score : Number.NEGATIVE_INFINITY;
+      const doc = docsById.get(id);
+      return doc ? { doc, score } : null;
+    })
+    .filter((entry): entry is { doc: MongoVectorDocument; score: number } => entry !== null && Number.isFinite(entry.score));
 }
 
 function toMetadata(doc: MongoVectorDocument): Record<string, unknown> {
@@ -505,6 +558,12 @@ async function queryPartitionWithCosineScan(params: {
 }): Promise<Array<{ doc: MongoVectorDocument; score: number }>> {
   const filter = buildMongoFilter(params.where);
   const candidates = await params.collection.find(filter).sort({ ts: -1 }).limit(Math.max(params.k * 50, 1000)).toArray();
+  const vexxRows = await queryPartitionWithVexxTopK({
+    candidates,
+    queryEmbedding: params.queryEmbedding,
+    k: params.k,
+  }).catch(() => null);
+  if (vexxRows) return vexxRows;
   return candidates
     .map((doc) => ({ doc, score: cosineSimilarity(params.queryEmbedding, doc.embedding ?? []) }))
     .filter((entry) => Number.isFinite(entry.score))
@@ -526,11 +585,17 @@ export async function queryMongoVectorsByText(params: {
   }
 
   const rows: Array<{ doc: MongoVectorDocument; score: number }> = [];
+  const queryEmbeddingsByModel = new Map<string, number[]>();
 
   for (const partition of partitions) {
     const collection = params.mongo.db.collection<MongoVectorDocument>(partition.collectionName);
-    const embeddingFunction = params.getEmbeddingFunctionForModel(partition.model);
-    const [queryEmbedding] = await embeddingFunction.generate([params.q]);
+    let queryEmbedding = queryEmbeddingsByModel.get(partition.model);
+    if (!queryEmbedding) {
+      const embeddingFunction = params.getEmbeddingFunctionForModel(partition.model);
+      const [generatedEmbedding] = await embeddingFunction.generate([params.q]);
+      queryEmbedding = Array.isArray(generatedEmbedding) ? generatedEmbedding : undefined;
+      if (queryEmbedding) queryEmbeddingsByModel.set(partition.model, queryEmbedding);
+    }
     if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) continue;
 
     let partitionRows: Array<{ doc: MongoVectorDocument; score: number }>;

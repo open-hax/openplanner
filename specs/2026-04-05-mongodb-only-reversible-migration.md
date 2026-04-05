@@ -6,7 +6,7 @@ We want to remove ChromaDB from the runtime path and make MongoDB the single per
 
 Workspace research found an existing upstream spec here:
 
-- `/home/err/devel/orgs/open-hax/knoxx/specs/knowledge-ops-mongodb-vector-unification.md`
+- `orgs/open-hax/knoxx/specs/knowledge-ops-mongodb-vector-unification.md`
 
 That spec establishes the long-term target architecture:
 
@@ -99,5 +99,6 @@ Verified locally:
 
 If we want the spec-complete end state, the next change should be:
 
-- partition Mongo vector storage by embedding model/dimension
-- then add native `$vectorSearch` indexes and query fan-out
+- harden the model/dimension-partitioned layout operationally
+- validate per-partition `$vectorSearch` index readiness and recovery behavior
+- remove the application-side cosine fallback once `mongot` availability is guaranteed

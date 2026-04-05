@@ -34,6 +34,41 @@ export type ChromaMigrationConfig = {
   compactCollection: string;
 };
 
+function createChromaMigrationClient(chroma: ChromaMigrationConfig): ChromaClient {
+  const url = String(chroma.url ?? "").trim();
+  if (!url) {
+    throw new Error("Chroma migration requires a configured Chroma URL");
+  }
+  return new ChromaClient({ path: url });
+}
+
+function toChromaMetadata(row: MongoVectorDocument): Record<string, unknown> {
+  return {
+    ts: row.ts.toISOString(),
+    source: row.source,
+    kind: row.kind,
+    project: row.project ?? "",
+    session: row.session ?? "",
+    author: row.author ?? "",
+    role: row.role ?? "",
+    model: row.model ?? "",
+    visibility: row.visibility ?? "",
+    title: row.title ?? "",
+    embedding_model: row.embedding_model ?? "",
+    search_tier: row.search_tier,
+    parent_id: row.parent_id,
+    chunk_id: row.chunk_id ?? row._id,
+    chunk_index: row.chunk_index ?? 0,
+    chunk_count: row.chunk_count ?? 1,
+    ...(row.normalized_format ? { normalized_format: row.normalized_format } : {}),
+    ...(row.normalized_estimated_tokens != null ? { normalized_estimated_tokens: row.normalized_estimated_tokens } : {}),
+    ...(row.raw_estimated_tokens != null ? { raw_estimated_tokens: row.raw_estimated_tokens } : {}),
+    ...(row.seed_id ? { seed_id: row.seed_id } : {}),
+    ...(row.member_count != null ? { member_count: row.member_count } : {}),
+    ...(row.char_count != null ? { char_count: row.char_count } : {}),
+  };
+}
+
 /**
  * Built-in migrations.
  */
@@ -461,7 +496,7 @@ export async function migrateChromaToMongoDB(
   } = {},
 ): Promise<{ hotCount: number; compactCount: number; duration: number }> {
   const startTime = Date.now();
-  const client = new ChromaClient({ path: chroma.url });
+  const client = createChromaMigrationClient(chroma);
   const hotCount = await migrateChromaCollectionToMongo(client, mongo, chroma.hotCollection, "hot", options);
   const compactCount = await migrateChromaCollectionToMongo(client, mongo, chroma.compactCollection, "compact", options);
   return { hotCount, compactCount, duration: Date.now() - startTime };
@@ -489,30 +524,7 @@ async function migrateMongoVectorsToChromaCollection(
         ids: rows.map((row) => row._id),
         documents: rows.map((row) => row.text),
         embeddings: rows.map((row) => row.embedding),
-        metadatas: rows.map((row) => ({
-          ts: row.ts.toISOString(),
-          source: row.source,
-          kind: row.kind,
-          project: row.project ?? "",
-          session: row.session ?? "",
-          author: row.author ?? "",
-          role: row.role ?? "",
-          model: row.model ?? "",
-          visibility: row.visibility ?? "",
-          title: row.title ?? "",
-          embedding_model: row.embedding_model ?? "",
-          search_tier: row.search_tier,
-          parent_id: row.parent_id,
-          chunk_id: row.chunk_id ?? row._id,
-          chunk_index: row.chunk_index ?? 0,
-          chunk_count: row.chunk_count ?? 1,
-          normalized_format: row.normalized_format ?? null,
-          normalized_estimated_tokens: row.normalized_estimated_tokens ?? null,
-          raw_estimated_tokens: row.raw_estimated_tokens ?? null,
-          seed_id: row.seed_id ?? null,
-          member_count: row.member_count ?? null,
-          char_count: row.char_count ?? null,
-        })) as any,
+        metadatas: rows.map((row) => toChromaMetadata(row)) as any,
       });
     }
     migrated += rows.length;
@@ -532,7 +544,7 @@ export async function migrateMongoDBToChroma(
   } = {},
 ): Promise<{ hotCount: number; compactCount: number; duration: number }> {
   const startTime = Date.now();
-  const client = new ChromaClient({ path: chroma.url });
+  const client = createChromaMigrationClient(chroma);
   const hotCount = await migrateMongoVectorsToChromaCollection(mongo.hotVectors, client, chroma.hotCollection, options);
   const compactCount = await migrateMongoVectorsToChromaCollection(mongo.compactVectors, client, chroma.compactCollection, options);
   return { hotCount, compactCount, duration: Date.now() - startTime };

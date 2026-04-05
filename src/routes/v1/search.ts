@@ -177,6 +177,14 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
       project: typeof whereFromBody.project === "string" ? whereFromBody.project : undefined,
     };
     const whereClause = Object.keys(whereFromBody).length > 0 ? whereFromBody : undefined;
+    const mongoWhere = Object.fromEntries(
+      Object.entries(whereFromBody).filter(([key, value]) => (
+        ["source", "kind", "project", "session", "visibility", "parent_id", "embedding_model"].includes(key)
+        && !key.startsWith("$")
+        && !key.includes(".")
+        && (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
+      )),
+    );
     const tier = body.tier ?? "both";
     const includeHot = tier !== "compact";
     const includeCompact = tier !== "hot";
@@ -194,7 +202,7 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
           tier: "hot",
           q,
           k: limit,
-          where: whereClause,
+          where: Object.keys(mongoWhere).length > 0 ? mongoWhere : undefined,
           getEmbeddingFunctionForModel: (model: string) => embeddingRuntime.hot.getEmbeddingFunctionForModel(model),
         });
         tieredHits.push(extractTieredVectorHits(result, "hot"));
@@ -206,7 +214,7 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
           tier: "compact",
           q,
           k: limit,
-          where: whereClause,
+          where: Object.keys(mongoWhere).length > 0 ? mongoWhere : undefined,
           getEmbeddingFunctionForModel: (model: string) => embeddingRuntime.compact.getEmbeddingFunctionForModel(model),
         });
         tieredHits.push(extractTieredVectorHits(result, "compact"));

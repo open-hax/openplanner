@@ -177,7 +177,7 @@ export const lakeRoutes: FastifyPluginAsync = async (app) => {
 
     let hotDeleted = false;
     let compactDeleted = false;
-    if (app.chroma?.enabled !== false) {
+    if (app.chroma && app.chroma.enabled !== false) {
       try {
         const hot = await app.chroma.client.getCollection({
           name: app.chroma.collectionName,

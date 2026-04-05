@@ -177,14 +177,6 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
                   await collection.upsert({ ids, documents, metadatas });
                   continue;
                 }
-
-                try {
-                  if (typeof collection.update === "function") {
-                    await collection.update({ ids, documents, metadatas });
-                    continue;
-                  }
-                } catch {}
-
                 await collection.add({ ids, documents, metadatas });
               }
             };

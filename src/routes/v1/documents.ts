@@ -253,14 +253,6 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
         await collection.upsert({ ids, documents, metadatas });
         continue;
       }
-
-      try {
-        if (typeof collection.update === "function") {
-          await collection.update({ ids, documents, metadatas });
-          continue;
-        }
-      } catch {}
-
       await collection.add({ ids, documents, metadatas });
     }
   };

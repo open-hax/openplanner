@@ -30,7 +30,8 @@ import {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  const command = args[0] ?? "status";
+  const positionalArgs = args.filter((arg) => !arg.startsWith("--"));
+  const command = positionalArgs[0] ?? "status";
   const dryRun = args.includes("--dry-run");
   const cfg = loadConfig();
   const pathConfig = paths(cfg.dataDir);
@@ -80,7 +81,7 @@ async function main(): Promise<void> {
   }
 
   if (command === "export-jsonl") {
-    const outputDir = args[1] ?? `${cfg.dataDir}/export`;
+    const outputDir = positionalArgs[1] ?? `${cfg.dataDir}/export`;
     const duck = await openDuckDB(pathConfig.dbPath);
     try {
       const result = await exportDuckDBToJsonl(duck, outputDir);

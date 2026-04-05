@@ -201,7 +201,10 @@ export function prepareIndexDocument(params: {
   const targetChunkTokens = params.targetChunkTokens ?? DEFAULT_TARGET_CHUNK_TOKENS;
   const targetChunkChars = params.targetChunkChars ?? DEFAULT_TARGET_CHUNK_CHARS;
   const overlapChars = params.overlapChars ?? DEFAULT_OVERLAP_CHARS;
-  const shouldChunk = params.forceChunking === true || normalizedEstimatedTokens > overflowThresholdTokens;
+  const shouldChunk = params.forceChunking === true
+    || normalizedEstimatedTokens > targetChunkTokens
+    || normalizedText.length > targetChunkChars
+    || normalizedEstimatedTokens > overflowThresholdTokens;
   const parts = shouldChunk
     ? chunkText(normalizedText, targetChunkTokens, targetChunkChars, overlapChars)
     : [normalizedText];

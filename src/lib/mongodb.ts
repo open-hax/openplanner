@@ -208,6 +208,30 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     console.log(`[mongodb] Created TTL index on compacted_memories (expireAfterSeconds: ${compactedTtl})`);
   }
 
+  if (eventsTtl > 0) {
+    await hotVectors.createIndex(
+      { createdAt: 1 },
+      {
+        expireAfterSeconds: eventsTtl,
+        name: "hot_vectors_ttl",
+        background: true,
+      },
+    );
+    console.log(`[mongodb] Created TTL index on hot vectors (expireAfterSeconds: ${eventsTtl})`);
+  }
+
+  if (compactedTtl > 0) {
+    await compactVectors.createIndex(
+      { createdAt: 1 },
+      {
+        expireAfterSeconds: compactedTtl,
+        name: "compact_vectors_ttl",
+        background: true,
+      },
+    );
+    console.log(`[mongodb] Created TTL index on compact vectors (expireAfterSeconds: ${compactedTtl})`);
+  }
+
   return {
     client,
     db,

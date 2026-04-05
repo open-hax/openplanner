@@ -81,8 +81,8 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
             compact: app.chroma.compactCollectionName,
           },
       embeddingModels: {
-        hot: storageBackend === "mongodb" ? embeddingRuntime.hot.getModel({}) : (app.chroma.resolveEmbeddingModel?.({}) ?? null),
-        compact: storageBackend === "mongodb" ? embeddingRuntime.compact.getModel() : (app.chroma.resolveCompactEmbeddingModel?.({}) ?? null),
+        hot: storageBackend === "mongodb" ? embeddingRuntime.hot.getModel({}) : (app.chroma?.resolveEmbeddingModel?.({}) ?? null),
+        compact: storageBackend === "mongodb" ? embeddingRuntime.compact.getModel() : (app.chroma?.resolveCompactEmbeddingModel?.({}) ?? null),
       },
       dependencies: dependencyHealth,
     };

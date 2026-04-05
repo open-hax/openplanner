@@ -78,6 +78,28 @@ function normalizeUrl(value: unknown): string {
   }
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function endpointLake(project: string, extra: Record<string, unknown>, key: "source_lake" | "target_lake"): string {
+  return String(extra[key] ?? extra.lake ?? project ?? "web").trim() || project || "web";
+}
+
+function endpointFallbackValues(nodeIds: string[]): string[] {
+  const values = new Set<string>();
+  for (const nodeId of nodeIds) {
+    if (nodeId.includes(":url:")) {
+      values.add(nodeId.split(":url:")[1] ?? "");
+      continue;
+    }
+    if (nodeId.includes(":file:")) {
+      values.add(nodeId.split(":file:")[1] ?? "");
+    }
+  }
+  return [...values].filter(Boolean);
+}
+
 function lakeFromNodeId(nodeId: string): string {
   const idx = nodeId.indexOf(":");
   return idx > 0 ? nodeId.slice(0, idx) : "unknown";
@@ -144,18 +166,18 @@ function deriveNodeLabel(nodeId: string, extra: Record<string, unknown>): string
   return nodeId;
 }
 
-function deriveEdgeSource(extra: Record<string, unknown>): string | null {
+function deriveEdgeSource(project: string, extra: Record<string, unknown>): string | null {
   const explicit = String(extra.source_node_id ?? "").trim();
   if (explicit) return explicit;
   const raw = normalizeUrl(extra.source);
-  return raw ? `web:url:${raw}` : null;
+  return raw ? `${endpointLake(project, extra, "source_lake")}:url:${raw}` : null;
 }
 
-function deriveEdgeTarget(extra: Record<string, unknown>): string | null {
+function deriveEdgeTarget(project: string, extra: Record<string, unknown>): string | null {
   const explicit = String(extra.target_node_id ?? "").trim();
   if (explicit) return explicit;
   const raw = normalizeUrl(extra.target);
-  return raw ? `web:url:${raw}` : null;
+  return raw ? `${endpointLake(project, extra, "target_lake")}:url:${raw}` : null;
 }
 
 function deriveEdgeType(project: string, extra: Record<string, unknown>): string {
@@ -262,8 +284,8 @@ function mapNodeRow(row: Record<string, unknown>): ExportNode {
 function mapEdgeRow(row: Record<string, unknown>): ExportEdge | null {
   const extra = parseExtra(row.extra);
   const project = String(row.project ?? extra.lake ?? "").trim() || "unknown";
-  const source = deriveEdgeSource(extra);
-  const target = deriveEdgeTarget(extra);
+  const source = deriveEdgeSource(project, extra);
+  const target = deriveEdgeTarget(project, extra);
   if (!source || !target) return null;
 
   const edgeType = deriveEdgeType(project, extra);
@@ -351,6 +373,7 @@ async function searchDuckGraphNodeRows(
 
 async function loadDuckIncidentEdgeRows(conn: unknown, nodeIds: string[], edgeTypes: string[], limit: number): Promise<Record<string, unknown>[]> {
   if (nodeIds.length === 0) return [];
+  const fallbackValues = endpointFallbackValues(nodeIds);
   let sql = `
     SELECT id, ts, source, kind, project, extra
     FROM events
@@ -358,9 +381,10 @@ async function loadDuckIncidentEdgeRows(conn: unknown, nodeIds: string[], edgeTy
       AND (
         json_extract_string(extra, '$.source_node_id') IN (${nodeIds.map(() => "?").join(", ")})
         OR json_extract_string(extra, '$.target_node_id') IN (${nodeIds.map(() => "?").join(", ")})
+        ${fallbackValues.length > 0 ? `OR json_extract_string(extra, '$.source') IN (${fallbackValues.map(() => "?").join(", ")}) OR json_extract_string(extra, '$.target') IN (${fallbackValues.map(() => "?").join(", ")})` : ""}
       )
   `;
-  const params: unknown[] = [...nodeIds, ...nodeIds];
+  const params: unknown[] = [...nodeIds, ...nodeIds, ...fallbackValues, ...fallbackValues];
   if (edgeTypes.length > 0) {
     sql += ` AND json_extract_string(extra, '$.edge_type') IN (${edgeTypes.map(() => "?").join(", ")})`;
     params.push(...edgeTypes);
@@ -374,6 +398,29 @@ async function loadMongoGraphRows(collection: any, kind: "graph.node" | "graph.e
   const query: Record<string, unknown> = { kind };
   if (projects.length > 0) query.project = { $in: projects };
   return await collection.find(query).sort({ ts: -1 }).toArray();
+}
+
+async function searchMongoGraphNodeRows(
+  collection: any,
+  query: string,
+  projects: string[],
+  nodeTypes: string[],
+  limit: number,
+): Promise<Record<string, unknown>[]> {
+  const mongoQuery: Record<string, unknown> = { kind: "graph.node" };
+  if (projects.length > 0) mongoQuery.project = { $in: projects };
+  if (nodeTypes.length > 0) mongoQuery["extra.node_type"] = { $in: nodeTypes };
+  if (query.trim()) {
+    const regex = new RegExp(escapeRegex(query), "i");
+    mongoQuery.$or = [
+      { text: regex },
+      { "extra.label": regex },
+      { "extra.path": regex },
+      { "extra.url": regex },
+      { "extra.title": regex },
+    ];
+  }
+  return await collection.find(mongoQuery).sort({ ts: -1 }).limit(limit).toArray();
 }
 
 export const graphRoutes: FastifyPluginAsync = async (app) => {
@@ -502,23 +549,17 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const edgeLimit = Math.max(0, Math.min(200, Number(req.query?.edgeLimit ?? 40)));
 
     const nodeRows = storageBackend === "mongodb"
-      ? await loadMongoGraphRows((app as any).mongo.events, "graph.node", projects)
+      ? await searchMongoGraphNodeRows((app as any).mongo.events, query, projects, nodeTypes, limit)
       : duck
         ? await searchDuckGraphNodeRows((duck as any).conn, query, projects, nodeTypes, limit)
         : [];
 
     const nodes = (storageBackend === "mongodb"
-      ? (nodeRows as Record<string, unknown>[])
-          .map(mapNodeRow)
-          .filter((node) => (nodeTypes.length === 0 || nodeTypes.includes(node.nodeType))
-            && (!query || [node.label, String(node.data.path ?? ""), String(node.data.url ?? ""), String(node.data.title ?? ""), String(node.data.preview ?? "")]
-              .join("\n")
-              .toLowerCase()
-              .includes(query.toLowerCase())))
-          .slice(0, limit)
+      ? (nodeRows as Record<string, unknown>[]).map(mapNodeRow)
       : (nodeRows as Record<string, unknown>[]).map(mapNodeRow));
 
     const nodeIds = nodes.map((node) => node.id);
+    const fallbackValues = endpointFallbackValues(nodeIds);
     const edgeRows = edgeLimit > 0
       ? storageBackend === "mongodb"
         ? await (app as any).mongo.events.find({
@@ -526,6 +567,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
             $or: [
               { "extra.source_node_id": { $in: nodeIds } },
               { "extra.target_node_id": { $in: nodeIds } },
+              ...(fallbackValues.length > 0
+                ? [{ "extra.source": { $in: fallbackValues } }, { "extra.target": { $in: fallbackValues } }]
+                : []),
             ],
             ...(projects.length > 0 ? { project: { $in: projects } } : {}),
             ...(edgeTypes.length > 0 ? { "extra.edge_type": { $in: edgeTypes } } : {}),
