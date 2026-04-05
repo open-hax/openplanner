@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { all, run } from "../../lib/duckdb.js";
 import { upsertEvent } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
-import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
+import { deleteMongoVectorEntriesByFilter, indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import type {
   DocumentPatchRequest,
   DocumentRecord,
@@ -104,8 +104,8 @@ async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ in
     return { indexed: false, indexing: "disabled" };
   }
   try {
-    await indexDocument(app, ev);
-    return { indexed: true, indexing: "required" };
+    const indexed = await indexDocument(app, ev);
+    return { indexed, indexing: indexed ? "required" : "disabled" };
   } catch (error) {
     app.log.error(error, storageBackend === "mongodb" ? "Failed to index document into MongoDB vectors" : "Failed to index document into ChromaDB");
     const warning = error instanceof Error ? error.message : String(error);
@@ -177,8 +177,39 @@ async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
   }
 }
 
-async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
-  if (!ev.text) return;
+async function deleteDocumentVectors(app: any, ev: EventEnvelopeV1): Promise<void> {
+  const sr = ev.source_ref ?? {};
+  const embeddingScope = {
+    source: ev.source,
+    kind: ev.kind,
+    project: sr.project ? String(sr.project) : undefined,
+  };
+  if ((app.storageBackend ?? "duckdb") === "mongodb") {
+    await deleteMongoVectorEntriesByFilter(app.mongo, "hot", { parent_id: ev.id });
+    return;
+  }
+
+  if (!app.chroma?.enabled) return;
+
+  const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
+  const collection: any = await app.chroma.client.getCollection({
+    name: app.chroma.collectionName,
+    embeddingFunction,
+  });
+  if (typeof collection.delete === "function") {
+    await collection.delete({ where: { parent_id: ev.id } });
+    return;
+  }
+
+  throw new Error("document vector cleanup requires a collection delete() method");
+}
+
+async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
+  const content = String(ev.text ?? "");
+  if (!content.trim()) {
+    await deleteDocumentVectors(app, ev);
+    return false;
+  }
   const sr = ev.source_ref ?? {};
   const meta = ev.meta ?? {};
   const embeddingScope = {
@@ -208,12 +239,12 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
       mongo: app.mongo,
       tier: "hot",
       parentId: ev.id,
-      text: ev.text,
+      text: content,
       extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
       metadata: { ...metadata, embedding_model: embeddingModel ?? "" },
       embeddingFunction,
     });
-    return;
+    return true;
   }
 
   const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
@@ -226,7 +257,7 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
 
   const prepared = prepareIndexDocument({
     parentId: ev.id,
-    text: ev.text,
+    text: content,
     extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
   });
 
@@ -259,16 +290,17 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
 
   try {
     await upsertPrepared(prepared);
+    return true;
   } catch (error) {
     if (!prepared.chunked && isContextOverflowError(error)) {
       const retryPrepared = prepareIndexDocument({
         parentId: ev.id,
-        text: ev.text,
+        text: content,
         extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
         forceChunking: true,
       });
       await upsertPrepared(retryPrepared);
-      return;
+      return true;
     }
     throw error;
   }

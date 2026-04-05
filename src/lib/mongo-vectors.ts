@@ -103,9 +103,11 @@ function buildMongoFilter(where: Record<string, unknown> | undefined): Filter<Mo
 }
 
 function dot(left: readonly number[], right: readonly number[]): number {
+  if (left.length !== right.length) {
+    throw new RangeError(`embedding length mismatch: left=${left.length} right=${right.length}`);
+  }
   let total = 0;
-  const length = Math.min(left.length, right.length);
-  for (let index = 0; index < length; index += 1) {
+  for (let index = 0; index < left.length; index += 1) {
     total += left[index]! * right[index]!;
   }
   return total;
@@ -205,6 +207,39 @@ function makePartitionCollectionName(baseCollectionName: string, model: string, 
   return `${baseCollectionName}__${sanitizeModelName(model)}__d${dimensions}__${hashModelName(model)}`;
 }
 
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForQueryableSearchIndex(
+  collection: Collection<MongoVectorDocument>,
+  indexName: string,
+  timeoutMs = 60_000,
+  pollMs = 2_000,
+): Promise<void> {
+  const startedAt = Date.now();
+  let lastState = "missing";
+
+  while (Date.now() - startedAt < timeoutMs) {
+    const [index] = await collection.listSearchIndexes(indexName).toArray() as Array<Record<string, unknown>>;
+    if (index) {
+      const status = String(index.status ?? "UNKNOWN").toUpperCase();
+      const queryable = index.queryable === true;
+      lastState = `${status} queryable=${String(queryable)}`;
+      if (status === "READY" && queryable) {
+        return;
+      }
+      if (status === "FAILED" || status === "DOES_NOT_EXIST") {
+        throw new Error(`vector search index ${indexName} failed: ${lastState}`);
+      }
+    }
+
+    await sleep(pollMs);
+  }
+
+  throw new Error(`timed out waiting for vector search index ${indexName} to become queryable (${lastState})`);
+}
+
 async function ensurePartitionSupportIndexes(collection: Collection<MongoVectorDocument>): Promise<void> {
   await collection.createIndex({ parent_id: 1, chunk_index: 1 });
   await collection.createIndex({ ts: -1 });
@@ -240,6 +275,8 @@ async function ensurePartitionVectorSearchIndex(
         },
       });
     }
+
+    await waitForQueryableSearchIndex(collection, partition.searchIndexName);
 
     await mongo.vectorPartitions.updateOne(
       { _id: partition._id },
@@ -450,6 +487,9 @@ export async function deleteMongoVectorEntriesByFilter(
   where: Record<string, unknown>,
 ): Promise<void> {
   const filter = buildMongoFilter(where);
+  if (Object.keys(filter).length === 0) {
+    throw new Error("deleteMongoVectorEntriesByFilter requires at least one supported filter field");
+  }
   const partitions = await listMongoVectorPartitions(mongo, tier);
   await withMongoTransaction(mongo, async (session) => {
     await getFlatCollection(mongo, tier).deleteMany(filter, session ? { session } : undefined);
@@ -514,12 +554,23 @@ export async function indexTextInMongoVectors(params: {
     for (const batch of batchPreparedChunks(prepared.chunks)) {
       const texts = batch.map((chunk) => chunk.text);
       const embeddings = await params.embeddingFunction.generate(texts);
+      if (!Array.isArray(embeddings) || embeddings.length !== batch.length) {
+        throw new Error(`embedding batch size mismatch: expected ${batch.length}, got ${Array.isArray(embeddings) ? embeddings.length : 0}`);
+      }
+      const dimensions = Array.isArray(embeddings[0]) ? embeddings[0].length : 0;
+      if (dimensions <= 0) {
+        throw new Error(`embedding function returned an empty vector batch for ${params.parentId}`);
+      }
       batch.forEach((chunk, index) => {
+        const embedding = embeddings[index];
+        if (!Array.isArray(embedding) || embedding.length !== dimensions || embedding.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
+          throw new Error(`invalid embedding vector for ${chunk.id} at batch index ${index}`);
+        }
         entries.push({
           id: chunk.id,
           parentId: params.parentId,
           text: chunk.text,
-          embedding: embeddings[index] ?? [],
+          embedding,
           metadata: {
             ...params.metadata,
             chunk_id: chunk.id,
@@ -637,16 +688,19 @@ export async function queryMongoVectorsByText(params: {
   }
 
   const rows: Array<{ doc: MongoVectorDocument; score: number }> = [];
-  const queryEmbeddingsByModel = new Map<string, number[]>();
+  const queryEmbeddingsByPartitionKey = new Map<string, number[]>();
 
   for (const partition of partitions) {
     const collection = params.mongo.db.collection<MongoVectorDocument>(partition.collectionName);
-    let queryEmbedding = queryEmbeddingsByModel.get(partition.model);
+    const cacheKey = `${partition.model}:${partition.dimensions}`;
+    let queryEmbedding = queryEmbeddingsByPartitionKey.get(cacheKey);
     if (!queryEmbedding) {
       const embeddingFunction = params.getEmbeddingFunctionForModel(partition.model);
       const [generatedEmbedding] = await embeddingFunction.generate([params.q]);
-      queryEmbedding = Array.isArray(generatedEmbedding) ? generatedEmbedding : undefined;
-      if (queryEmbedding) queryEmbeddingsByModel.set(partition.model, queryEmbedding);
+      queryEmbedding = Array.isArray(generatedEmbedding) && generatedEmbedding.length === partition.dimensions
+        ? generatedEmbedding
+        : undefined;
+      if (queryEmbedding) queryEmbeddingsByPartitionKey.set(cacheKey, queryEmbedding);
     }
     if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) continue;
 

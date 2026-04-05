@@ -99,6 +99,6 @@ Verified locally:
 
 If we want the spec-complete end state, the next change should be:
 
-- harden the model/dimension-partitioned layout operationally
-- validate per-partition `$vectorSearch` index readiness and recovery behavior
+- harden migration safety when moving mixed-profile Mongo tiers back into Chroma
+- validate per-partition `$vectorSearch` index readiness and recovery behavior in production
 - remove the application-side cosine fallback once `mongot` availability is guaranteed

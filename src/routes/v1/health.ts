@@ -3,7 +3,23 @@ import type { FastifyPluginAsync } from "fastify";
 async function checkVectorHealth(app: any): Promise<{ ok: boolean; error?: string; mode: string }> {
   const storageBackend = (app as any).storageBackend ?? "duckdb";
   if (storageBackend === "mongodb") {
-    return { ok: true, mode: "mongodb" };
+    try {
+      await app.mongo.db.command({ ping: 1 });
+      const [hotIndex, compactIndex] = await Promise.all([
+        app.mongo.hotVectors.indexExists("parent_id_1_chunk_index_1"),
+        app.mongo.compactVectors.indexExists("parent_id_1"),
+      ]);
+      if (!hotIndex || !compactIndex) {
+        return {
+          ok: false,
+          mode: "mongodb",
+          error: `missing vector indexes: hot=${String(hotIndex)} compact=${String(compactIndex)}`,
+        };
+      }
+      return { ok: true, mode: "mongodb" };
+    } catch (error) {
+      return { ok: false, mode: "mongodb", error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   if (!app.chroma?.enabled) {
@@ -11,11 +27,18 @@ async function checkVectorHealth(app: any): Promise<{ ok: boolean; error?: strin
   }
 
   try {
-    const embeddingFunction = app.chroma.embeddingFunctionFor?.({}) ?? app.chroma.embeddingFunction;
-    await app.chroma.client.getCollection({
-      name: app.chroma.collectionName,
-      embeddingFunction: embeddingFunction as any,
-    });
+    const hotEmbeddingFunction = app.chroma.embeddingFunctionFor?.({}) ?? app.chroma.embeddingFunction;
+    const compactEmbeddingFunction = app.chroma.compactEmbeddingFunction ?? hotEmbeddingFunction;
+    await Promise.all([
+      app.chroma.client.getCollection({
+        name: app.chroma.collectionName,
+        embeddingFunction: hotEmbeddingFunction as any,
+      }),
+      app.chroma.client.getCollection({
+        name: app.chroma.compactCollectionName,
+        embeddingFunction: compactEmbeddingFunction as any,
+      }),
+    ]);
     return { ok: true, mode: "chroma" };
   } catch (error) {
     return { ok: false, mode: "chroma", error: error instanceof Error ? error.message : String(error) };

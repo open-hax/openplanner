@@ -36,7 +36,7 @@ export type ChromaMigrationConfig = {
 
 function createChromaMigrationClient(chroma: ChromaMigrationConfig): ChromaClient {
   const url = String(chroma.url ?? "").trim();
-  if (!url) {
+  if (!url || url.toLowerCase() === "disabled") {
     throw new Error("Chroma migration requires a configured Chroma URL");
   }
   return new ChromaClient({ path: url });
@@ -67,6 +67,41 @@ function toChromaMetadata(row: MongoVectorDocument): Record<string, unknown> {
     ...(row.member_count != null ? { member_count: row.member_count } : {}),
     ...(row.char_count != null ? { char_count: row.char_count } : {}),
   };
+}
+
+async function assertSingleChromaEmbeddingProfile(
+  source: MongoConnection["hotVectors"] | MongoConnection["compactVectors"],
+  collectionName: string,
+): Promise<void> {
+  const profiles = await source.aggregate<{
+    _id: { model: string; dimensions: number };
+  }>([
+    {
+      $group: {
+        _id: {
+          model: { $ifNull: ["$embedding_model", ""] },
+          dimensions: { $ifNull: ["$embedding_dimensions", { $size: { $ifNull: ["$embedding", []] } }] },
+        },
+      },
+    },
+    { $limit: 2 },
+  ]).toArray();
+
+  if (profiles.length === 0) return;
+
+  const dimensions = Number(profiles[0]?._id.dimensions ?? 0);
+  if (!Number.isFinite(dimensions) || dimensions <= 0) {
+    throw new Error(`Cannot migrate ${collectionName}: invalid embedding_dimensions detected`);
+  }
+
+  if (profiles.length > 1) {
+    const labels = profiles
+      .map((profile) => `${profile._id.model || "unknown-model"}:${profile._id.dimensions}`)
+      .join(", ");
+    throw new Error(
+      `Cannot migrate ${collectionName} into a single Chroma collection: multiple embedding profiles detected (${labels})`,
+    );
+  }
 }
 
 /**
@@ -513,6 +548,7 @@ async function migrateMongoVectorsToChromaCollection(
   } = {},
 ): Promise<number> {
   const batchSize = options.batchSize ?? 500;
+  await assertSingleChromaEmbeddingProfile(source, collectionName);
   const collection = await client.getOrCreateCollection({ name: collectionName } as any);
   const total = await source.countDocuments();
   let migrated = 0;
