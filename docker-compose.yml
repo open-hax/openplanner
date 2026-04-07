@@ -11,6 +11,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    cpus: 2
+    cpuset: "2-21"
     depends_on:
       chroma:
         condition: service_started
@@ -41,6 +43,8 @@ services:
       MONGODB_COMPACTED_COLLECTION: "${MONGODB_COMPACTED_COLLECTION:-compacted_memories}"
       MONGODB_VECTOR_HOT_COLLECTION: "${MONGODB_VECTOR_HOT_COLLECTION:-event_chunks}"
       MONGODB_VECTOR_COMPACT_COLLECTION: "${MONGODB_VECTOR_COMPACT_COLLECTION:-compacted_vectors}"
+      MONGODB_GRAPH_LAYOUT_COLLECTION: "${MONGODB_GRAPH_LAYOUT_COLLECTION:-graph_layout_overrides}"
+      MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION: "${MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION:-graph_node_embeddings}"
       # TTL settings (seconds) - set to auto-expire old events
       # Recommended: 2592000 = 30 days, 7776000 = 90 days
       MONGODB_EVENTS_TTL_SECONDS: "${MONGODB_EVENTS_TTL_SECONDS:-0}"
@@ -57,8 +61,10 @@ services:
       OLLAMA_EMBED_MODEL_BY_SOURCE: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_SOURCE:-}"
       OLLAMA_EMBED_MODEL_BY_KIND: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_KIND:-}"
       OLLAMA_EMBED_MODEL_BY_PROJECT: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_PROJECT:-}"
-      OLLAMA_EMBED_TRUNCATE: "${OPENPLANNER_OLLAMA_EMBED_TRUNCATE:-true}"
-      OLLAMA_EMBED_NUM_CTX: "${OPENPLANNER_OLLAMA_EMBED_NUM_CTX:-40000}"
+      OLLAMA_EMBED_TRUNCATE: "${OPENPLANNER_OLLAMA_EMBED_TRUNCATE:-false}"
+      OLLAMA_EMBED_NUM_CTX: "${OPENPLANNER_OLLAMA_EMBED_NUM_CTX:-32000}"
+      OLLAMA_EMBED_BATCH_WINDOW_MS: "${OPENPLANNER_OLLAMA_EMBED_BATCH_WINDOW_MS:-100}"
+      OLLAMA_EMBED_MAX_BATCH_ITEMS: "${OPENPLANNER_OLLAMA_EMBED_MAX_BATCH_ITEMS:-512}"
     volumes:
       - ./openplanner-lake:/app/openplanner-lake
     extra_hosts:
@@ -82,6 +88,8 @@ services:
 
   chroma:
     image: chromadb/chroma:latest
+    cpus: 1
+    cpuset: "2-21"
     ports:
       - "${OPENPLANNER_CHROMA_PORT:-8000}:8000"
     environment:

@@ -24,6 +24,8 @@ export interface MongoConfig {
   compactedCollection: string;
   vectorHotCollection: string;
   vectorCompactCollection: string;
+  graphLayoutCollection: string;
+  graphNodeEmbeddingCollection: string;
   /** TTL for events in seconds (0 = no TTL) */
   eventsTtlSeconds?: number;
   /** TTL for compacted memories in seconds (0 = no TTL) */
@@ -113,6 +115,62 @@ export interface CompactedMemoryDocument {
   updatedAt: Date;
 }
 
+export interface GraphLayoutOverrideDocument {
+  _id: string;
+  node_id: string;
+  project: string | null;
+  x: number;
+  y: number;
+  layout_source: string | null;
+  layout_version: string | null;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GraphNodeEmbeddingDocument {
+  _id: string;
+  node_id: string;
+  source_event_id: string;
+  project: string | null;
+  embedding_model: string | null;
+  embedding_dimensions: number;
+  embedding: number[];
+  chunk_count: number;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GraphSemanticEdgeDocument {
+  _id: string;
+  source_node_id: string;
+  target_node_id: string;
+  similarity: number;
+  edge_type: string;
+  project: string | null;
+  embedding_model: string | null;
+  clustering_version: string | null;
+  source: string | null;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface GraphEdgeDocument {
+  _id: string;
+  source_node_id: string;
+  target_node_id: string;
+  edge_kind: string; // structural edge kind (e.g., "visited_to_unvisited", "code_dep", etc.)
+  layer: string | null;
+  project: string | null;
+  source: string | null; // where this edge came from (e.g., "graph-weaver")
+  data: Record<string, unknown> | null;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface MongoConnection {
   client: MongoClient;
   db: Db;
@@ -121,6 +179,10 @@ export interface MongoConnection {
   hotVectors: Collection<MongoVectorDocument>;
   compactVectors: Collection<MongoVectorDocument>;
   vectorPartitions: Collection<MongoVectorPartitionDocument>;
+  graphLayoutOverrides: Collection<GraphLayoutOverrideDocument>;
+  graphNodeEmbeddings: Collection<GraphNodeEmbeddingDocument>;
+  graphSemanticEdges: Collection<GraphSemanticEdgeDocument>;
+  graphEdges: Collection<GraphEdgeDocument>;
   ftsEnabled: boolean; // MongoDB has text search, always true
 }
 
@@ -142,6 +204,10 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const hotVectors = db.collection<MongoVectorDocument>(config.vectorHotCollection);
   const compactVectors = db.collection<MongoVectorDocument>(config.vectorCompactCollection);
   const vectorPartitions = db.collection<MongoVectorPartitionDocument>("vector_partitions");
+  const graphLayoutOverrides = db.collection<GraphLayoutOverrideDocument>(config.graphLayoutCollection);
+  const graphNodeEmbeddings = db.collection<GraphNodeEmbeddingDocument>(config.graphNodeEmbeddingCollection);
+  const graphSemanticEdges = db.collection<GraphSemanticEdgeDocument>("graph_semantic_edges");
+  const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
 
   // Create indexes for events
   await events.createIndex({ ts: -1 });
@@ -178,6 +244,30 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
 
   await vectorPartitions.createIndex({ collectionName: 1 }, { unique: true });
   await vectorPartitions.createIndex({ tier: 1, model: 1, dimensions: 1 }, { unique: true });
+
+  await graphLayoutOverrides.createIndex({ node_id: 1 }, { unique: true });
+  await graphLayoutOverrides.createIndex({ project: 1, updated_at: -1 as IndexDirection });
+  await graphLayoutOverrides.createIndex({ updated_at: -1 as IndexDirection });
+  await graphLayoutOverrides.createIndex({ layout_source: 1, updated_at: -1 as IndexDirection });
+
+  await graphNodeEmbeddings.createIndex({ node_id: 1, embedding_model: 1, embedding_dimensions: 1 }, { unique: true });
+  await graphNodeEmbeddings.createIndex({ source_event_id: 1, embedding_model: 1, embedding_dimensions: 1 });
+  await graphNodeEmbeddings.createIndex({ project: 1, updated_at: -1 as IndexDirection });
+  await graphNodeEmbeddings.createIndex({ updated_at: -1 as IndexDirection });
+
+  // Semantic edges for graph clustering
+  await graphSemanticEdges.createIndex({ source_node_id: 1, target_node_id: 1 }, { unique: true });
+  await graphSemanticEdges.createIndex({ source_node_id: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticEdges.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticEdges.createIndex({ similarity: -1 as IndexDirection });
+  await graphSemanticEdges.createIndex({ clustering_version: 1, updated_at: -1 as IndexDirection });
+
+  // ALL graph edges (structural + semantic) from graph-weaver
+  await graphEdges.createIndex({ source_node_id: 1, target_node_id: 1, edge_kind: 1 }, { unique: true });
+  await graphEdges.createIndex({ source_node_id: 1, updated_at: -1 as IndexDirection });
+  await graphEdges.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
+  await graphEdges.createIndex({ edge_kind: 1, updated_at: -1 as IndexDirection });
+  await graphEdges.createIndex({ project: 1, updated_at: -1 as IndexDirection });
 
   // TTL index for events (auto-expire old signals)
   const eventsTtl = config.eventsTtlSeconds ?? DEFAULT_EVENTS_TTL_SECONDS;
@@ -240,6 +330,10 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     hotVectors,
     compactVectors,
     vectorPartitions,
+    graphLayoutOverrides,
+    graphNodeEmbeddings,
+    graphSemanticEdges,
+    graphEdges,
     ftsEnabled: true, // MongoDB always has text search
   };
 }
@@ -295,6 +389,201 @@ export async function upsertCompactedMemory(
     },
     { upsert: true }
   );
+}
+
+export async function upsertGraphLayoutOverrides(
+  collection: Collection<GraphLayoutOverrideDocument>,
+  rows: Array<{
+    node_id: string;
+    project?: string | null;
+    x: number;
+    y: number;
+    layout_source?: string | null;
+    layout_version?: string | null;
+    updated_at?: Date;
+  }>,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const now = new Date();
+
+  await collection.bulkWrite(
+    rows.map((row) => ({
+      updateOne: {
+        filter: { _id: row.node_id },
+        update: {
+          $set: {
+            node_id: row.node_id,
+            project: row.project ?? null,
+            x: row.x,
+            y: row.y,
+            layout_source: row.layout_source ?? null,
+            layout_version: row.layout_version ?? null,
+            updated_at: row.updated_at ?? now,
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            createdAt: now,
+          },
+        },
+        upsert: true,
+      },
+    })),
+    { ordered: false },
+  );
+
+  return rows.length;
+}
+
+export async function upsertGraphNodeEmbeddings(
+  collection: Collection<GraphNodeEmbeddingDocument>,
+  rows: Array<{
+    node_id: string;
+    source_event_id: string;
+    project?: string | null;
+    embedding_model?: string | null;
+    embedding_dimensions: number;
+    embedding: number[];
+    chunk_count: number;
+    updated_at?: Date;
+  }>,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const now = new Date();
+
+  await collection.bulkWrite(
+    rows.map((row) => ({
+      updateOne: {
+        filter: {
+          _id: `${row.node_id}::${row.embedding_model ?? ""}::${row.embedding_dimensions}`,
+        },
+        update: {
+          $set: {
+            node_id: row.node_id,
+            source_event_id: row.source_event_id,
+            project: row.project ?? null,
+            embedding_model: row.embedding_model ?? null,
+            embedding_dimensions: row.embedding_dimensions,
+            embedding: row.embedding,
+            chunk_count: row.chunk_count,
+            updated_at: row.updated_at ?? now,
+            updatedAt: now,
+          },
+          $setOnInsert: {
+            createdAt: now,
+          },
+        },
+        upsert: true,
+      },
+    })),
+    { ordered: false },
+  );
+
+  return rows.length;
+}
+
+export async function upsertGraphSemanticEdges(
+  collection: Collection<GraphSemanticEdgeDocument>,
+  rows: Array<{
+    source_node_id: string;
+    target_node_id: string;
+    similarity: number;
+    edge_type?: string;
+    project?: string | null;
+    embedding_model?: string | null;
+    clustering_version?: string | null;
+    source?: string | null;
+    updated_at?: Date;
+  }>,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const now = new Date();
+
+  await collection.bulkWrite(
+    rows.map((row) => {
+      // Ensure consistent ordering: source < target
+      const [sourceNodeId, targetNodeId] = row.source_node_id < row.target_node_id
+        ? [row.source_node_id, row.target_node_id]
+        : [row.target_node_id, row.source_node_id];
+      const edgeId = `${sourceNodeId}||${targetNodeId}`;
+
+      return {
+        updateOne: {
+          filter: { _id: edgeId },
+          update: {
+            $set: {
+              source_node_id: sourceNodeId,
+              target_node_id: targetNodeId,
+              similarity: row.similarity,
+              edge_type: row.edge_type ?? "semantic_similarity",
+              project: row.project ?? null,
+              embedding_model: row.embedding_model ?? null,
+              clustering_version: row.clustering_version ?? null,
+              source: row.source ?? null,
+              updated_at: row.updated_at ?? now,
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              createdAt: now,
+            },
+          },
+          upsert: true,
+        },
+      };
+    }),
+    { ordered: false },
+  );
+
+  return rows.length;
+}
+
+export async function upsertGraphEdges(
+  collection: Collection<GraphEdgeDocument>,
+  rows: Array<{
+    source_node_id: string;
+    target_node_id: string;
+    edge_kind: string;
+    layer?: string | null;
+    project?: string | null;
+    source?: string | null;
+    data?: Record<string, unknown> | null;
+    updated_at?: Date;
+  }>,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const now = new Date();
+
+  await collection.bulkWrite(
+    rows.map((row) => {
+      // Edge ID includes kind to allow multiple edge types between same nodes
+      const edgeId = `${row.source_node_id}||${row.target_node_id}||${row.edge_kind}`;
+
+      return {
+        updateOne: {
+          filter: { _id: edgeId },
+          update: {
+            $set: {
+              source_node_id: row.source_node_id,
+              target_node_id: row.target_node_id,
+              edge_kind: row.edge_kind,
+              layer: row.layer ?? null,
+              project: row.project ?? null,
+              source: row.source ?? null,
+              data: row.data ?? null,
+              updated_at: row.updated_at ?? now,
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              createdAt: now,
+            },
+          },
+          upsert: true,
+        },
+      };
+    }),
+    { ordered: false },
+  );
+
+  return rows.length;
 }
 
 /**

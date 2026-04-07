@@ -1,21 +1,16 @@
 /**
  * OpenPlanner Migration System
  *
- * Manages schema migrations between versions and storage backends.
- * Supports both DuckDB and MongoDB backends.
+ * Manages schema migrations for MongoDB backend.
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import { ChromaClient } from "chromadb";
-import { run, all, type Duck } from "./duckdb.js";
-import { upsertMongoVectorDocuments } from "./mongo-vectors.js";
 import type { MongoConnection, MongoVectorDocument } from "./mongodb.js";
+import { upsertMongoVectorDocuments } from "./mongo-vectors.js";
 
 export interface MigrationContext {
-  storageBackend: "duckdb" | "mongodb";
-  duck?: Duck;
-  mongo?: MongoConnection;
+  mongo: MongoConnection;
   dataDir: string;
   migrationsPath: string;
 }
@@ -28,110 +23,23 @@ export interface Migration {
   down?: (ctx: MigrationContext) => Promise<void>;
 }
 
-export type ChromaMigrationConfig = {
-  url: string;
-  hotCollection: string;
-  compactCollection: string;
-};
-
-function createChromaMigrationClient(chroma: ChromaMigrationConfig): ChromaClient {
-  const url = String(chroma.url ?? "").trim();
-  if (!url || url.toLowerCase() === "disabled") {
-    throw new Error("Chroma migration requires a configured Chroma URL");
-  }
-  return new ChromaClient({ path: url });
-}
-
-function toChromaMetadata(row: MongoVectorDocument): Record<string, unknown> {
-  return {
-    ts: row.ts.toISOString(),
-    source: row.source,
-    kind: row.kind,
-    project: row.project ?? "",
-    session: row.session ?? "",
-    author: row.author ?? "",
-    role: row.role ?? "",
-    model: row.model ?? "",
-    visibility: row.visibility ?? "",
-    title: row.title ?? "",
-    embedding_model: row.embedding_model ?? "",
-    search_tier: row.search_tier,
-    parent_id: row.parent_id,
-    chunk_id: row.chunk_id ?? row._id,
-    chunk_index: row.chunk_index ?? 0,
-    chunk_count: row.chunk_count ?? 1,
-    ...(row.normalized_format ? { normalized_format: row.normalized_format } : {}),
-    ...(row.normalized_estimated_tokens != null ? { normalized_estimated_tokens: row.normalized_estimated_tokens } : {}),
-    ...(row.raw_estimated_tokens != null ? { raw_estimated_tokens: row.raw_estimated_tokens } : {}),
-    ...(row.seed_id ? { seed_id: row.seed_id } : {}),
-    ...(row.member_count != null ? { member_count: row.member_count } : {}),
-    ...(row.char_count != null ? { char_count: row.char_count } : {}),
-  };
-}
-
-async function assertSingleChromaEmbeddingProfile(
-  source: MongoConnection["hotVectors"] | MongoConnection["compactVectors"],
-  collectionName: string,
-): Promise<void> {
-  const profiles = await source.aggregate<{
-    _id: { model: string; dimensions: number };
-  }>([
-    {
-      $group: {
-        _id: {
-          model: { $ifNull: ["$embedding_model", ""] },
-          dimensions: { $ifNull: ["$embedding_dimensions", { $size: { $ifNull: ["$embedding", []] } }] },
-        },
-      },
-    },
-    { $limit: 2 },
-  ]).toArray();
-
-  if (profiles.length === 0) return;
-
-  const dimensions = Number(profiles[0]?._id.dimensions ?? 0);
-  if (!Number.isFinite(dimensions) || dimensions <= 0) {
-    throw new Error(`Cannot migrate ${collectionName}: invalid embedding_dimensions detected`);
-  }
-
-  if (profiles.length > 1) {
-    const labels = profiles
-      .map((profile) => `${profile._id.model || "unknown-model"}:${profile._id.dimensions}`)
-      .join(", ");
-    throw new Error(
-      `Cannot migrate ${collectionName} into a single Chroma collection: multiple embedding profiles detected (${labels})`,
-    );
-  }
-}
-
 /**
  * Built-in migrations.
  */
 export const migrations: Migration[] = [
   {
-    id: "001_duckdb_initial",
-    name: "duckdb_initial",
-    description: "Initial DuckDB schema with events and compacted_memories tables",
+    id: "001_mongodb_initial",
+    name: "mongodb_initial",
+    description: "Initial MongoDB schema with events and compacted_memories collections",
     up: async () => {
-      // Already handled by openDuckDB
+      // Already handled by openMongoDB
     },
   },
   {
-    id: "002_mongodb_support",
-    name: "mongodb_support",
-    description: "Add MongoDB as alternative storage backend",
-    up: async (ctx) => {
-      if (ctx.storageBackend !== "mongodb") return;
-      // MongoDB indexes are created in openMongoDB.
-    },
-  },
-  {
-    id: "003_perception_events",
+    id: "002_perception_events",
     name: "perception_events",
     description: "Add perception_events collection for Sintel signal intake",
     up: async (ctx) => {
-      if (ctx.storageBackend !== "mongodb" || !ctx.mongo) return;
-
       const perceptionEvents = ctx.mongo.db.collection("perception_events");
       await perceptionEvents.createIndex({ createdAt: -1 });
       await perceptionEvents.createIndex({ category: 1, createdAt: -1 });
@@ -175,253 +83,6 @@ export async function runMigrations(ctx: MigrationContext): Promise<string[]> {
   return results;
 }
 
-export async function migrateDuckDBToMongoDB(
-  duck: Duck,
-  mongo: MongoConnection,
-  options: {
-    batchSize?: number;
-    dryRun?: boolean;
-    onProgress?: (phase: string, count: number, total?: number) => void;
-  } = {},
-): Promise<{ eventsCount: number; memoriesCount: number; duration: number }> {
-  const batchSize = options.batchSize ?? 1000;
-  const dryRun = options.dryRun ?? false;
-  const startTime = Date.now();
-
-  let eventsCount = 0;
-  let memoriesCount = 0;
-
-  const [{ count: totalEvents }] = await all(duck.conn, "SELECT COUNT(*) as count FROM events");
-  const [{ count: totalMemories }] = await all(duck.conn, "SELECT COUNT(*) as count FROM compacted_memories");
-  const totalEventsCount = totalEvents as number;
-  const totalMemoriesCount = totalMemories as number;
-
-  console.log(`[migration] DuckDB → MongoDB: ${totalEventsCount} events, ${totalMemoriesCount} memories`);
-
-  let offset = 0;
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-      FROM events
-      ORDER BY ts ASC, id ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    if (!dryRun) {
-      const docs = rows.map((row: any) => ({
-        _id: row.id,
-        id: row.id,
-        ts: new Date(row.ts),
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        message: row.message ?? null,
-        role: row.role ?? null,
-        author: row.author ?? null,
-        model: row.model ?? null,
-        tags: row.tags ? JSON.parse(row.tags) : null,
-        text: row.text ?? null,
-        attachments: row.attachments ? JSON.parse(row.attachments) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-        createdAt: new Date(row.ts),
-        updatedAt: new Date(),
-      }));
-
-      await mongo.events.bulkWrite(
-        docs.map((doc) => {
-          const { createdAt, ...docWithoutCreatedAt } = doc;
-          return {
-            updateOne: {
-              filter: { _id: doc._id },
-              update: {
-                $set: docWithoutCreatedAt,
-                $setOnInsert: { createdAt },
-              },
-              upsert: true,
-            },
-          };
-        }),
-        { ordered: false },
-      );
-    }
-
-    eventsCount += rows.length;
-    offset += batchSize;
-    options.onProgress?.("events", eventsCount, totalEventsCount);
-    console.log(`[migration] Events: ${eventsCount}/${totalEventsCount}`);
-  }
-
-  offset = 0;
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, seed_id, member_count, char_count, embedding_model, text, members, extra
-      FROM compacted_memories
-      ORDER BY ts ASC, id ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    if (!dryRun) {
-      const docs = rows.map((row: any) => ({
-        _id: row.id,
-        id: row.id,
-        ts: new Date(row.ts),
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        seed_id: row.seed_id ?? null,
-        member_count: row.member_count ?? 0,
-        char_count: row.char_count ?? 0,
-        embedding_model: row.embedding_model ?? null,
-        text: row.text ?? "",
-        members: row.members ? JSON.parse(row.members) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-        createdAt: new Date(row.ts),
-        updatedAt: new Date(),
-      }));
-
-      await mongo.compacted.bulkWrite(
-        docs.map((doc) => {
-          const { createdAt, ...docWithoutCreatedAt } = doc;
-          return {
-            updateOne: {
-              filter: { _id: doc._id },
-              update: {
-                $set: docWithoutCreatedAt,
-                $setOnInsert: { createdAt },
-              },
-              upsert: true,
-            },
-          };
-        }),
-        { ordered: false },
-      );
-    }
-
-    memoriesCount += rows.length;
-    offset += batchSize;
-    options.onProgress?.("memories", memoriesCount, totalMemoriesCount);
-    console.log(`[migration] Memories: ${memoriesCount}/${totalMemoriesCount}`);
-  }
-
-  const duration = Date.now() - startTime;
-  console.log(`[migration] Complete: ${eventsCount} events, ${memoriesCount} memories in ${(duration / 1000).toFixed(2)}s`);
-
-  return { eventsCount, memoriesCount, duration };
-}
-
-export async function migrateMongoDBToDuckDB(
-  mongo: MongoConnection,
-  duck: Duck,
-  options: {
-    batchSize?: number;
-    dryRun?: boolean;
-    onProgress?: (phase: string, count: number, total?: number) => void;
-  } = {},
-): Promise<{ eventsCount: number; memoriesCount: number; duration: number }> {
-  const batchSize = options.batchSize ?? 1000;
-  const dryRun = options.dryRun ?? false;
-  const startTime = Date.now();
-
-  let eventsCount = 0;
-  let memoriesCount = 0;
-  const totalEventsCount = await mongo.events.countDocuments();
-  const totalMemoriesCount = await mongo.compacted.countDocuments();
-
-  for (let offset = 0; offset < totalEventsCount; offset += batchSize) {
-    const rows = await mongo.events.find({}).sort({ ts: 1, _id: 1 }).skip(offset).limit(batchSize).toArray();
-    if (!dryRun) {
-      for (const row of rows) {
-        await run(duck.conn, `
-          INSERT INTO events (
-            id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            ts=excluded.ts,
-            source=excluded.source,
-            kind=excluded.kind,
-            project=excluded.project,
-            session=excluded.session,
-            message=excluded.message,
-            role=excluded.role,
-            author=excluded.author,
-            model=excluded.model,
-            tags=excluded.tags,
-            text=excluded.text,
-            attachments=excluded.attachments,
-            extra=excluded.extra
-        `, [
-          row.id,
-          row.ts.toISOString(),
-          row.source,
-          row.kind,
-          row.project,
-          row.session,
-          row.message,
-          row.role,
-          row.author,
-          row.model,
-          JSON.stringify(row.tags ?? null),
-          row.text ?? "",
-          JSON.stringify(row.attachments ?? null),
-          JSON.stringify(row.extra ?? null),
-        ]);
-      }
-    }
-    eventsCount += rows.length;
-    options.onProgress?.("events", eventsCount, totalEventsCount);
-  }
-
-  for (let offset = 0; offset < totalMemoriesCount; offset += batchSize) {
-    const rows = await mongo.compacted.find({}).sort({ ts: 1, _id: 1 }).skip(offset).limit(batchSize).toArray();
-    if (!dryRun) {
-      for (const row of rows) {
-        await run(duck.conn, `
-          INSERT INTO compacted_memories (
-            id, ts, source, kind, project, session, seed_id, member_count, char_count, embedding_model, text, members, extra
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            ts=excluded.ts,
-            source=excluded.source,
-            kind=excluded.kind,
-            project=excluded.project,
-            session=excluded.session,
-            seed_id=excluded.seed_id,
-            member_count=excluded.member_count,
-            char_count=excluded.char_count,
-            embedding_model=excluded.embedding_model,
-            text=excluded.text,
-            members=excluded.members,
-            extra=excluded.extra
-        `, [
-          row.id,
-          row.ts.toISOString(),
-          row.source,
-          row.kind,
-          row.project,
-          row.session,
-          row.seed_id,
-          row.member_count,
-          row.char_count,
-          row.embedding_model,
-          row.text,
-          JSON.stringify(row.members ?? null),
-          JSON.stringify(row.extra ?? null),
-        ]);
-      }
-    }
-    memoriesCount += rows.length;
-    options.onProgress?.("memories", memoriesCount, totalMemoriesCount);
-  }
-
-  return { eventsCount, memoriesCount, duration: Date.now() - startTime };
-}
-
 function toMongoVectorDocument(
   id: string,
   document: string | null | undefined,
@@ -463,132 +124,11 @@ function toMongoVectorDocument(
   };
 }
 
-async function migrateChromaCollectionToMongo(
-  client: ChromaClient,
+/**
+ * Export MongoDB collections to JSONL files for backup.
+ */
+export async function exportMongoDBToJsonl(
   mongo: MongoConnection,
-  collectionName: string,
-  tier: "hot" | "compact",
-  options: {
-    batchSize?: number;
-    dryRun?: boolean;
-    onProgress?: (phase: string, count: number) => void;
-  } = {},
-): Promise<number> {
-  const batchSize = options.batchSize ?? 500;
-  let collection: Awaited<ReturnType<ChromaClient["getCollection"]>>;
-
-  try {
-    collection = await client.getCollection({ name: collectionName } as any);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("The requested resource could not be found")) {
-      console.warn(`[migration] Chroma collection missing, skipping ${collectionName}`);
-      return 0;
-    }
-    throw error;
-  }
-
-  let offset = 0;
-  let count = 0;
-
-  while (true) {
-    const response: any = await collection.get({
-      limit: batchSize,
-      offset,
-      include: ["embeddings", "metadatas", "documents"] as any,
-    });
-
-    const ids = Array.isArray(response.ids) ? response.ids : [];
-    if (ids.length === 0) break;
-
-    if (!options.dryRun) {
-      await upsertMongoVectorDocuments(mongo, tier, ids.map((id: string, index: number) => ({
-        id,
-        parentId: typeof response.metadatas?.[index]?.parent_id === "string" && response.metadatas[index].parent_id.length > 0
-          ? response.metadatas[index].parent_id
-          : id,
-        text: response.documents?.[index] ?? "",
-        embedding: Array.isArray(response.embeddings?.[index]) ? response.embeddings[index] : [],
-        metadata: response.metadatas?.[index] ?? {},
-      })));
-    }
-
-    count += ids.length;
-    offset += ids.length;
-    options.onProgress?.(tier, count);
-  }
-
-  return count;
-}
-
-export async function migrateChromaToMongoDB(
-  mongo: MongoConnection,
-  chroma: ChromaMigrationConfig,
-  options: {
-    batchSize?: number;
-    dryRun?: boolean;
-    onProgress?: (phase: string, count: number) => void;
-  } = {},
-): Promise<{ hotCount: number; compactCount: number; duration: number }> {
-  const startTime = Date.now();
-  const client = createChromaMigrationClient(chroma);
-  const hotCount = await migrateChromaCollectionToMongo(client, mongo, chroma.hotCollection, "hot", options);
-  const compactCount = await migrateChromaCollectionToMongo(client, mongo, chroma.compactCollection, "compact", options);
-  return { hotCount, compactCount, duration: Date.now() - startTime };
-}
-
-async function migrateMongoVectorsToChromaCollection(
-  source: MongoConnection["hotVectors"] | MongoConnection["compactVectors"],
-  client: ChromaClient,
-  collectionName: string,
-  options: {
-    batchSize?: number;
-    dryRun?: boolean;
-    onProgress?: (phase: string, count: number) => void;
-  } = {},
-): Promise<number> {
-  const batchSize = options.batchSize ?? 500;
-  await assertSingleChromaEmbeddingProfile(source, collectionName);
-  const total = await source.countDocuments();
-  let migrated = 0;
-  let collection: Awaited<ReturnType<ChromaClient["getOrCreateCollection"]>> | null = null;
-
-  for (let offset = 0; offset < total; offset += batchSize) {
-    const rows = await source.find({}).sort({ ts: 1, _id: 1 }).skip(offset).limit(batchSize).toArray();
-    if (!options.dryRun && rows.length > 0) {
-      collection ??= await client.getOrCreateCollection({ name: collectionName } as any);
-      await collection.upsert({
-        ids: rows.map((row) => row._id),
-        documents: rows.map((row) => row.text),
-        embeddings: rows.map((row) => row.embedding),
-        metadatas: rows.map((row) => toChromaMetadata(row)) as any,
-      });
-    }
-    migrated += rows.length;
-    options.onProgress?.(collectionName, migrated);
-  }
-
-  return migrated;
-}
-
-export async function migrateMongoDBToChroma(
-  mongo: MongoConnection,
-  chroma: ChromaMigrationConfig,
-  options: {
-    batchSize?: number;
-    dryRun?: boolean;
-    onProgress?: (phase: string, count: number) => void;
-  } = {},
-): Promise<{ hotCount: number; compactCount: number; duration: number }> {
-  const startTime = Date.now();
-  const client = createChromaMigrationClient(chroma);
-  const hotCount = await migrateMongoVectorsToChromaCollection(mongo.hotVectors, client, chroma.hotCollection, options);
-  const compactCount = await migrateMongoVectorsToChromaCollection(mongo.compactVectors, client, chroma.compactCollection, options);
-  return { hotCount, compactCount, duration: Date.now() - startTime };
-}
-
-export async function exportDuckDBToJsonl(
-  duck: Duck,
   outputDir: string,
   options: {
     batchSize?: number;
@@ -603,42 +143,31 @@ export async function exportDuckDBToJsonl(
 
   console.log("[export] Exporting events to JSONL...");
   const eventsStream = await fs.open(eventsFile, "w");
-  let offset = 0;
   let count = 0;
 
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-      FROM events
-      ORDER BY ts ASC, id ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    for (const row of rows) {
-      const doc = {
-        id: row.id,
-        ts: row.ts,
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        message: row.message ?? null,
-        role: row.role ?? null,
-        author: row.author ?? null,
-        model: row.model ?? null,
-        tags: row.tags ? JSON.parse(row.tags) : null,
-        text: row.text ?? null,
-        attachments: row.attachments ? JSON.parse(row.attachments) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-      };
-      await eventsStream.write(JSON.stringify(doc) + "\n");
-      count++;
+  const eventsCursor = mongo.events.find({}).sort({ ts: 1 });
+  for await (const row of eventsCursor) {
+    const doc = {
+      id: row.id,
+      ts: row.ts.toISOString(),
+      source: row.source,
+      kind: row.kind,
+      project: row.project,
+      session: row.session,
+      message: row.message,
+      role: row.role,
+      author: row.author,
+      model: row.model,
+      tags: row.tags,
+      text: row.text,
+      attachments: row.attachments,
+      extra: row.extra,
+    };
+    await eventsStream.write(JSON.stringify(doc) + "\n");
+    count++;
+    if (count % batchSize === 0) {
+      options.onProgress?.("events", count);
     }
-
-    options.onProgress?.("events", count);
-    offset += batchSize;
   }
 
   await eventsStream.close();
@@ -646,45 +175,152 @@ export async function exportDuckDBToJsonl(
 
   console.log("[export] Exporting compacted_memories to JSONL...");
   const memoriesStream = await fs.open(memoriesFile, "w");
-  offset = 0;
   count = 0;
 
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, seed_id, member_count, char_count, embedding_model, text, members, extra
-      FROM compacted_memories
-      ORDER BY ts ASC, id ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    for (const row of rows) {
-      const doc = {
-        id: row.id,
-        ts: row.ts,
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        seed_id: row.seed_id ?? null,
-        member_count: row.member_count ?? 0,
-        char_count: row.char_count ?? 0,
-        embedding_model: row.embedding_model ?? null,
-        text: row.text ?? "",
-        members: row.members ? JSON.parse(row.members) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-      };
-      await memoriesStream.write(JSON.stringify(doc) + "\n");
-      count++;
+  const memoriesCursor = mongo.compacted.find({}).sort({ ts: 1 });
+  for await (const row of memoriesCursor) {
+    const doc = {
+      id: row.id,
+      ts: row.ts.toISOString(),
+      source: row.source,
+      kind: row.kind,
+      project: row.project,
+      session: row.session,
+      seed_id: row.seed_id,
+      member_count: row.member_count,
+      char_count: row.char_count,
+      embedding_model: row.embedding_model,
+      text: row.text,
+      members: row.members,
+      extra: row.extra,
+    };
+    await memoriesStream.write(JSON.stringify(doc) + "\n");
+    count++;
+    if (count % batchSize === 0) {
+      options.onProgress?.("memories", count);
     }
-
-    options.onProgress?.("memories", count);
-    offset += batchSize;
   }
 
   await memoriesStream.close();
   console.log(`[export] Memories: ${count} records → ${memoriesFile}`);
 
   return { eventsFile, memoriesFile };
+}
+
+/**
+ * Import JSONL files to MongoDB collections.
+ */
+export async function importJsonlToMongoDB(
+  mongo: MongoConnection,
+  inputDir: string,
+  options: {
+    batchSize?: number;
+    onProgress?: (phase: string, count: number) => void;
+  } = {},
+): Promise<{ eventsCount: number; memoriesCount: number }> {
+  const batchSize = options.batchSize ?? 1000;
+  const eventsFile = path.join(inputDir, "events.jsonl");
+  const memoriesFile = path.join(inputDir, "compacted_memories.jsonl");
+
+  let eventsCount = 0;
+  let memoriesCount = 0;
+
+  // Import events
+  try {
+    const eventsContent = await fs.readFile(eventsFile, "utf-8");
+    const eventDocs: any[] = [];
+    for (const line of eventsContent.split(/\n+/)) {
+      if (!line.trim()) continue;
+      try {
+        const doc = JSON.parse(line);
+        eventDocs.push({
+          _id: doc.id,
+          id: doc.id,
+          ts: new Date(doc.ts),
+          source: doc.source ?? "",
+          kind: doc.kind ?? "",
+          project: doc.project ?? null,
+          session: doc.session ?? null,
+          message: doc.message ?? null,
+          role: doc.role ?? null,
+          author: doc.author ?? null,
+          model: doc.model ?? null,
+          tags: doc.tags ?? null,
+          text: doc.text ?? null,
+          attachments: doc.attachments ?? null,
+          extra: doc.extra ?? null,
+          createdAt: new Date(doc.ts),
+          updatedAt: new Date(),
+        });
+      } catch {}
+    }
+
+    for (let i = 0; i < eventDocs.length; i += batchSize) {
+      const batch = eventDocs.slice(i, i + batchSize);
+      await mongo.events.bulkWrite(
+        batch.map((doc) => ({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: doc },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+      eventsCount += batch.length;
+      options.onProgress?.("events", eventsCount);
+    }
+  } catch (error) {
+    console.warn(`[import] No events file found or failed to read: ${eventsFile}`);
+  }
+
+  // Import memories
+  try {
+    const memoriesContent = await fs.readFile(memoriesFile, "utf-8");
+    const memoryDocs: any[] = [];
+    for (const line of memoriesContent.split(/\n+/)) {
+      if (!line.trim()) continue;
+      try {
+        const doc = JSON.parse(line);
+        memoryDocs.push({
+          _id: doc.id,
+          id: doc.id,
+          ts: new Date(doc.ts),
+          source: doc.source ?? "",
+          kind: doc.kind ?? "",
+          project: doc.project ?? null,
+          session: doc.session ?? null,
+          seed_id: doc.seed_id ?? null,
+          member_count: doc.member_count ?? 0,
+          char_count: doc.char_count ?? 0,
+          embedding_model: doc.embedding_model ?? null,
+          text: doc.text ?? "",
+          members: doc.members ?? null,
+          extra: doc.extra ?? null,
+          createdAt: new Date(doc.ts),
+          updatedAt: new Date(),
+        });
+      } catch {}
+    }
+
+    for (let i = 0; i < memoryDocs.length; i += batchSize) {
+      const batch = memoryDocs.slice(i, i + batchSize);
+      await mongo.compacted.bulkWrite(
+        batch.map((doc) => ({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: doc },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+      memoriesCount += batch.length;
+      options.onProgress?.("memories", memoriesCount);
+    }
+  } catch (error) {
+    console.warn(`[import] No memories file found or failed to read: ${memoriesFile}`);
+  }
+
+  return { eventsCount, memoriesCount };
 }

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { ClientSession, Collection, Filter } from "mongodb";
-import type { IEmbeddingFunction } from "chromadb";
+import type { IEmbeddingFunction } from "./embeddings.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "./indexing.js";
 import type { MongoConnection, MongoVectorDocument, MongoVectorPartitionDocument } from "./mongodb.js";
 
@@ -29,6 +29,7 @@ const VEXX_BASE_URL = String(process.env.VEXX_BASE_URL ?? "").trim();
 const VEXX_API_KEY = String(process.env.VEXX_API_KEY ?? "").trim();
 const VEXX_DEVICE = String(process.env.VEXX_DEVICE ?? "AUTO").trim() || "AUTO";
 const VEXX_REQUIRE_ACCEL = /^(1|true|yes|on)$/i.test(String(process.env.VEXX_REQUIRE_ACCEL ?? ""));
+const VEXX_ENFORCE = /^(1|true|yes|on)$/i.test(String(process.env.VEXX_ENFORCE ?? ""));
 const VEXX_TIMEOUT_MS = (() => {
   const parsed = Number(process.env.VEXX_TIMEOUT_MS ?? "1500");
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1500;
@@ -127,6 +128,10 @@ function cosineSimilarity(left: readonly number[], right: readonly number[]): nu
   const rightMagnitude = magnitude(right);
   if (leftMagnitude === 0 || rightMagnitude === 0) return Number.NEGATIVE_INFINITY;
   return dot(left, right) / (leftMagnitude * rightMagnitude);
+}
+
+function vexxRequiredError(context: string): Error {
+  return new Error(`vexx_required:${context}`);
 }
 
 async function queryPartitionWithVexxTopK(params: {
@@ -684,7 +689,7 @@ async function queryPartitionWithNativeVectorSearch(params: {
         path: "embedding",
         queryVector: params.queryEmbedding,
         numCandidates: Math.max(params.k * 20, 100),
-        limit: Math.max(1, params.k),
+        limit: Math.max(params.k * 20, 100),
         ...(Object.keys(filter).length > 0 ? { filter } : {}),
       },
     },
@@ -724,6 +729,18 @@ async function queryPartitionWithNativeVectorSearch(params: {
   ];
 
   const rows = await params.collection.aggregate(pipeline).toArray() as Array<MongoVectorDocument & { score?: number }>;
+  const rescored = await queryPartitionWithVexxTopK({
+    candidates: rows,
+    queryEmbedding: params.queryEmbedding,
+    k: params.k,
+  }).catch((error) => {
+    if (VEXX_ENFORCE) throw error;
+    return null;
+  });
+  if (rescored) return rescored;
+  if (VEXX_ENFORCE) {
+    throw vexxRequiredError(`native_vector_search:${params.partition.collectionName}`);
+  }
   return rows.map((doc) => ({ doc, score: typeof doc.score === "number" ? doc.score : Number.NEGATIVE_INFINITY }));
 }
 
@@ -739,8 +756,14 @@ async function queryPartitionWithCosineScan(params: {
     candidates,
     queryEmbedding: params.queryEmbedding,
     k: params.k,
-  }).catch(() => null);
+  }).catch((error) => {
+    if (VEXX_ENFORCE) throw error;
+    return null;
+  });
   if (vexxRows) return vexxRows;
+  if (VEXX_ENFORCE) {
+    throw vexxRequiredError(`cosine_scan:${params.collection.collectionName}`);
+  }
   return candidates
     .map((doc) => ({ doc, score: cosineSimilarity(params.queryEmbedding, doc.embedding ?? []) }))
     .filter((entry) => Number.isFinite(entry.score))
@@ -823,4 +846,187 @@ export async function queryMongoVectorsByText(params: {
 
 export function buildMongoVectorDeleteFilter(where: Record<string, unknown>): Filter<MongoVectorDocument> {
   return buildMongoFilter(where);
+}
+
+// ============================================================================
+// GPU-Saturating Batch Indexing
+// ============================================================================
+
+/**
+ * Configuration for parallel batch indexing
+ */
+export type BatchIndexConfig = {
+  /** Number of documents to process in parallel (default: 16) */
+  concurrency?: number;
+  /** Number of chunks to embed in a single batch (default: 256) */
+  embeddingBatchSize?: number;
+  /** Number of documents to write to MongoDB in a single batch (default: 100) */
+  mongoBatchSize?: number;
+  /** Callback for progress reporting */
+  onProgress?: (phase: string, completed: number, total: number) => void;
+};
+
+/**
+ * Optimized batch indexer for GPU saturation during backfill.
+ * 
+ * Key optimizations:
+ * 1. Pipelines embedding generation with MongoDB writes
+ * 2. Uses larger batch sizes for GPU efficiency
+ * 3. Processes multiple documents concurrently
+ * 4. Fire-and-forget caching to avoid blocking
+ */
+export async function batchIndexTextsInMongoVectors(params: {
+  mongo: MongoConnection;
+  tier: MongoVectorTier;
+  items: Array<{
+    id: string;
+    text: string;
+    extra?: Record<string, unknown>;
+    metadata: Record<string, unknown>;
+  }>;
+  embeddingFunction: IEmbeddingFunction;
+  config?: BatchIndexConfig;
+}): Promise<{ indexed: number; failed: Array<{ id: string; error: string }> }> {
+  const { items, embeddingFunction, config = {} } = params;
+  const concurrency = config.concurrency ?? 16;
+  const embeddingBatchSize = config.embeddingBatchSize ?? 256;
+  const mongoBatchSize = config.mongoBatchSize ?? 100;
+  
+  const indexed: string[] = [];
+  const failed: Array<{ id: string; error: string }> = [];
+  
+  // Prepare all documents first
+  const preparedItems: Array<{
+    id: string;
+    prepared: ReturnType<typeof prepareIndexDocument>;
+    metadata: Record<string, unknown>;
+  }> = [];
+  
+  for (const item of items) {
+    try {
+      const prepared = prepareIndexDocument({
+        parentId: item.id,
+        text: item.text,
+        extra: item.extra,
+      });
+      preparedItems.push({ id: item.id, prepared, metadata: item.metadata });
+    } catch (error) {
+      failed.push({ id: item.id, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  
+  // Collect all chunks for batch embedding
+  const allChunks: Array<{ chunkId: string; parentId: string; text: string; metadata: Record<string, unknown> }> = [];
+  for (const item of preparedItems) {
+    for (const chunk of item.prepared.chunks) {
+      allChunks.push({
+        chunkId: chunk.id,
+        parentId: item.id,
+        text: chunk.text,
+        metadata: {
+          ...item.metadata,
+          chunk_id: chunk.id,
+          chunk_index: chunk.chunkIndex,
+          chunk_count: chunk.chunkCount,
+          normalized_format: item.prepared.normalizedFormat,
+          normalized_estimated_tokens: item.prepared.normalizedEstimatedTokens,
+          raw_estimated_tokens: item.prepared.rawEstimatedTokens,
+        },
+      });
+    }
+  }
+  
+  config.onProgress?.("embedding", 0, allChunks.length);
+  
+  // Generate embeddings in large batches for GPU saturation
+  const embeddings = new Map<string, number[]>();
+  const embeddingErrors = new Map<string, string>();
+  
+  for (let offset = 0; offset < allChunks.length; offset += embeddingBatchSize) {
+    const batch = allChunks.slice(offset, offset + embeddingBatchSize);
+    const texts = batch.map((c) => c.text);
+    
+    try {
+      const vectors = await embeddingFunction.generate(texts);
+      if (!Array.isArray(vectors) || vectors.length !== batch.length) {
+        throw new Error(`Embedding batch size mismatch: expected ${batch.length}, got ${Array.isArray(vectors) ? vectors.length : 0}`);
+      }
+      batch.forEach((chunk, index) => {
+        const vec = vectors[index];
+        if (Array.isArray(vec) && vec.length > 0 && vec.every((v) => typeof v === "number" && Number.isFinite(v))) {
+          embeddings.set(chunk.chunkId, vec);
+        } else {
+          embeddingErrors.set(chunk.chunkId, "Invalid embedding vector");
+        }
+      });
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      batch.forEach((chunk) => embeddingErrors.set(chunk.chunkId, errorMsg));
+    }
+    
+    config.onProgress?.("embedding", Math.min(offset + embeddingBatchSize, allChunks.length), allChunks.length);
+  }
+  
+  // Group by parent for MongoDB upsert
+  const entriesByParent = new Map<string, MongoVectorEntry[]>();
+  for (const chunk of allChunks) {
+    const embedding = embeddings.get(chunk.chunkId);
+    if (!embedding) continue;
+    
+    const existing = entriesByParent.get(chunk.parentId) ?? [];
+    existing.push({
+      id: chunk.chunkId,
+      parentId: chunk.parentId,
+      text: chunk.text,
+      embedding,
+      metadata: chunk.metadata,
+    });
+    entriesByParent.set(chunk.parentId, existing);
+  }
+  
+  config.onProgress?.("indexing", 0, entriesByParent.size);
+  
+  // Write to MongoDB with controlled concurrency
+  const parentIds = Array.from(entriesByParent.keys());
+  let completedCount = 0;
+  
+  const processParent = async (parentId: string): Promise<void> => {
+    const entries = entriesByParent.get(parentId);
+    if (!entries || entries.length === 0) return;
+    
+    try {
+      await replaceMongoVectorEntries(params.mongo, params.tier, parentId, entries);
+      indexed.push(parentId);
+    } catch (error) {
+      failed.push({
+        id: parentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    
+    completedCount++;
+    if (completedCount % mongoBatchSize === 0) {
+      config.onProgress?.("indexing", completedCount, parentIds.length);
+    }
+  };
+  
+  // Process with concurrency control
+  const queue = [...parentIds];
+  const workers: Promise<void>[] = [];
+  
+  for (let i = 0; i < Math.min(concurrency, queue.length); i++) {
+    workers.push((async () => {
+      while (queue.length > 0) {
+        const parentId = queue.shift();
+        if (!parentId) break;
+        await processParent(parentId);
+      }
+    })());
+  }
+  
+  await Promise.all(workers);
+  
+  config.onProgress?.("complete", indexed.length, items.length);
+  
+  return { indexed: indexed.length, failed };
 }

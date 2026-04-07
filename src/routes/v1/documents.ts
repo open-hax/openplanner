@@ -1,5 +1,4 @@
 import type { FastifyPluginAsync } from "fastify";
-import { all, run } from "../../lib/duckdb.js";
 import { upsertEvent } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
 import { deleteMongoVectorEntriesByFilter, indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
@@ -97,19 +96,15 @@ function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventE
   };
 }
 
-async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ indexed: boolean; warning?: string; indexing?: string }> {
+async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ indexed: boolean; warning?: string }> {
   await persistEvent(app, ev);
-  const storageBackend = app.storageBackend ?? "duckdb";
-  if (storageBackend !== "mongodb" && app.chroma?.enabled === false) {
-    return { indexed: false, indexing: "disabled" };
-  }
   try {
     const indexed = await indexDocument(app, ev);
-    return { indexed, indexing: indexed ? "required" : "disabled" };
+    return { indexed };
   } catch (error) {
-    app.log.error(error, storageBackend === "mongodb" ? "Failed to index document into MongoDB vectors" : "Failed to index document into ChromaDB");
+    app.log.error(error, "Failed to index document into MongoDB vectors");
     const warning = error instanceof Error ? error.message : String(error);
-    return { indexed: false, warning, indexing: "required" };
+    return { indexed: false, warning };
   }
 }
 
@@ -120,88 +115,27 @@ async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
   const author = meta.author ? String(meta.author) : null;
   const model = meta.model ? String(meta.model) : null;
   const tags = meta.tags ?? null;
-  const storageBackend = app.storageBackend ?? "duckdb";
 
-  if (storageBackend === "mongodb") {
-    await upsertEvent(app.mongo.events, {
-      id: ev.id,
-      ts: new Date(ev.ts),
-      source: ev.source,
-      kind: ev.kind,
-      project: sr.project ? String(sr.project) : null,
-      session: sr.session ? String(sr.session) : null,
-      message: sr.message ? String(sr.message) : null,
-      role,
-      author,
-      model,
-      tags,
-      text: ev.text ? String(ev.text) : "",
-      attachments: ev.attachments ?? null,
-      extra: ev.extra ?? null,
-    });
-  } else {
-    await run(app.duck.conn, `
-      INSERT INTO events (
-        id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        ts=excluded.ts,
-        source=excluded.source,
-        kind=excluded.kind,
-        project=excluded.project,
-        session=excluded.session,
-        message=excluded.message,
-        role=excluded.role,
-        author=excluded.author,
-        model=excluded.model,
-        tags=excluded.tags,
-        text=excluded.text,
-        attachments=excluded.attachments,
-        extra=excluded.extra
-    `, [
-      ev.id,
-      ev.ts,
-      ev.source,
-      ev.kind,
-      sr.project ? String(sr.project) : null,
-      sr.session ? String(sr.session) : null,
-      sr.message ? String(sr.message) : null,
-      role,
-      author,
-      model,
-      JSON.stringify(tags ?? []),
-      ev.text ? String(ev.text) : "",
-      JSON.stringify(ev.attachments ?? []),
-      JSON.stringify(ev.extra ?? {}),
-    ]);
-  }
+  await upsertEvent(app.mongo.events, {
+    id: ev.id,
+    ts: new Date(ev.ts),
+    source: ev.source,
+    kind: ev.kind,
+    project: sr.project ? String(sr.project) : null,
+    session: sr.session ? String(sr.session) : null,
+    message: sr.message ? String(sr.message) : null,
+    role,
+    author,
+    model,
+    tags,
+    text: ev.text ? String(ev.text) : "",
+    attachments: ev.attachments ?? null,
+    extra: ev.extra ?? null,
+  });
 }
 
 async function deleteDocumentVectors(app: any, ev: EventEnvelopeV1): Promise<void> {
-  const sr = ev.source_ref ?? {};
-  const embeddingScope = {
-    source: ev.source,
-    kind: ev.kind,
-    project: sr.project ? String(sr.project) : undefined,
-  };
-  if ((app.storageBackend ?? "duckdb") === "mongodb") {
-    await deleteMongoVectorEntriesByFilter(app.mongo, "hot", { parent_id: ev.id });
-    return;
-  }
-
-  if (!app.chroma?.enabled) return;
-
-  const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
-  const collection: any = await app.chroma.client.getCollection({
-    name: app.chroma.collectionName,
-    embeddingFunction,
-  });
-  if (typeof collection.delete === "function") {
-    await collection.delete({ where: { parent_id: ev.id } });
-    return;
-  }
-
-  throw new Error("document vector cleanup requires a collection delete() method");
+  await deleteMongoVectorEntriesByFilter(app.mongo, "hot", { parent_id: ev.id });
 }
 
 async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
@@ -231,92 +165,24 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
     title: (ev.extra as Record<string, unknown> | undefined)?.title ?? sr.message ?? ev.id,
   } as Record<string, unknown>;
 
-  if ((app.storageBackend ?? "duckdb") === "mongodb") {
-    const embeddingRuntime = (app as any).embeddingRuntime;
-    const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
-    const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
-    await indexTextInMongoVectors({
-      mongo: app.mongo,
-      tier: "hot",
-      parentId: ev.id,
-      text: content,
-      extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
-      metadata: { ...metadata, embedding_model: embeddingModel ?? "" },
-      embeddingFunction,
-    });
-    return true;
-  }
-
-  const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
-  const embeddingModel = app.chroma.resolveEmbeddingModel?.(embeddingScope);
-  const collection: any = await app.chroma.client.getCollection({
-    name: app.chroma.collectionName,
-    embeddingFunction,
-  });
-  const preparedMetadata = { ...metadata, embedding_model: embeddingModel ?? "" } as Record<string, unknown>;
-
-  const prepared = prepareIndexDocument({
+  const embeddingRuntime = (app as any).embeddingRuntime;
+  const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+  const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+  await indexTextInMongoVectors({
+    mongo: app.mongo,
+    tier: "hot",
     parentId: ev.id,
     text: content,
     extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+    metadata: { ...metadata, embedding_model: embeddingModel ?? "" },
+    embeddingFunction,
   });
-
-  const upsertPrepared = async (preparedDoc: ReturnType<typeof prepareIndexDocument>) => {
-    if (typeof collection.delete === "function") {
-      await collection.delete({ where: { parent_id: ev.id } });
-    }
-
-    for (const batch of batchPreparedChunks(preparedDoc.chunks)) {
-      const ids = batch.map((chunk) => chunk.id);
-      const documents = batch.map((chunk) => chunk.text);
-      const metadatas = batch.map((chunk) => ({
-        ...preparedMetadata,
-        parent_id: ev.id,
-        chunk_id: chunk.id,
-        chunk_index: chunk.chunkIndex,
-        chunk_count: chunk.chunkCount,
-        normalized_format: preparedDoc.normalizedFormat,
-        normalized_estimated_tokens: preparedDoc.normalizedEstimatedTokens,
-        raw_estimated_tokens: preparedDoc.rawEstimatedTokens,
-      })) as any;
-
-      if (typeof collection.upsert === "function") {
-        await collection.upsert({ ids, documents, metadatas });
-        continue;
-      }
-      await collection.add({ ids, documents, metadatas });
-    }
-  };
-
-  try {
-    await upsertPrepared(prepared);
-    return true;
-  } catch (error) {
-    if (!prepared.chunked && isContextOverflowError(error)) {
-      const retryPrepared = prepareIndexDocument({
-        parentId: ev.id,
-        text: content,
-        extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
-        forceChunking: true,
-      });
-      await upsertPrepared(retryPrepared);
-      return true;
-    }
-    throw error;
-  }
+  return true;
 }
 
 async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
-  const storageBackend = app.storageBackend ?? "duckdb";
-  if (storageBackend === "mongodb") {
-    const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
-    return row ? rowToDocument(row as Record<string, unknown>) : null;
-  }
-
-  const rows = await all<Record<string, unknown>>(app.duck.conn, `
-    SELECT * FROM events WHERE id = ? AND kind IN ('docs','code','config','data') LIMIT 1
-  `, [id]);
-  return rows[0] ? rowToDocument(rows[0]) : null;
+  const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
+  return row ? rowToDocument(row as Record<string, unknown>) : null;
 }
 
 export const documentRoutes: FastifyPluginAsync = async (app) => {
@@ -368,28 +234,15 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     const project = query.project;
     const kind = query.kind;
     const source = query.source;
-    const storageBackend = (app as any).storageBackend ?? "duckdb";
 
-    if (storageBackend === "mongodb") {
-      const filter: Record<string, unknown> = { kind: { $in: [...DOCUMENT_KINDS] } };
-      if (project) filter.project = project;
-      if (kind) filter.kind = kind;
-      if (source) filter.source = source;
-      if (visibility) filter["extra.visibility"] = visibility;
-      const rows = await app.mongo.events.find(filter).sort({ ts: -1 }).limit(limit).toArray();
-      return { ok: true, count: rows.length, rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)) };
-    }
-
-    const where: string[] = ["kind IN ('docs','code','config','data')"];
-    const params: unknown[] = [];
-    if (project) { where.push("project = ?"); params.push(project); }
-    if (kind) { where.push("kind = ?"); params.push(kind); }
-    if (source) { where.push("source = ?"); params.push(source); }
-    if (visibility) { where.push("json_extract_string(extra, '$.visibility') = ?"); params.push(visibility); }
-    const rows = await all<Record<string, unknown>>(app.duck.conn, `
-      SELECT * FROM events WHERE ${where.join(" AND ")} ORDER BY ts DESC LIMIT ?
-    `, [...params, limit]);
-    return { ok: true, count: rows.length, rows: rows.map(rowToDocument) };
+    const filter: Record<string, unknown> = { kind: { $in: [...DOCUMENT_KINDS] } };
+    if (project) filter.project = project;
+    if (kind) filter.kind = kind;
+    if (source) filter.source = source;
+    if (visibility) filter["extra.visibility"] = visibility;
+    
+    const rows = await app.mongo.events.find(filter).sort({ ts: -1 }).limit(limit).toArray();
+    return { ok: true, count: rows.length, rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)), storageBackend: "mongodb" };
   });
 
   app.patch<{ Body: DocumentPatchRequest }>("/documents/:id", async (req, reply) => {

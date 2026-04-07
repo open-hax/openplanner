@@ -90,3 +90,136 @@ export type VectorSearchRequest = {
   where?: Record<string, unknown>;
   tier?: SearchTier;
 };
+
+// Translation types
+
+export type TranslationSegmentSource = "mt" | "human" | "import";
+export type TranslationStatus = "pending" | "in_review" | "approved" | "rejected";
+
+export type TranslationSegmentEvent = {
+  schema: "openplanner.event.v1";
+  id: string;
+  ts: string;
+  source: TranslationSegmentSource;
+  kind: "translation.segment";
+  source_ref: {
+    project: string;
+    document_id: string;
+    segment_index: number;
+  };
+  text: string;
+  meta: {
+    source_lang: string;
+    target_lang: string;
+    source_text: string;
+    mt_model?: string;
+    confidence?: number;
+    status: TranslationStatus;
+  };
+  extra: {
+    tenant_id: string;
+    org_id: string;
+    domain?: string;
+    content_type?: string;
+    url_context?: string;
+  };
+};
+
+export type TranslationLabelEvent = {
+  schema: "openplanner.event.v1";
+  id: string;
+  ts: string;
+  source: "shibboleth";
+  kind: "translation.label";
+  source_ref: {
+    project: string;
+    segment_id: string;
+    document_id: string;
+  };
+  meta: {
+    labeler_id: string;
+    labeler_email: string;
+    label_version: number;
+  };
+  extra: {
+    tenant_id: string;
+    org_id: string;
+    adequacy: "excellent" | "good" | "adequate" | "poor" | "unusable";
+    fluency: "excellent" | "good" | "adequate" | "poor" | "unusable";
+    terminology: "correct" | "minor_errors" | "major_errors";
+    risk: "safe" | "sensitive" | "policy_violation";
+    overall: "approve" | "needs_edit" | "reject";
+    corrected_text?: string;
+    editor_notes?: string;
+  };
+};
+
+export type TranslationSegmentResponse = {
+  id: string;
+  source_text: string;
+  translated_text: string;
+  source_lang: string;
+  target_lang: string;
+  status: TranslationStatus;
+  confidence?: number;
+  mt_model?: string;
+  document_id: string;
+  segment_index: number;
+  domain?: string;
+  tenant_id: string;
+  org_id: string;
+  labels: TranslationLabelResponse[];
+  ts: string;
+};
+
+export type TranslationLabelResponse = {
+  id: string;
+  segment_id: string;
+  labeler_id: string;
+  labeler_email: string;
+  adequacy: string;
+  fluency: string;
+  terminology: string;
+  risk: string;
+  overall: string;
+  corrected_text?: string;
+  editor_notes?: string;
+  ts: string;
+};
+
+export type TranslationSegmentListRequest = {
+  project: string;
+  status?: TranslationStatus;
+  source_lang?: string;
+  target_lang?: string;
+  domain?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export type TranslationLabelSubmitRequest = {
+  adequacy: "excellent" | "good" | "adequate" | "poor" | "unusable";
+  fluency: "excellent" | "good" | "adequate" | "poor" | "unusable";
+  terminology: "correct" | "minor_errors" | "major_errors";
+  risk: "safe" | "sensitive" | "policy_violation";
+  overall: "approve" | "needs_edit" | "reject";
+  corrected_text?: string;
+  editor_notes?: string;
+};
+
+export type TranslationBatchImportRequest = {
+  segments: {
+    source_text: string;
+    translated_text: string;
+    source_lang: string;
+    target_lang: string;
+    document_id: string;
+    segment_index: number;
+    mt_model?: string;
+    confidence?: number;
+    domain?: string;
+    project?: string;
+    tenant_id?: string;
+    org_id?: string;
+  }[];
+};
