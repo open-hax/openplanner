@@ -11,11 +11,20 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    cpus: 2
+    cpuset: "2-21"
     depends_on:
       chroma:
         condition: service_started
+        required: false
       mongodb:
         condition: service_healthy
+        required: false
+      mongot:
+        condition: service_started
+        required: false
+      mongo-init:
+        condition: service_completed_successfully
         required: false
     ports:
       - "${OPENPLANNER_PORT:-7777}:7777"
@@ -28,10 +37,14 @@ services:
       # Storage backend: duckdb (default) or mongodb
       OPENPLANNER_STORAGE_BACKEND: "${OPENPLANNER_STORAGE_BACKEND:-duckdb}"
       # MongoDB configuration (used when STORAGE_BACKEND=mongodb)
-      MONGODB_URI: "${MONGODB_URI:-mongodb://mongodb:27017}"
+      MONGODB_URI: "${MONGODB_URI:-mongodb://mongodb:27017/openplanner?replicaSet=rs0}"
       MONGODB_DB: "${MONGODB_DB:-openplanner}"
       MONGODB_EVENTS_COLLECTION: "${MONGODB_EVENTS_COLLECTION:-events}"
       MONGODB_COMPACTED_COLLECTION: "${MONGODB_COMPACTED_COLLECTION:-compacted_memories}"
+      MONGODB_VECTOR_HOT_COLLECTION: "${MONGODB_VECTOR_HOT_COLLECTION:-event_chunks}"
+      MONGODB_VECTOR_COMPACT_COLLECTION: "${MONGODB_VECTOR_COMPACT_COLLECTION:-compacted_vectors}"
+      MONGODB_GRAPH_LAYOUT_COLLECTION: "${MONGODB_GRAPH_LAYOUT_COLLECTION:-graph_layout_overrides}"
+      MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION: "${MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION:-graph_node_embeddings}"
       # TTL settings (seconds) - set to auto-expire old events
       # Recommended: 2592000 = 30 days, 7776000 = 90 days
       MONGODB_EVENTS_TTL_SECONDS: "${MONGODB_EVENTS_TTL_SECONDS:-0}"
@@ -40,16 +53,18 @@ services:
       CHROMA_URL: http://chroma:8000
       CHROMA_COLLECTION: "${OPENPLANNER_CHROMA_COLLECTION:-openplanner_events_v1}"
       CHROMA_COMPACT_COLLECTION: "${OPENPLANNER_CHROMA_COMPACT_COLLECTION:-openplanner_events_v1_compact}"
-      # Ollama embeddings
-      OLLAMA_BASE_URL: "${OPENPLANNER_OLLAMA_BASE_URL:-http://host.docker.internal:8789}"
+      # Ollama embeddings (routed through Proxx for key rotation)
+      OLLAMA_BASE_URL: "${OPENPLANNER_OLLAMA_BASE_URL:-http://proxx:8789}"
       OLLAMA_API_KEY: "${OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN:-change-me-open-hax-proxy-token}"
       OLLAMA_EMBED_MODEL: "${OPENPLANNER_OLLAMA_EMBED_MODEL:-qwen3-embedding:0.6b}"
       OLLAMA_COMPACT_EMBED_MODEL: "${OPENPLANNER_OLLAMA_COMPACT_EMBED_MODEL:-qwen3-embedding:4b}"
       OLLAMA_EMBED_MODEL_BY_SOURCE: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_SOURCE:-}"
       OLLAMA_EMBED_MODEL_BY_KIND: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_KIND:-}"
       OLLAMA_EMBED_MODEL_BY_PROJECT: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_PROJECT:-}"
-      OLLAMA_EMBED_TRUNCATE: "${OPENPLANNER_OLLAMA_EMBED_TRUNCATE:-true}"
-      OLLAMA_EMBED_NUM_CTX: "${OPENPLANNER_OLLAMA_EMBED_NUM_CTX:-}"
+      OLLAMA_EMBED_TRUNCATE: "${OPENPLANNER_OLLAMA_EMBED_TRUNCATE:-false}"
+      OLLAMA_EMBED_NUM_CTX: "${OPENPLANNER_OLLAMA_EMBED_NUM_CTX:-32000}"
+      OLLAMA_EMBED_BATCH_WINDOW_MS: "${OPENPLANNER_OLLAMA_EMBED_BATCH_WINDOW_MS:-100}"
+      OLLAMA_EMBED_MAX_BATCH_ITEMS: "${OPENPLANNER_OLLAMA_EMBED_MAX_BATCH_ITEMS:-512}"
     volumes:
       - ./openplanner-lake:/app/openplanner-lake
     extra_hosts:
@@ -73,6 +88,8 @@ services:
 
   chroma:
     image: chromadb/chroma:latest
+    cpus: 1
+    cpuset: "2-21"
     ports:
       - "${OPENPLANNER_CHROMA_PORT:-8000}:8000"
     environment:
@@ -82,9 +99,10 @@ services:
       - ./openplanner-lake/chroma:/chroma/chroma
     restart: unless-stopped
 
-  # MongoDB - shared with Cephalon Hive for unified perception storage
+  # MongoDB self-managed vector search runtime (mongod + mongot)
   mongodb:
-    image: mongo:7
+    image: mongodb/mongodb-community-server:8.2.0-ubi9
+    command: ["mongod", "--replSet", "rs0"]
     ports:
       - "${OPENPLANNER_MONGODB_PORT:-27017}:27017"
     environment:
@@ -95,8 +113,8 @@ services:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 20s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
     profiles:
       - mongodb
@@ -105,6 +123,37 @@ services:
       ai-infra:
         aliases:
           - openplanner-mongodb
+
+  mongot:
+    image: mongodb/mongodb-community-search:0.53.1
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "${OPENPLANNER_MONGOT_PORT:-27028}:27028"
+    restart: unless-stopped
+    profiles:
+      - mongodb
+    networks:
+      default: {}
+      ai-infra: {}
+
+  mongo-init:
+    image: mongodb/mongodb-community-server:8.2.0-ubi9
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+        mongosh --host mongodb --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongodb:27017" }] })' || true
+    restart: "no"
+    profiles:
+      - mongodb
+    networks:
+      default: {}
+      ai-infra: {}
 
   # Prometheus - metrics collection
   prometheus:

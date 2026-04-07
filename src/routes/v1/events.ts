@@ -1,17 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
-import { run } from "../../lib/duckdb.js";
 import { upsertEvent } from "../../lib/mongodb.js";
-import { counterInc, histogramObserve } from "../../lib/metrics.js";
+import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
+import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
+import { counterInc } from "../../lib/metrics.js";
 import type { EventIngestRequest, EventEnvelopeV1 } from "../../lib/types.js";
 
 function norm(v: any): string | null {
   if (v === undefined || v === null) return null;
   return String(v);
-}
-
-function toJson(v: any): string | null {
-  if (v === undefined || v === null) return null;
-  try { return JSON.stringify(v); } catch { return null; }
 }
 
 function validateEvent(ev: EventEnvelopeV1) {
@@ -28,7 +24,6 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     if (!body || !Array.isArray(body.events)) return reply.status(400).send({ error: "expected { events: [...] }" });
 
     const ids: string[] = [];
-    const storageBackend = (app as any).storageBackend ?? "duckdb";
 
     for (const ev of body.events) {
       validateEvent(ev);
@@ -40,61 +35,23 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       const model = norm((meta as any).model);
       const tags = (meta as any).tags;
 
-      if (storageBackend === "mongodb") {
-        // MongoDB storage
-        await upsertEvent(app.mongo.events, {
-          id: ev.id,
-          ts: new Date(ev.ts),
-          source: ev.source,
-          kind: ev.kind,
-          project: norm((sr as any).project),
-          session: norm((sr as any).session),
-          message: norm((sr as any).message),
-          role,
-          author,
-          model,
-          tags: tags ?? null,
-          text: norm(ev.text ?? ""),
-          attachments: ev.attachments ?? null,
-          extra: ev.extra ?? null,
-        });
-      } else {
-        // DuckDB storage
-        await run(app.duck.conn, `
-          INSERT INTO events (
-            id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            ts=excluded.ts,
-            source=excluded.source,
-            kind=excluded.kind,
-            project=excluded.project,
-            session=excluded.session,
-            message=excluded.message,
-            role=excluded.role,
-            author=excluded.author,
-            model=excluded.model,
-            tags=excluded.tags,
-            text=excluded.text,
-            attachments=excluded.attachments,
-            extra=excluded.extra
-        `, [
-          ev.id,
-          ev.ts,
-          ev.source,
-          ev.kind,
-          norm((sr as any).project),
-          norm((sr as any).session),
-          norm((sr as any).message),
-          role,
-          author,
-          model,
-          toJson(tags),
-          norm(ev.text ?? ""),
-          toJson(ev.attachments ?? []),
-          toJson(ev.extra ?? {})
-        ]);
-      }
+      // MongoDB storage
+      await upsertEvent(app.mongo.events, {
+        id: ev.id,
+        ts: new Date(ev.ts),
+        source: ev.source,
+        kind: ev.kind,
+        project: norm((sr as any).project),
+        session: norm((sr as any).session),
+        message: norm((sr as any).message),
+        role,
+        author,
+        model,
+        tags: tags ?? null,
+        text: norm(ev.text ?? ""),
+        attachments: ev.attachments ?? null,
+        extra: ev.extra ?? null,
+      });
 
       ids.push(ev.id);
 
@@ -105,16 +62,17 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
             kind: ev.kind,
             project: norm((sr as any).project) ?? undefined
           };
-          const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
-          const embeddingModel = app.chroma.resolveEmbeddingModel?.(embeddingScope);
-          const collection = await app.chroma.client.getCollection({ 
-            name: app.chroma.collectionName, 
-            embeddingFunction: embeddingFunction as any
-          });
-          await collection.add({
-            ids: [ev.id],
-            documents: [ev.text],
-            metadatas: [{
+
+          const embeddingRuntime = (app as any).embeddingRuntime;
+          const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+          const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+          await indexTextInMongoVectors({
+            mongo: app.mongo,
+            tier: "hot",
+            parentId: ev.id,
+            text: ev.text,
+            extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+            metadata: {
               ts: ev.ts,
               source: ev.source,
               kind: ev.kind,
@@ -124,24 +82,42 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
               role: role ?? "",
               model: model ?? "",
               embedding_model: embeddingModel ?? "",
-              search_tier: "hot"
-            }] as any
+              search_tier: "hot",
+              visibility: (ev.extra as Record<string, unknown> | undefined)?.visibility ?? "internal",
+              title: (ev.extra as Record<string, unknown> | undefined)?.title ?? (sr as any).message ?? ev.id,
+            },
+            embeddingFunction,
           });
         } catch (err) {
-          app.log.error(err, "Failed to index event into ChromaDB");
+          app.log.error(err, "Failed to index event into MongoDB vectors");
+          const detail = err instanceof Error ? err.message : String(err);
+          return reply.status(503).send({
+            ok: false,
+            error: "embedding_index_failed",
+            detail,
+            persisted_ids: [...ids],
+            failed_id: ev.id,
+            storageBackend: "mongodb",
+          });
         }
       }
     }
-
-    const ftsEnabled = storageBackend === "mongodb" ? true : app.duck?.ftsEnabled ?? false;
     
     // Track metrics
-    counterInc("openplanner_events_ingested_total", { backend: storageBackend }, ids.length);
+    counterInc("openplanner_events_ingested_total", { backend: "mongodb" }, ids.length);
     for (const ev of body.events) {
-      counterInc("openplanner_events_by_source", { source: ev.source, backend: storageBackend });
-      counterInc("openplanner_events_by_kind", { kind: ev.kind, backend: storageBackend });
+      counterInc("openplanner_events_by_source", { source: ev.source, backend: "mongodb" });
+      counterInc("openplanner_events_by_kind", { kind: ev.kind, backend: "mongodb" });
     }
     
-    return { ok: true, count: ids.length, ids, ftsEnabled, storageBackend };
+    return {
+      ok: true,
+      count: ids.length,
+      ids,
+      ftsEnabled: true,
+      storageBackend: "mongodb",
+      indexed: true,
+      indexing: "required",
+    };
   });
 };

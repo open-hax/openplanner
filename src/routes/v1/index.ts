@@ -9,6 +9,8 @@ import { sessionRoutes } from "./sessions.js";
 import { jobRoutes } from "./jobs.js";
 import { metricsRoutes } from "./metrics.js";
 import { graphRoutes } from "./graph.js";
+import { lakeRoutes } from "./lakes.js";
+import { translationRoutes } from "./translations.js";
 
 export const v1Routes: FastifyPluginAsync = async (app) => {
   await app.register(healthRoutes);
@@ -21,4 +23,6 @@ export const v1Routes: FastifyPluginAsync = async (app) => {
   await app.register(jobRoutes);
   await app.register(metricsRoutes);
   await app.register(graphRoutes);
+  await app.register(lakeRoutes);
+  await app.register(translationRoutes);
 };

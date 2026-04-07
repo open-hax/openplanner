@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
-import { all, run } from "../../lib/duckdb.js";
 import { upsertEvent } from "../../lib/mongodb.js";
+import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
+import { deleteMongoVectorEntriesByFilter, indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import type {
   DocumentPatchRequest,
   DocumentRecord,
@@ -98,10 +99,10 @@ function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventE
 async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ indexed: boolean; warning?: string }> {
   await persistEvent(app, ev);
   try {
-    await indexDocument(app, ev);
-    return { indexed: true };
+    const indexed = await indexDocument(app, ev);
+    return { indexed };
   } catch (error) {
-    app.log.error(error, "Failed to index document into ChromaDB");
+    app.log.error(error, "Failed to index document into MongoDB vectors");
     const warning = error instanceof Error ? error.message : String(error);
     return { indexed: false, warning };
   }
@@ -114,65 +115,35 @@ async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
   const author = meta.author ? String(meta.author) : null;
   const model = meta.model ? String(meta.model) : null;
   const tags = meta.tags ?? null;
-  const storageBackend = app.storageBackend ?? "duckdb";
 
-  if (storageBackend === "mongodb") {
-    await upsertEvent(app.mongo.events, {
-      id: ev.id,
-      ts: new Date(ev.ts),
-      source: ev.source,
-      kind: ev.kind,
-      project: sr.project ? String(sr.project) : null,
-      session: sr.session ? String(sr.session) : null,
-      message: sr.message ? String(sr.message) : null,
-      role,
-      author,
-      model,
-      tags,
-      text: ev.text ? String(ev.text) : "",
-      attachments: ev.attachments ?? null,
-      extra: ev.extra ?? null,
-    });
-  } else {
-    await run(app.duck.conn, `
-      INSERT INTO events (
-        id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        ts=excluded.ts,
-        source=excluded.source,
-        kind=excluded.kind,
-        project=excluded.project,
-        session=excluded.session,
-        message=excluded.message,
-        role=excluded.role,
-        author=excluded.author,
-        model=excluded.model,
-        tags=excluded.tags,
-        text=excluded.text,
-        attachments=excluded.attachments,
-        extra=excluded.extra
-    `, [
-      ev.id,
-      ev.ts,
-      ev.source,
-      ev.kind,
-      sr.project ? String(sr.project) : null,
-      sr.session ? String(sr.session) : null,
-      sr.message ? String(sr.message) : null,
-      role,
-      author,
-      model,
-      JSON.stringify(tags ?? []),
-      ev.text ? String(ev.text) : "",
-      JSON.stringify(ev.attachments ?? []),
-      JSON.stringify(ev.extra ?? {}),
-    ]);
-  }
+  await upsertEvent(app.mongo.events, {
+    id: ev.id,
+    ts: new Date(ev.ts),
+    source: ev.source,
+    kind: ev.kind,
+    project: sr.project ? String(sr.project) : null,
+    session: sr.session ? String(sr.session) : null,
+    message: sr.message ? String(sr.message) : null,
+    role,
+    author,
+    model,
+    tags,
+    text: ev.text ? String(ev.text) : "",
+    attachments: ev.attachments ?? null,
+    extra: ev.extra ?? null,
+  });
 }
 
-async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
-  if (!ev.text) return;
+async function deleteDocumentVectors(app: any, ev: EventEnvelopeV1): Promise<void> {
+  await deleteMongoVectorEntriesByFilter(app.mongo, "hot", { parent_id: ev.id });
+}
+
+async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
+  const content = String(ev.text ?? "");
+  if (!content.trim()) {
+    await deleteDocumentVectors(app, ev);
+    return false;
+  }
   const sr = ev.source_ref ?? {};
   const meta = ev.meta ?? {};
   const embeddingScope = {
@@ -180,12 +151,6 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
     kind: ev.kind,
     project: sr.project ? String(sr.project) : undefined,
   };
-  const embeddingFunction = app.chroma.embeddingFunctionFor?.(embeddingScope) ?? app.chroma.embeddingFunction;
-  const embeddingModel = app.chroma.resolveEmbeddingModel?.(embeddingScope);
-  const collection: any = await app.chroma.client.getCollection({
-    name: app.chroma.collectionName,
-    embeddingFunction,
-  });
   const metadata = {
     ts: ev.ts,
     source: ev.source,
@@ -195,38 +160,29 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<void> {
     author: meta.author ? String(meta.author) : "",
     role: meta.role ? String(meta.role) : "",
     model: meta.model ? String(meta.model) : "",
-    embedding_model: embeddingModel ?? "",
     search_tier: "hot",
     visibility: (ev.extra as Record<string, unknown> | undefined)?.visibility ?? "internal",
     title: (ev.extra as Record<string, unknown> | undefined)?.title ?? sr.message ?? ev.id,
   } as Record<string, unknown>;
 
-  if (typeof collection.upsert === "function") {
-    await collection.upsert({ ids: [ev.id], documents: [ev.text], metadatas: [metadata] });
-    return;
-  }
-
-  try {
-    if (typeof collection.update === "function") {
-      await collection.update({ ids: [ev.id], documents: [ev.text], metadatas: [metadata] });
-      return;
-    }
-  } catch {}
-
-  await collection.add({ ids: [ev.id], documents: [ev.text], metadatas: [metadata] });
+  const embeddingRuntime = (app as any).embeddingRuntime;
+  const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+  const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+  await indexTextInMongoVectors({
+    mongo: app.mongo,
+    tier: "hot",
+    parentId: ev.id,
+    text: content,
+    extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+    metadata: { ...metadata, embedding_model: embeddingModel ?? "" },
+    embeddingFunction,
+  });
+  return true;
 }
 
 async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
-  const storageBackend = app.storageBackend ?? "duckdb";
-  if (storageBackend === "mongodb") {
-    const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
-    return row ? rowToDocument(row as Record<string, unknown>) : null;
-  }
-
-  const rows = await all<Record<string, unknown>>(app.duck.conn, `
-    SELECT * FROM events WHERE id = ? AND kind IN ('docs','code','config','data') LIMIT 1
-  `, [id]);
-  return rows[0] ? rowToDocument(rows[0]) : null;
+  const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
+  return row ? rowToDocument(row as Record<string, unknown>) : null;
 }
 
 export const documentRoutes: FastifyPluginAsync = async (app) => {
@@ -251,6 +207,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(normalized);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: normalized,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: normalized, ...result };
   });
 
@@ -268,28 +234,15 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     const project = query.project;
     const kind = query.kind;
     const source = query.source;
-    const storageBackend = (app as any).storageBackend ?? "duckdb";
 
-    if (storageBackend === "mongodb") {
-      const filter: Record<string, unknown> = { kind: { $in: [...DOCUMENT_KINDS] } };
-      if (project) filter.project = project;
-      if (kind) filter.kind = kind;
-      if (source) filter.source = source;
-      if (visibility) filter["extra.visibility"] = visibility;
-      const rows = await app.mongo.events.find(filter).sort({ ts: -1 }).limit(limit).toArray();
-      return { ok: true, count: rows.length, rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)) };
-    }
-
-    const where: string[] = ["kind IN ('docs','code','config','data')"];
-    const params: unknown[] = [];
-    if (project) { where.push("project = ?"); params.push(project); }
-    if (kind) { where.push("kind = ?"); params.push(kind); }
-    if (source) { where.push("source = ?"); params.push(source); }
-    if (visibility) { where.push("json_extract_string(extra, '$.visibility') = ?"); params.push(visibility); }
-    const rows = await all<Record<string, unknown>>(app.duck.conn, `
-      SELECT * FROM events WHERE ${where.join(" AND ")} ORDER BY ts DESC LIMIT ?
-    `, [...params, limit]);
-    return { ok: true, count: rows.length, rows: rows.map(rowToDocument) };
+    const filter: Record<string, unknown> = { kind: { $in: [...DOCUMENT_KINDS] } };
+    if (project) filter.project = project;
+    if (kind) filter.kind = kind;
+    if (source) filter.source = source;
+    if (visibility) filter["extra.visibility"] = visibility;
+    
+    const rows = await app.mongo.events.find(filter).sort({ ts: -1 }).limit(limit).toArray();
+    return { ok: true, count: rows.length, rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)), storageBackend: "mongodb" };
   });
 
   app.patch<{ Body: DocumentPatchRequest }>("/documents/:id", async (req, reply) => {
@@ -310,6 +263,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(next, existing);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: next,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: next, ...result };
   });
 
@@ -325,6 +288,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(next, existing);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: next,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: next, ...result };
   });
 
@@ -339,6 +312,16 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     };
     const ev = documentToEvent(next, existing);
     const result = await persistAndMaybeIndex(app, ev);
+    if (result.warning) {
+      return reply.status(503).send({
+        ok: false,
+        error: "embedding_index_failed",
+        persisted: true,
+        indexed: false,
+        document: next,
+        detail: result.warning,
+      });
+    }
     return { ok: true, document: next, ...result };
   });
 };

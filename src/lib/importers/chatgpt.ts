@@ -1,172 +1,177 @@
-import yauzl from "yauzl";
-import chain from "stream-chain";
-import StreamJson from "stream-json";
-import StreamArrayPkg from "stream-json/streamers/StreamArray.js";
-import type { Duck } from "../duckdb.js";
-import { run } from "../duckdb.js";
+import fs from "node:fs/promises";
+import path from "node:path";
+// @ts-ignore - unzipper has no types
+import unzipper from "unzipper";
 import type { EventEnvelopeV1 } from "../types.js";
-import type { Readable } from "node:stream";
-
-const { parser } = StreamJson;
-const { streamArray } = StreamArrayPkg;
-
-type ChatGPTNode = {
-  id: string;
-  message?: {
-    id: string;
-    author: { role: string; name?: string; metadata?: any };
-    create_time: number;
-    content: { content_type: string; parts: string[] };
-    status: string;
-    end_turn?: boolean;
-    weight?: number;
-    metadata?: any;
-    recipient?: string;
-  } | null;
-  parent?: string;
-  children: string[];
-};
 
 type ChatGPTConversation = {
-  title: string;
-  create_time: number;
-  mapping: Record<string, ChatGPTNode>;
+  title?: string;
+  create_time?: number;
+  update_time?: number;
+  mapping?: Record<string, {
+    id: string;
+    message?: {
+      author?: { role?: string };
+      content?: { parts?: unknown[]; content_type?: string };
+      create_time?: number;
+      model?: string;
+    };
+    parent?: string;
+    children?: string[];
+  }>;
+  current_node?: string;
 };
 
-export async function importChatGPTZip(
-  zipPath: string,
-  duck: Duck,
-  onProgress: (count: number) => Promise<void>
-): Promise<{ count: number; errors: string[] }> {
-  return new Promise((resolve, reject) => {
-    yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
-      if (err) return reject(err);
-      if (!zipfile) return reject(new Error("Failed to open zip"));
+type ImportedEvent = {
+  id: string;
+  ts: string;
+  source: string;
+  kind: string;
+  project: string | null;
+  session: string | null;
+  message: string | null;
+  role: string | null;
+  author: string | null;
+  model: string | null;
+  tags: unknown | null;
+  text: string | null;
+  attachments: unknown[] | null;
+  extra: unknown | null;
+};
 
-      zipfile.readEntry();
-
-      zipfile.on("entry", (entry) => {
-        if (entry.fileName === "conversations.json") {
-          zipfile.openReadStream(entry, (err, readStream) => {
-            if (err) return reject(err);
-            if (!readStream) return reject(new Error("Failed to read stream"));
-
-            processStream(readStream, duck, onProgress)
-              .then(resolve)
-              .catch(reject)
-              .finally(() => zipfile.close());
-          });
-        } else {
-          zipfile.readEntry();
-        }
-      });
-
-      zipfile.on("end", () => {
-        // "end" means we scanned all entries and didn't open a stream (or logic elsewhere handled it).
-        // Since we resolve inside the stream processor, we just ignore "end" if we found it.
-        // We could track "found" state if needed.
-      });
-    });
-  });
-}
-
-async function processStream(
-  readStream: Readable,
-  duck: Duck,
-  onProgress: (count: number) => Promise<void>
-): Promise<{ count: number; errors: string[] }> {
-  let totalEvents = 0;
-  const errors: string[] = [];
-  const eventsBatch: EventEnvelopeV1[] = [];
-
-  const pipeline = chain([
-    readStream,
-    parser(),
-    streamArray()
-  ]);
-
-  for await (const { value: conv } of pipeline) {
-    const c = conv as ChatGPTConversation;
-    // Iterate all nodes in 'mapping' that have a message.
-    for (const nodeId in c.mapping) {
-      const node = c.mapping[nodeId];
-      if (!node.message) continue;
-
-      const msg = node.message;
-      if (!msg.content) continue;
-      
-      const parts = msg.content.parts || [];
-      const textContent = parts.map(p => (typeof p === 'string' ? p : JSON.stringify(p))).join("\n");
-      
-      if (!textContent.trim()) continue;
-
-      const event: EventEnvelopeV1 = {
-        schema: "openplanner.event.v1",
-        id: msg.id,
-        ts: new Date((msg.create_time || 0) * 1000).toISOString(),
-        source: "chatgpt-export",
-        kind: "message",
-        source_ref: {
-          session: c.title || "Untitled",
-          message: msg.id,
-          project: "chatgpt"
-        },
-        text: textContent,
-        meta: {
-          role: msg.author.role,
-          model: msg.metadata?.model_slug,
-          author_name: msg.author.name
-        },
-        extra: {
-          original_node_id: nodeId,
-          parent_node_id: node.parent
-        }
-      };
-
-      eventsBatch.push(event);
-
-      if (eventsBatch.length >= 500) {
-        await upsertEvents(duck, eventsBatch);
-        totalEvents += eventsBatch.length;
-        eventsBatch.length = 0;
-        await onProgress(totalEvents);
+function extractTextFromParts(parts: unknown[]): string {
+  const texts: string[] = [];
+  for (const part of parts) {
+    if (typeof part === "string") {
+      texts.push(part);
+    } else if (typeof part === "object" && part !== null) {
+      if ("text" in part && typeof (part as any).text === "string") {
+        texts.push((part as any).text);
+      } else if ("content" in part && typeof (part as any).content === "string") {
+        texts.push((part as any).content);
       }
     }
   }
-
-  if (eventsBatch.length > 0) {
-    await upsertEvents(duck, eventsBatch);
-    totalEvents += eventsBatch.length;
-    await onProgress(totalEvents);
-  }
-
-  return { count: totalEvents, errors };
+  return texts.join("\n\n");
 }
 
-async function upsertEvents(duck: Duck, events: EventEnvelopeV1[]) {
-  // Batch insert loop
-  for (const e of events) {
-    await run(duck.conn, `
-      INSERT OR REPLACE INTO events (
-        id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-      ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-      )
-    `, [
-      e.id,
-      e.ts,
-      e.source,
-      e.kind,
-      e.source_ref?.project ?? null,
-      e.source_ref?.session ?? null,
-      e.source_ref?.message ?? null,
-      e.meta?.role ?? null,
-      e.meta?.author_name ?? null,
-      e.meta?.model ?? null,
-      null, // tags
-      e.text ?? null,
-      null, // attachments
-      JSON.stringify(e.extra || {})
-    ]);
+function parseChatGPTConversation(conversation: ChatGPTConversation): ImportedEvent[] {
+  const events: ImportedEvent[] = [];
+  const mapping = conversation.mapping ?? {};
+  const sessionId = Object.keys(mapping)[0]?.split("-").slice(0, 5).join("-") ?? "unknown";
+
+  for (const [nodeId, node] of Object.entries(mapping)) {
+    const message = node.message;
+    if (!message) continue;
+
+    const role = message.author?.role ?? "unknown";
+    const content = message.content;
+    const ts = message.create_time
+      ? new Date(message.create_time * 1000).toISOString()
+      : new Date().toISOString();
+
+    let text = "";
+    if (content?.parts && Array.isArray(content.parts)) {
+      text = extractTextFromParts(content.parts);
+    }
+
+    if (!text.trim()) continue;
+
+    const eventId = `${nodeId}:${ts}`;
+
+    events.push({
+      id: eventId,
+      ts,
+      source: "chatgpt",
+      kind: "chat.message",
+      project: null,
+      session: sessionId,
+      message: null,
+      role,
+      author: role === "assistant" ? "chatgpt" : "user",
+      model: message.model ?? null,
+      tags: null,
+      text,
+      attachments: null,
+      extra: {
+        conversation_title: conversation.title,
+        content_type: content?.content_type,
+      },
+    });
   }
+
+  return events.sort((a, b) => a.ts.localeCompare(b.ts));
+}
+
+async function readConversationsFromZip(zipPath: string): Promise<ChatGPTConversation[]> {
+  const conversations: ChatGPTConversation[] = [];
+  const directory = await unzipper.Open.file(zipPath);
+
+  for (const entry of directory.files) {
+    if (entry.type !== "File") continue;
+    if (!entry.path.endsWith(".json")) continue;
+    if (entry.path.includes("user.json") || entry.path.includes("settings.json")) continue;
+
+    try {
+      const content = await entry.buffer();
+      const data = JSON.parse(content.toString("utf-8"));
+
+      // Handle both single conversation and array of conversations
+      if (Array.isArray(data)) {
+        conversations.push(...data);
+      } else if (data.mapping) {
+        conversations.push(data);
+      }
+    } catch (error) {
+      console.warn(`[chatgpt-import] Failed to parse ${entry.path}:`, error);
+    }
+  }
+
+  return conversations;
+}
+
+/**
+ * Import ChatGPT conversations and emit events to a sink function.
+ * Use this for MongoDB ingestion via the /v1/events endpoint.
+ */
+export async function importChatGPTZipToSink(
+  zipPath: string,
+  sink: (events: EventEnvelopeV1[]) => Promise<void>,
+  onProgress?: (count: number) => void,
+): Promise<{ conversationsCount: number; eventsCount: number }> {
+  const conversations = await readConversationsFromZip(zipPath);
+  let eventsCount = 0;
+
+  for (const conversation of conversations) {
+    const events = parseChatGPTConversation(conversation);
+    if (events.length === 0) continue;
+
+    const envelopes: EventEnvelopeV1[] = events.map((event) => ({
+      schema: "openplanner.event.v1" as const,
+      id: event.id,
+      ts: event.ts,
+      source: event.source,
+      kind: event.kind,
+      source_ref: {
+        project: event.project ?? undefined,
+        session: event.session ?? undefined,
+        message: event.message ?? undefined,
+      },
+      meta: {
+        role: event.role ?? undefined,
+        author: event.author ?? undefined,
+        model: event.model ?? undefined,
+        tags: event.tags ?? undefined,
+      },
+      text: event.text ?? "",
+      attachments: [] as const,
+      extra: (event.extra ?? {}) as Record<string, unknown>,
+    }));
+
+    await sink(envelopes);
+    eventsCount += events.length;
+    onProgress?.(eventsCount);
+  }
+
+  return { conversationsCount: conversations.length, eventsCount };
 }

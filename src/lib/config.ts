@@ -1,8 +1,6 @@
 import path from "node:path";
 import { parseModelMap, type EmbeddingModelConfig } from "./embedding-models.js";
 
-export type StorageBackend = "duckdb" | "mongodb";
-
 export type SemanticCompactionConfig = {
   enabled: boolean;
   minEventCount: number;
@@ -18,23 +16,28 @@ export type MongoConfig = {
   dbName: string;
   eventsCollection: string;
   compactedCollection: string;
+  vectorHotCollection: string;
+  vectorCompactCollection: string;
+  graphLayoutCollection: string;
+  graphNodeEmbeddingCollection: string;
+  eventsTtlSeconds?: number;
+  compactedTtlSeconds?: number;
 };
 
 export type OpenPlannerConfig = {
-  storageBackend: StorageBackend;
   dataDir: string;
   host: string;
   port: number;
   apiKey: string;
-  chromaUrl: string;
-  chromaCollection: string;
-  chromaCompactCollection: string;
   ollamaBaseUrl: string;
   ollamaApiKey?: string;
   embeddingModels: EmbeddingModelConfig;
   compactEmbedModel: string;
   ollamaEmbedTruncate: boolean;
   ollamaEmbedNumCtx?: number;
+  ollamaEmbedBatchWindowMs: number;
+  ollamaEmbedMaxBatchItems: number;
+  ollamaEmbedCachePath: string;
   semanticCompaction: SemanticCompactionConfig;
   mongodb: MongoConfig;
 };
@@ -68,17 +71,20 @@ export function loadConfig(): OpenPlannerConfig {
   const host = mustGet("OPENPLANNER_HOST", "127.0.0.1");
   const port = Number(mustGet("OPENPLANNER_PORT", "7777"));
   const apiKey = mustGet("OPENPLANNER_API_KEY", "change-me");
-  const chromaUrl = mustGet("CHROMA_URL", "http://127.0.0.1:8000");
-  const chromaCollection = mustGet("CHROMA_COLLECTION", "openplanner_events_v1");
-  const chromaCompactCollection = mustGet("CHROMA_COMPACT_COLLECTION", `${chromaCollection}_compact`);
   const ollamaBaseUrl = mustGet("OLLAMA_BASE_URL", mustGet("OLLAMA_URL", "http://127.0.0.1:8789"));
   const ollamaApiKey = process.env.OLLAMA_API_KEY ?? process.env.OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN ?? undefined;
   const defaultEmbedModel = mustGet("OLLAMA_EMBED_MODEL", "qwen3-embedding:0.6b");
   const compactEmbedModel = mustGet("OLLAMA_COMPACT_EMBED_MODEL", defaultEmbedModel);
-  const ollamaEmbedTruncate = (process.env.OLLAMA_EMBED_TRUNCATE ?? "true").toLowerCase() !== "false";
+  const ollamaEmbedTruncate = (process.env.OLLAMA_EMBED_TRUNCATE ?? "false").toLowerCase() !== "false";
   const ollamaEmbedNumCtxRaw = (process.env.OLLAMA_EMBED_NUM_CTX ?? "").trim();
   const ollamaEmbedNumCtx = ollamaEmbedNumCtxRaw.length > 0 ? Number(ollamaEmbedNumCtxRaw) : undefined;
   const finalOllamaEmbedNumCtx = Number.isFinite(ollamaEmbedNumCtx as number) ? (ollamaEmbedNumCtx as number) : undefined;
+  
+  // Larger batch sizes for GPU saturation
+  const ollamaEmbedBatchWindowMs = parsePositiveInt(process.env.OLLAMA_EMBED_BATCH_WINDOW_MS, 50);
+  const ollamaEmbedMaxBatchItems = parsePositiveInt(process.env.OLLAMA_EMBED_MAX_BATCH_ITEMS, 256);
+  
+  const ollamaEmbedCachePath = mustGet("OLLAMA_EMBED_CACHE_PATH", path.join(dataDir, "cache", "ollama-embeddings.jsonl"));
   const embeddingModels: EmbeddingModelConfig = {
     defaultModel: defaultEmbedModel,
     bySource: parseModelMap(process.env.OLLAMA_EMBED_MODEL_BY_SOURCE),
@@ -95,35 +101,37 @@ export function loadConfig(): OpenPlannerConfig {
     maxPacksPerRun: parsePositiveInt(process.env.SEMANTIC_COMPACTION_MAX_PACKS_PER_RUN, 256),
   };
 
-  // Storage backend selection
-  const storageBackend: StorageBackend = (process.env.OPENPLANNER_STORAGE_BACKEND ?? "duckdb") as StorageBackend;
-  if (storageBackend !== "duckdb" && storageBackend !== "mongodb") {
-    throw new Error(`Invalid OPENPLANNER_STORAGE_BACKEND: ${storageBackend}. Must be "duckdb" or "mongodb"`);
-  }
-
-  // MongoDB configuration
+  // MongoDB configuration (only storage backend)
+  const eventsTtlSeconds = parsePositiveInt(process.env.MONGODB_EVENTS_TTL_SECONDS, 0);
+  const compactedTtlSeconds = parsePositiveInt(process.env.MONGODB_COMPACTED_TTL_SECONDS, 0);
+  
   const mongodb: MongoConfig = {
     uri: mustGet("MONGODB_URI", "mongodb://localhost:27017"),
     dbName: mustGet("MONGODB_DB", "openplanner"),
     eventsCollection: mustGet("MONGODB_EVENTS_COLLECTION", "events"),
     compactedCollection: mustGet("MONGODB_COMPACTED_COLLECTION", "compacted_memories"),
+    vectorHotCollection: mustGet("MONGODB_VECTOR_HOT_COLLECTION", "event_chunks"),
+    vectorCompactCollection: mustGet("MONGODB_VECTOR_COMPACT_COLLECTION", "compacted_vectors"),
+    graphLayoutCollection: mustGet("MONGODB_GRAPH_LAYOUT_COLLECTION", "graph_layout_overrides"),
+    graphNodeEmbeddingCollection: mustGet("MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION", "graph_node_embeddings"),
+    eventsTtlSeconds: eventsTtlSeconds > 0 ? eventsTtlSeconds : undefined,
+    compactedTtlSeconds: compactedTtlSeconds > 0 ? compactedTtlSeconds : undefined,
   };
 
   return {
-    storageBackend,
     dataDir: path.resolve(dataDir),
     host,
     port,
     apiKey,
-    chromaUrl,
-    chromaCollection,
-    chromaCompactCollection,
     ollamaBaseUrl,
     ollamaApiKey,
     embeddingModels,
     compactEmbedModel,
     ollamaEmbedTruncate,
     ollamaEmbedNumCtx: finalOllamaEmbedNumCtx,
+    ollamaEmbedBatchWindowMs,
+    ollamaEmbedMaxBatchItems,
+    ollamaEmbedCachePath: path.resolve(ollamaEmbedCachePath),
     semanticCompaction,
     mongodb,
   };

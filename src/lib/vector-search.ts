@@ -52,13 +52,23 @@ export function mergeTieredVectorHits(
 
   for (const hits of hitsByTier) {
     for (const hit of hits) {
-      const existing = byId.get(hit.id);
+      const parentId = typeof hit.metadata.parent_id === "string" && hit.metadata.parent_id.length > 0
+        ? hit.metadata.parent_id
+        : hit.id;
+      const existing = byId.get(parentId);
       const reciprocalRank = 1 / (rrfK + hit.rank + 1);
       const nextDistance = typeof hit.distance === "number" ? hit.distance : Number.POSITIVE_INFINITY;
+      const hitMetadata = {
+        ...hit.metadata,
+        parent_id: parentId,
+        best_match_id: hit.id,
+      };
 
       if (!existing) {
-        byId.set(hit.id, {
+        byId.set(parentId, {
           ...hit,
+          id: parentId,
+          metadata: hitMetadata,
           fusedScore: reciprocalRank,
           bestDistance: nextDistance,
           searchTiers: new Set<SearchTier>([hit.tier]),
@@ -73,7 +83,7 @@ export function mergeTieredVectorHits(
         existing.bestDistance = nextDistance;
         existing.distance = hit.distance;
         if (hit.document) existing.document = hit.document;
-        existing.metadata = { ...existing.metadata, ...hit.metadata };
+        existing.metadata = { ...existing.metadata, ...hitMetadata };
         existing.tier = hit.tier;
       }
     }

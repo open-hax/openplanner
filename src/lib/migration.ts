@@ -1,21 +1,16 @@
 /**
  * OpenPlanner Migration System
  *
- * Manages schema migrations between versions and storage backends.
- * Supports both DuckDB and MongoDB backends.
+ * Manages schema migrations for MongoDB backend.
  */
 
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Db, Collection } from "mongodb";
-import type { Database, Connection } from "duckdb";
-import { openMongoDB, type MongoConnection, type EventDocument, type CompactedMemoryDocument } from "./mongodb.js";
-import { openDuckDB, run, all, type Duck } from "./duckdb.js";
+import type { MongoConnection, MongoVectorDocument } from "./mongodb.js";
+import { upsertMongoVectorDocuments } from "./mongo-vectors.js";
 
 export interface MigrationContext {
-  storageBackend: "duckdb" | "mongodb";
-  duck?: Duck;
-  mongo?: MongoConnection;
+  mongo: MongoConnection;
   dataDir: string;
   migrationsPath: string;
 }
@@ -32,37 +27,19 @@ export interface Migration {
  * Built-in migrations.
  */
 export const migrations: Migration[] = [
-  // Migration 001: Initial DuckDB schema (already applied)
   {
-    id: "001_duckdb_initial",
-    name: "duckdb_initial",
-    description: "Initial DuckDB schema with events and compacted_memories tables",
+    id: "001_mongodb_initial",
+    name: "mongodb_initial",
+    description: "Initial MongoDB schema with events and compacted_memories collections",
     up: async () => {
-      // Already handled by openDuckDB
+      // Already handled by openMongoDB
     },
   },
-
-  // Migration 002: MongoDB support
   {
-    id: "002_mongodb_support",
-    name: "mongodb_support",
-    description: "Add MongoDB as alternative storage backend",
-    up: async (ctx) => {
-      if (ctx.storageBackend !== "mongodb") return;
-
-      // MongoDB indexes are created in openMongoDB
-      // This is just a marker migration
-    },
-  },
-
-  // Migration 003: Add perception_events collection
-  {
-    id: "003_perception_events",
+    id: "002_perception_events",
     name: "perception_events",
     description: "Add perception_events collection for Sintel signal intake",
     up: async (ctx) => {
-      if (ctx.storageBackend !== "mongodb" || !ctx.mongo) return;
-
       const perceptionEvents = ctx.mongo.db.collection("perception_events");
       await perceptionEvents.createIndex({ createdAt: -1 });
       await perceptionEvents.createIndex({ category: 1, createdAt: -1 });
@@ -72,9 +49,6 @@ export const migrations: Migration[] = [
   },
 ];
 
-/**
- * Load applied migrations from disk.
- */
 export async function loadAppliedMigrations(dataDir: string): Promise<Set<string>> {
   const migrationsPath = path.join(dataDir, "migrations.json");
   try {
@@ -86,18 +60,12 @@ export async function loadAppliedMigrations(dataDir: string): Promise<Set<string
   }
 }
 
-/**
- * Save applied migrations to disk.
- */
 export async function saveAppliedMigrations(dataDir: string, applied: Set<string>): Promise<void> {
   const migrationsPath = path.join(dataDir, "migrations.json");
   await fs.mkdir(path.dirname(migrationsPath), { recursive: true });
   await fs.writeFile(migrationsPath, JSON.stringify([...applied], null, 2));
 }
 
-/**
- * Run pending migrations.
- */
 export async function runMigrations(ctx: MigrationContext): Promise<string[]> {
   const applied = await loadAppliedMigrations(ctx.dataDir);
   const results: string[] = [];
@@ -115,135 +83,57 @@ export async function runMigrations(ctx: MigrationContext): Promise<string[]> {
   return results;
 }
 
-/**
- * Migrate data from DuckDB to MongoDB.
- *
- * This is a one-time migration when switching from DuckDB to MongoDB.
- * Reads all events and compacted_memories from DuckDB and inserts them into MongoDB.
- */
-export async function migrateDuckDBToMongoDB(
-  duck: Duck,
-  mongo: MongoConnection,
-  options: {
-    batchSize?: number;
-    dryRun?: boolean;
-    onProgress?: (phase: string, count: number, total?: number) => void;
-  } = {}
-): Promise<{ eventsCount: number; memoriesCount: number; duration: number }> {
-  const batchSize = options.batchSize ?? 1000;
-  const dryRun = options.dryRun ?? false;
-  const startTime = Date.now();
-
-  let eventsCount = 0;
-  let memoriesCount = 0;
-
-  // Count total records
-  const [{ count: totalEvents }] = await all(duck.conn, "SELECT COUNT(*) as count FROM events");
-  const [{ count: totalMemories }] = await all(duck.conn, "SELECT COUNT(*) as count FROM compacted_memories");
-  const totalEventsCount = totalEvents as number;
-  const totalMemoriesCount = totalMemories as number;
-
-  console.log(`[migration] DuckDB → MongoDB: ${totalEventsCount} events, ${totalMemoriesCount} memories`);
-
-  // Migrate events in batches
-  let offset = 0;
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-      FROM events
-      ORDER BY ts ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    if (!dryRun) {
-      const docs = rows.map((row: any) => ({
-        _id: row.id,
-        id: row.id,
-        ts: new Date(row.ts),
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        message: row.message ?? null,
-        role: row.role ?? null,
-        author: row.author ?? null,
-        model: row.model ?? null,
-        tags: row.tags ? JSON.parse(row.tags) : null,
-        text: row.text ?? null,
-        attachments: row.attachments ? JSON.parse(row.attachments) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-        createdAt: new Date(row.ts),
-        updatedAt: new Date(),
-      }));
-
-      await mongo.events.insertMany(docs, { ordered: false });
-    }
-
-    eventsCount += rows.length;
-    offset += batchSize;
-    options.onProgress?.("events", eventsCount, totalEventsCount);
-    console.log(`[migration] Events: ${eventsCount}/${totalEventsCount}`);
-  }
-
-  // Migrate compacted_memories in batches
-  offset = 0;
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, seed_id, member_count, char_count, embedding_model, text, members, extra
-      FROM compacted_memories
-      ORDER BY ts ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    if (!dryRun) {
-      const docs = rows.map((row: any) => ({
-        _id: row.id,
-        id: row.id,
-        ts: new Date(row.ts),
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        seed_id: row.seed_id ?? null,
-        member_count: row.member_count ?? 0,
-        char_count: row.char_count ?? 0,
-        embedding_model: row.embedding_model ?? null,
-        text: row.text ?? "",
-        members: row.members ? JSON.parse(row.members) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-        createdAt: new Date(row.ts),
-        updatedAt: new Date(),
-      }));
-
-      await mongo.compacted.insertMany(docs, { ordered: false });
-    }
-
-    memoriesCount += rows.length;
-    offset += batchSize;
-    options.onProgress?.("memories", memoriesCount, totalMemoriesCount);
-    console.log(`[migration] Memories: ${memoriesCount}/${totalMemoriesCount}`);
-  }
-
-  const duration = Date.now() - startTime;
-  console.log(`[migration] Complete: ${eventsCount} events, ${memoriesCount} memories in ${(duration / 1000).toFixed(2)}s`);
-
-  return { eventsCount, memoriesCount, duration };
+function toMongoVectorDocument(
+  id: string,
+  document: string | null | undefined,
+  embedding: unknown,
+  metadata: Record<string, unknown> | null | undefined,
+  tier: "hot" | "compact",
+): MongoVectorDocument {
+  const safeMetadata = metadata ?? {};
+  const ts = new Date(String(safeMetadata.ts ?? new Date().toISOString()));
+  return {
+    _id: id,
+    parent_id: typeof safeMetadata.parent_id === "string" && safeMetadata.parent_id.length > 0 ? safeMetadata.parent_id : id,
+    text: document ?? "",
+    embedding: Array.isArray(embedding) ? embedding.filter((value): value is number => typeof value === "number") : [],
+    ts: Number.isNaN(ts.getTime()) ? new Date() : ts,
+    source: typeof safeMetadata.source === "string" ? safeMetadata.source : "",
+    kind: typeof safeMetadata.kind === "string" ? safeMetadata.kind : "",
+    project: typeof safeMetadata.project === "string" && safeMetadata.project.length > 0 ? safeMetadata.project : null,
+    session: typeof safeMetadata.session === "string" && safeMetadata.session.length > 0 ? safeMetadata.session : null,
+    author: typeof safeMetadata.author === "string" && safeMetadata.author.length > 0 ? safeMetadata.author : null,
+    role: typeof safeMetadata.role === "string" && safeMetadata.role.length > 0 ? safeMetadata.role : null,
+    model: typeof safeMetadata.model === "string" && safeMetadata.model.length > 0 ? safeMetadata.model : null,
+    visibility: typeof safeMetadata.visibility === "string" && safeMetadata.visibility.length > 0 ? safeMetadata.visibility : null,
+    title: typeof safeMetadata.title === "string" && safeMetadata.title.length > 0 ? safeMetadata.title : null,
+    embedding_model: typeof safeMetadata.embedding_model === "string" && safeMetadata.embedding_model.length > 0 ? safeMetadata.embedding_model : null,
+    embedding_dimensions: Array.isArray(embedding) ? embedding.filter((value): value is number => typeof value === "number").length : null,
+    search_tier: tier,
+    chunk_id: typeof safeMetadata.chunk_id === "string" && safeMetadata.chunk_id.length > 0 ? safeMetadata.chunk_id : id,
+    chunk_index: typeof safeMetadata.chunk_index === "number" ? safeMetadata.chunk_index : null,
+    chunk_count: typeof safeMetadata.chunk_count === "number" ? safeMetadata.chunk_count : null,
+    normalized_format: typeof safeMetadata.normalized_format === "string" ? safeMetadata.normalized_format : null,
+    normalized_estimated_tokens: typeof safeMetadata.normalized_estimated_tokens === "number" ? safeMetadata.normalized_estimated_tokens : null,
+    raw_estimated_tokens: typeof safeMetadata.raw_estimated_tokens === "number" ? safeMetadata.raw_estimated_tokens : null,
+    seed_id: typeof safeMetadata.seed_id === "string" && safeMetadata.seed_id.length > 0 ? safeMetadata.seed_id : null,
+    member_count: typeof safeMetadata.member_count === "number" ? safeMetadata.member_count : null,
+    char_count: typeof safeMetadata.char_count === "number" ? safeMetadata.char_count : null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 }
 
 /**
- * Export DuckDB data to JSONL files.
+ * Export MongoDB collections to JSONL files for backup.
  */
-export async function exportDuckDBToJsonl(
-  duck: Duck,
+export async function exportMongoDBToJsonl(
+  mongo: MongoConnection,
   outputDir: string,
   options: {
     batchSize?: number;
     onProgress?: (phase: string, count: number) => void;
-  } = {}
+  } = {},
 ): Promise<{ eventsFile: string; memoriesFile: string }> {
   const batchSize = options.batchSize ?? 1000;
   await fs.mkdir(outputDir, { recursive: true });
@@ -251,92 +141,186 @@ export async function exportDuckDBToJsonl(
   const eventsFile = path.join(outputDir, "events.jsonl");
   const memoriesFile = path.join(outputDir, "compacted_memories.jsonl");
 
-  // Export events
   console.log("[export] Exporting events to JSONL...");
   const eventsStream = await fs.open(eventsFile, "w");
-  let offset = 0;
   let count = 0;
 
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, message, role, author, model, tags, text, attachments, extra
-      FROM events
-      ORDER BY ts ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    for (const row of rows) {
-      const doc = {
-        id: row.id,
-        ts: row.ts,
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        message: row.message ?? null,
-        role: row.role ?? null,
-        author: row.author ?? null,
-        model: row.model ?? null,
-        tags: row.tags ? JSON.parse(row.tags) : null,
-        text: row.text ?? null,
-        attachments: row.attachments ? JSON.parse(row.attachments) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-      };
-      await eventsStream.write(JSON.stringify(doc) + "\n");
-      count++;
+  const eventsCursor = mongo.events.find({}).sort({ ts: 1 });
+  for await (const row of eventsCursor) {
+    const doc = {
+      id: row.id,
+      ts: row.ts.toISOString(),
+      source: row.source,
+      kind: row.kind,
+      project: row.project,
+      session: row.session,
+      message: row.message,
+      role: row.role,
+      author: row.author,
+      model: row.model,
+      tags: row.tags,
+      text: row.text,
+      attachments: row.attachments,
+      extra: row.extra,
+    };
+    await eventsStream.write(JSON.stringify(doc) + "\n");
+    count++;
+    if (count % batchSize === 0) {
+      options.onProgress?.("events", count);
     }
-
-    options.onProgress?.("events", count);
-    offset += batchSize;
   }
 
   await eventsStream.close();
   console.log(`[export] Events: ${count} records → ${eventsFile}`);
 
-  // Export compacted_memories
   console.log("[export] Exporting compacted_memories to JSONL...");
   const memoriesStream = await fs.open(memoriesFile, "w");
-  offset = 0;
   count = 0;
 
-  while (true) {
-    const rows = await all(duck.conn, `
-      SELECT id, ts, source, kind, project, session, seed_id, member_count, char_count, embedding_model, text, members, extra
-      FROM compacted_memories
-      ORDER BY ts ASC
-      LIMIT ? OFFSET ?
-    `, [batchSize, offset]);
-
-    if (rows.length === 0) break;
-
-    for (const row of rows) {
-      const doc = {
-        id: row.id,
-        ts: row.ts,
-        source: row.source ?? "",
-        kind: row.kind ?? "",
-        project: row.project ?? null,
-        session: row.session ?? null,
-        seed_id: row.seed_id ?? null,
-        member_count: row.member_count ?? 0,
-        char_count: row.char_count ?? 0,
-        embedding_model: row.embedding_model ?? null,
-        text: row.text ?? "",
-        members: row.members ? JSON.parse(row.members) : null,
-        extra: row.extra ? JSON.parse(row.extra) : null,
-      };
-      await memoriesStream.write(JSON.stringify(doc) + "\n");
-      count++;
+  const memoriesCursor = mongo.compacted.find({}).sort({ ts: 1 });
+  for await (const row of memoriesCursor) {
+    const doc = {
+      id: row.id,
+      ts: row.ts.toISOString(),
+      source: row.source,
+      kind: row.kind,
+      project: row.project,
+      session: row.session,
+      seed_id: row.seed_id,
+      member_count: row.member_count,
+      char_count: row.char_count,
+      embedding_model: row.embedding_model,
+      text: row.text,
+      members: row.members,
+      extra: row.extra,
+    };
+    await memoriesStream.write(JSON.stringify(doc) + "\n");
+    count++;
+    if (count % batchSize === 0) {
+      options.onProgress?.("memories", count);
     }
-
-    options.onProgress?.("memories", count);
-    offset += batchSize;
   }
 
   await memoriesStream.close();
   console.log(`[export] Memories: ${count} records → ${memoriesFile}`);
 
   return { eventsFile, memoriesFile };
+}
+
+/**
+ * Import JSONL files to MongoDB collections.
+ */
+export async function importJsonlToMongoDB(
+  mongo: MongoConnection,
+  inputDir: string,
+  options: {
+    batchSize?: number;
+    onProgress?: (phase: string, count: number) => void;
+  } = {},
+): Promise<{ eventsCount: number; memoriesCount: number }> {
+  const batchSize = options.batchSize ?? 1000;
+  const eventsFile = path.join(inputDir, "events.jsonl");
+  const memoriesFile = path.join(inputDir, "compacted_memories.jsonl");
+
+  let eventsCount = 0;
+  let memoriesCount = 0;
+
+  // Import events
+  try {
+    const eventsContent = await fs.readFile(eventsFile, "utf-8");
+    const eventDocs: any[] = [];
+    for (const line of eventsContent.split(/\n+/)) {
+      if (!line.trim()) continue;
+      try {
+        const doc = JSON.parse(line);
+        eventDocs.push({
+          _id: doc.id,
+          id: doc.id,
+          ts: new Date(doc.ts),
+          source: doc.source ?? "",
+          kind: doc.kind ?? "",
+          project: doc.project ?? null,
+          session: doc.session ?? null,
+          message: doc.message ?? null,
+          role: doc.role ?? null,
+          author: doc.author ?? null,
+          model: doc.model ?? null,
+          tags: doc.tags ?? null,
+          text: doc.text ?? null,
+          attachments: doc.attachments ?? null,
+          extra: doc.extra ?? null,
+          createdAt: new Date(doc.ts),
+          updatedAt: new Date(),
+        });
+      } catch {}
+    }
+
+    for (let i = 0; i < eventDocs.length; i += batchSize) {
+      const batch = eventDocs.slice(i, i + batchSize);
+      await mongo.events.bulkWrite(
+        batch.map((doc) => ({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: doc },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+      eventsCount += batch.length;
+      options.onProgress?.("events", eventsCount);
+    }
+  } catch (error) {
+    console.warn(`[import] No events file found or failed to read: ${eventsFile}`);
+  }
+
+  // Import memories
+  try {
+    const memoriesContent = await fs.readFile(memoriesFile, "utf-8");
+    const memoryDocs: any[] = [];
+    for (const line of memoriesContent.split(/\n+/)) {
+      if (!line.trim()) continue;
+      try {
+        const doc = JSON.parse(line);
+        memoryDocs.push({
+          _id: doc.id,
+          id: doc.id,
+          ts: new Date(doc.ts),
+          source: doc.source ?? "",
+          kind: doc.kind ?? "",
+          project: doc.project ?? null,
+          session: doc.session ?? null,
+          seed_id: doc.seed_id ?? null,
+          member_count: doc.member_count ?? 0,
+          char_count: doc.char_count ?? 0,
+          embedding_model: doc.embedding_model ?? null,
+          text: doc.text ?? "",
+          members: doc.members ?? null,
+          extra: doc.extra ?? null,
+          createdAt: new Date(doc.ts),
+          updatedAt: new Date(),
+        });
+      } catch {}
+    }
+
+    for (let i = 0; i < memoryDocs.length; i += batchSize) {
+      const batch = memoryDocs.slice(i, i + batchSize);
+      await mongo.compacted.bulkWrite(
+        batch.map((doc) => ({
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $set: doc },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+      memoriesCount += batch.length;
+      options.onProgress?.("memories", memoriesCount);
+    }
+  } catch (error) {
+    console.warn(`[import] No memories file found or failed to read: ${memoriesFile}`);
+  }
+
+  return { eventsCount, memoriesCount };
 }

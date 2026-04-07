@@ -2,10 +2,9 @@ import Fastify, { type FastifyInstance } from "fastify";
 import multipart from "@fastify/multipart";
 import sensible from "@fastify/sensible";
 import type { OpenPlannerConfig } from "./lib/config.js";
+import { createEmbeddingRuntime } from "./lib/embedding-runtime.js";
 import { authPlugin } from "./plugins/auth.js";
-import { duckdbPlugin } from "./plugins/duckdb.js";
 import { mongodbPlugin } from "./plugins/mongodb.js";
-import { chromaPlugin } from "./plugins/chroma.js";
 import { v1Routes } from "./routes/v1/index.js";
 
 export async function buildApp(cfg: OpenPlannerConfig): Promise<FastifyInstance> {
@@ -16,7 +15,7 @@ export async function buildApp(cfg: OpenPlannerConfig): Promise<FastifyInstance>
   });
 
   (app as any).openplannerConfig = cfg;
-  (app as any).storageBackend = cfg.storageBackend;
+  (app as any).embeddingRuntime = createEmbeddingRuntime(cfg);
 
   await app.register(sensible as any);
   await app.register(multipart as any, {
@@ -25,17 +24,11 @@ export async function buildApp(cfg: OpenPlannerConfig): Promise<FastifyInstance>
 
   await app.register(authPlugin as any, cfg);
 
-  // Register storage backend based on config
-  if (cfg.storageBackend === "mongodb") {
-    await app.register(mongodbPlugin as any, cfg);
-  } else {
-    await app.register(duckdbPlugin as any, cfg);
-  }
-
-  await app.register(chromaPlugin as any, cfg);
+  // MongoDB is the only storage backend
+  await app.register(mongodbPlugin as any, cfg);
 
   await app.register(v1Routes, { prefix: "/v1" });
 
-  app.get("/", async () => ({ ok: true, name: "openplanner", version: "0.2.0", storageBackend: cfg.storageBackend }));
+  app.get("/", async () => ({ ok: true, name: "openplanner", version: "0.3.0", storageBackend: "mongodb" }));
   return app;
 }

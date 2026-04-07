@@ -1,104 +1,153 @@
-# OpenPlanner (API-first data lake)
+# OpenPlanner - Graph Stack Monorepo
 
-Local-first personal data lake for LLM session archives with:
+OpenPlanner is the canonical graph monorepo containing all packages for semantic graph construction, layout, traversal, and search.
 
-- **DuckDB** (default) for storage + FTS search
-- **MongoDB** (optional) for scalable storage, shared with Cephalon Hive
-- **ChromaDB** for vector search
+## Architecture
 
-This is a complete runnable **project skeleton**. See `specs/` for scope.
-
-## Quick start
-
-```bash
-npm install
-docker compose up -d
-cp .env.example .env
-npm run dev
+```
+OpenPlanner (monorepo root)
+├── src/                          # Core OpenPlanner API server
+│   ├── routes/v1/graph.ts        # Graph endpoints (traversal, edges, layout)
+│   └── lib/mongodb.ts            # MongoDB collections for graph data
+├── packages/
+│   ├── graph-weaver/             # GraphQL server for graph data
+│   ├── graph-weaver-aco/         # Ant Colony Optimization for clustering
+│   ├── graph-runtime/            # Runtime specs and documentation
+│   ├── eros-eris-field/          # Force-directed layout library
+│   ├── eros-eris-field-app/      # Layout worker app (connects to graph-weaver)
+│   ├── myrmex/                   # Web crawler and graph store client
+│   └── vexx/                     # NPU-accelerated cosine similarity (Clojure)
+└── services/                     # Runtime stack configurations
 ```
 
-With MongoDB backend:
-```bash
-docker compose --profile mongodb up -d
-export OPENPLANNER_STORAGE_BACKEND=mongodb
-npm run dev
+## Data Flow
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Myrmex        │────▶│   Graph-Weaver   │────▶│  OpenPlanner    │
+│  (web crawler)  │     │  (GraphQL API)   │     │  (storage API)  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │                         │
+                               ▼                         ▼
+                        ┌──────────────────┐     ┌─────────────────┐
+                        │ Eros-Eris-Field  │     │    MongoDB      │
+                        │ (layout worker)  │────▶│  (vectors +     │
+                        └──────────────────┘     │   graph data)   │
+                               │                 └─────────────────┘
+                               ▼
+                        ┌──────────────────┐
+                        │      Vexx        │
+                        │ (NPU cosine sim) │
+                        └──────────────────┘
 ```
 
-## Data Retention (TTL)
+## Packages
 
-MongoDB supports automatic data expiration via TTL indexes:
+### Core Storage
+
+| Package | Description | Tech |
+|---------|-------------|------|
+| `src/` | OpenPlanner API server | TypeScript, Fastify, MongoDB |
+| `graph-weaver` | GraphQL server for graph queries | TypeScript, GraphQL, MongoDB |
+| `graph-runtime` | Runtime specifications | Markdown |
+
+### Layout & Clustering
+
+| Package | Description | Tech |
+|---------|-------------|------|
+| `eros-eris-field` | Force-directed layout engine | TypeScript |
+| `eros-eris-field-app` | Layout worker (connects to graph-weaver) | TypeScript |
+| `graph-weaver-aco` | Ant Colony Optimization clustering | TypeScript |
+
+### Ingestion & Acceleration
+
+| Package | Description | Tech |
+|---------|-------------|------|
+| `myrmex` | Web crawler, graph store client | TypeScript |
+| `vexx` | NPU-accelerated cosine similarity | Clojure, ONNX Runtime |
+
+## Quick Start
 
 ```bash
-# Retain events for 30 days
-export MONGODB_EVENTS_TTL_SECONDS=2592000
+# Clone with submodules
+git clone --recursive git@github.com:open-hax/openplanner.git
 
-# Retain compacted memories for 90 days
-export MONGODB_COMPACTED_TTL_SECONDS=7776000
+# Or initialize submodules after clone
+git submodule update --init --recursive
+
+# Install dependencies
+pnpm install
+
+# Start the stack
+docker compose -f services/openplanner/docker-compose.yml up -d
 ```
 
-Set to `0` (default) to disable TTL.
+## Graph Search Architecture
+
+OpenPlanner owns all graph data:
+
+| Collection | Purpose |
+|------------|---------|
+| `graph_edges` | Structural edges (links, deps) from graph-weaver |
+| `graph_semantic_edges` | Semantic edges from embedding clustering |
+| `graph_layout_overrides` | Node positions (x, y) from force simulation |
+| `graph_node_embeddings` | Node embeddings for vector search |
+
+### Traversal with Physical Distances
+
+Graph traversal uses **Euclidean distance** from layout positions as the cost metric:
+
+```
+cost = sqrt((x1-x2)² + (y1-y2)²)
+```
+
+This encodes ALL forces in the graph:
+- Structural links pull connected nodes together
+- Semantic similarity creates attraction/repulsion
+- Layout positions reflect the equilibrium of all forces
+
+```bash
+# Traverse from seed nodes using physical distances
+curl -X POST http://localhost:7777/v1/graph/traverse \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"seedNodeIds": ["web:url:https://github.com/"], "maxDistance": 5000}'
+```
 
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | Health check |
-| `GET /v1/health` | Detailed health status |
-| `POST /v1/events` | Ingest events |
-| `POST /v1/search/fts` | Full-text search |
-| `POST /v1/search/vector` | Vector search (ChromaDB) |
-| `GET /v1/sessions` | List sessions |
-| `POST /v1/jobs/import/chatgpt` | Import ChatGPT data |
+| `POST /v1/graph/edges/upsert` | Persist structural edges |
+| `POST /v1/graph/edges/query` | Query edges by node IDs |
+| `POST /v1/graph/semantic-edges/upsert` | Persist semantic edges |
+| `POST /v1/graph/semantic-edges/query` | Query semantic edges |
+| `POST /v1/graph/traverse` | Graph traversal with physical distances |
+| `POST /v1/graph/semantic-search` | Vector search + graph traversal |
+| `GET /v1/graph/monitoring` | Graph stats and metrics |
 
-Container-first workflow from the workspace root:
+## Development
 
 ```bash
-pnpm docker:stack up openplanner -- --build
-pnpm docker:stack ps openplanner
-pnpm docker:stack logs openplanner -- -f
+# Build all packages
+pnpm -r build
+
+# Run tests
+pnpm -r test
+
+# Start dev server
+npm run dev
 ```
 
-This stack now owns both the `openplanner` app on `7777` and `chroma` on `8000`.
-If `8000` is already in use on the host, override it with `OPENPLANNER_CHROMA_PORT=<port>`.
-When the root `ollama` stack is running, `openplanner` can use it over the shared `ai-infra` Docker network.
+## Submodule Management
 
-Auth header:
+```bash
+# Initialize submodules
+git submodule update --init --recursive
 
+# Update all submodules to latest
+git submodule update --remote --merge
+
+# Update a specific submodule
+cd packages/graph-weaver && git pull origin main
 ```
-Authorization: Bearer <OPENPLANNER_API_KEY>
-```
-
-Embedding model selection knobs:
-
-- `OLLAMA_EMBED_MODEL`: hot/raw collection model
-- `OLLAMA_EMBED_MODEL_BY_PROJECT`: per-project overrides for the hot/raw collection
-- `OLLAMA_EMBED_MODEL_BY_SOURCE`: per-source overrides for the hot/raw collection
-- `OLLAMA_EMBED_MODEL_BY_KIND`: per-kind overrides for the hot/raw collection
-- `CHROMA_COMPACT_COLLECTION`: secondary compacted semantic collection
-- `OLLAMA_COMPACT_EMBED_MODEL`: embedding model for compacted semantic packs
-
-Override precedence for the hot/raw collection is `project -> source -> kind -> default`.
-Override values accept either JSON (`{"chatgpt":"qwen3-embedding:4b"}`) or pair list (`chatgpt=qwen3-embedding:4b;discord=qwen3-embedding:0.6b`).
-
-Semantic compaction knobs:
-
-- `SEMANTIC_COMPACTION_ENABLED`
-- `SEMANTIC_COMPACTION_MIN_EVENTS`
-- `SEMANTIC_COMPACTION_MAX_NEIGHBORS`
-- `SEMANTIC_COMPACTION_CHAR_BUDGET`
-- `SEMANTIC_COMPACTION_DISTANCE_THRESHOLD`
-- `SEMANTIC_COMPACTION_MIN_CLUSTER_SIZE`
-- `SEMANTIC_COMPACTION_MAX_PACKS_PER_RUN`
-
-## Endpoints (MVP)
-
-- `POST /v1/blobs` (multipart) -> sha256
-- `GET /v1/blobs/:sha256`
-- `POST /v1/events` -> upsert events into DuckDB
-- `POST /v1/search/fts` -> keyword search
-- `POST /v1/search/vector` -> vector search (assumes embeddings exist in Chroma)
-- `GET /v1/sessions`
-- `GET /v1/sessions/:sessionId`
-- `GET /v1/jobs` + job creation stubs
-
-See `spec/01-api-contract.md`.
