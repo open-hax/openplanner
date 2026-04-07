@@ -1,0 +1,21 @@
+[submodule "packages/graph-weaver"]
+	path = packages/graph-weaver
+	url = git@github.com:octave-commons/graph-weaver.git
+[submodule "packages/eros-eris-field"]
+	path = packages/eros-eris-field
+	url = git@github.com:octave-commons/eros-eris-field.git
+[submodule "packages/graph-weaver-aco"]
+	path = packages/graph-weaver-aco
+	url = git@github.com:octave-commons/graph-weaver-aco.git
+[submodule "packages/eros-eris-field-app"]
+	path = packages/eros-eris-field-app
+	url = git@github.com:octave-commons/eros-eris-field-app.git
+[submodule "packages/vexx"]
+	path = packages/vexx
+	url = git@github.com:open-hax/vexx.git
+[submodule "packages/myrmex"]
+	path = packages/myrmex
+	url = git@github.com:octave-commons/myrmex.git
+[submodule "packages/graph-runtime"]
+	path = packages/graph-runtime
+	url = git@github.com:octave-commons/graph-runtime.git

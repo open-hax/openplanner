@@ -1,126 +1,153 @@
-# OpenPlanner (API-first data lake)
+# OpenPlanner - Graph Stack Monorepo
 
-Local-first personal data lake for LLM session archives with MongoDB as the single storage backend for structured data + vector persistence.
+OpenPlanner is the canonical graph monorepo containing all packages for semantic graph construction, layout, traversal, and search.
 
-## Quick start
+## Architecture
 
-```bash
-npm install
-cp .env.example .env
-npm run dev
+```
+OpenPlanner (monorepo root)
+├── src/                          # Core OpenPlanner API server
+│   ├── routes/v1/graph.ts        # Graph endpoints (traversal, edges, layout)
+│   └── lib/mongodb.ts            # MongoDB collections for graph data
+├── packages/
+│   ├── graph-weaver/             # GraphQL server for graph data
+│   ├── graph-weaver-aco/         # Ant Colony Optimization for clustering
+│   ├── graph-runtime/            # Runtime specs and documentation
+│   ├── eros-eris-field/          # Force-directed layout library
+│   ├── eros-eris-field-app/      # Layout worker app (connects to graph-weaver)
+│   ├── myrmex/                   # Web crawler and graph store client
+│   └── vexx/                     # NPU-accelerated cosine similarity (Clojure)
+└── services/                     # Runtime stack configurations
 ```
 
-The MongoDB backend requires:
-- MongoDB 7.0+ with Atlas Vector Search or self-managed `mongot`
-- Ollama or compatible embedding endpoint
+## Data Flow
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
+│   Myrmex        │────▶│   Graph-Weaver   │────▶│  OpenPlanner    │
+│  (web crawler)  │     │  (GraphQL API)   │     │  (storage API)  │
+└─────────────────┘     └──────────────────┘     └─────────────────┘
+                               │                         │
+                               ▼                         ▼
+                        ┌──────────────────┐     ┌─────────────────┐
+                        │ Eros-Eris-Field  │     │    MongoDB      │
+                        │ (layout worker)  │────▶│  (vectors +     │
+                        └──────────────────┘     │   graph data)   │
+                               │                 └─────────────────┘
+                               ▼
+                        ┌──────────────────┐
+                        │      Vexx        │
+                        │ (NPU cosine sim) │
+                        └──────────────────┘
+```
+
+## Packages
+
+### Core Storage
+
+| Package | Description | Tech |
+|---------|-------------|------|
+| `src/` | OpenPlanner API server | TypeScript, Fastify, MongoDB |
+| `graph-weaver` | GraphQL server for graph queries | TypeScript, GraphQL, MongoDB |
+| `graph-runtime` | Runtime specifications | Markdown |
+
+### Layout & Clustering
+
+| Package | Description | Tech |
+|---------|-------------|------|
+| `eros-eris-field` | Force-directed layout engine | TypeScript |
+| `eros-eris-field-app` | Layout worker (connects to graph-weaver) | TypeScript |
+| `graph-weaver-aco` | Ant Colony Optimization clustering | TypeScript |
+
+### Ingestion & Acceleration
+
+| Package | Description | Tech |
+|---------|-------------|------|
+| `myrmex` | Web crawler, graph store client | TypeScript |
+| `vexx` | NPU-accelerated cosine similarity | Clojure, ONNX Runtime |
+
+## Quick Start
+
+```bash
+# Clone with submodules
+git clone --recursive git@github.com:open-hax/openplanner.git
+
+# Or initialize submodules after clone
+git submodule update --init --recursive
+
+# Install dependencies
+pnpm install
+
+# Start the stack
+docker compose -f services/openplanner/docker-compose.yml up -d
+```
+
+## Graph Search Architecture
+
+OpenPlanner owns all graph data:
+
+| Collection | Purpose |
+|------------|---------|
+| `graph_edges` | Structural edges (links, deps) from graph-weaver |
+| `graph_semantic_edges` | Semantic edges from embedding clustering |
+| `graph_layout_overrides` | Node positions (x, y) from force simulation |
+| `graph_node_embeddings` | Node embeddings for vector search |
+
+### Traversal with Physical Distances
+
+Graph traversal uses **Euclidean distance** from layout positions as the cost metric:
+
+```
+cost = sqrt((x1-x2)² + (y1-y2)²)
+```
+
+This encodes ALL forces in the graph:
+- Structural links pull connected nodes together
+- Semantic similarity creates attraction/repulsion
+- Layout positions reflect the equilibrium of all forces
+
+```bash
+# Traverse from seed nodes using physical distances
+curl -X POST http://localhost:7777/v1/graph/traverse \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"seedNodeIds": ["web:url:https://github.com/"], "maxDistance": 5000}'
+```
 
 ## API Endpoints
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /` | Health check |
-| `GET /v1/health` | Detailed health status |
-| `POST /v1/events` | Ingest events with automatic vector indexing |
-| `POST /v1/search/fts` | Full-text search |
-| `POST /v1/search/vector` | Vector similarity search |
-| `GET /v1/sessions` | List sessions |
-| `POST /v1/jobs/import/chatgpt` | Import ChatGPT data |
-| `POST /v1/jobs/backfill/embeddings` | Rebuild all embeddings with GPU saturation |
-| `POST /v1/jobs/compact/semantic` | Run semantic compaction |
+| `POST /v1/graph/edges/upsert` | Persist structural edges |
+| `POST /v1/graph/edges/query` | Query edges by node IDs |
+| `POST /v1/graph/semantic-edges/upsert` | Persist semantic edges |
+| `POST /v1/graph/semantic-edges/query` | Query semantic edges |
+| `POST /v1/graph/traverse` | Graph traversal with physical distances |
+| `POST /v1/graph/semantic-search` | Vector search + graph traversal |
+| `GET /v1/graph/monitoring` | Graph stats and metrics |
 
-Container-first workflow from the workspace root:
+## Development
 
 ```bash
-pnpm docker:stack up openplanner -- --build
-pnpm docker:stack ps openplanner
-pnpm docker:stack logs openplanner -- -f
+# Build all packages
+pnpm -r build
+
+# Run tests
+pnpm -r test
+
+# Start dev server
+npm run dev
 ```
 
-When the root `ollama` stack is running, `openplanner` can use it over the shared `ai-infra` Docker network.
-
-Auth header:
-
-```
-Authorization: Bearer <OPENPLANNER_API_KEY>
-```
-
-## GPU-Saturating Embedding Backfill
-
-The `/v1/jobs/backfill/embeddings` endpoint rebuilds all embeddings with maximum GPU utilization:
+## Submodule Management
 
 ```bash
-# Set environment variables for maximum GPU utilization
-export OLLAMA_EMBED_BATCH_WINDOW_MS=100
-export OLLAMA_EMBED_MAX_BATCH_ITEMS=512
+# Initialize submodules
+git submodule update --init --recursive
 
-# Trigger backfill
-curl -X POST http://localhost:7777/v1/jobs/backfill/embeddings \
-  -H "Authorization: Bearer $OPENPLANNER_API_KEY"
-```
+# Update all submodules to latest
+git submodule update --remote --merge
 
-**Configuration:**
-- `OLLAMA_EMBED_BATCH_WINDOW_MS`: Time to collect items before embedding (default: 50ms, increase for larger batches)
-- `OLLAMA_EMBED_MAX_BATCH_ITEMS`: Maximum items per embedding batch (default: 256)
-- `OLLAMA_EMBED_MAX_CONCURRENT_BATCHES`: Concurrent GPU requests (default: 4)
-
-The backfill uses:
-- 16 concurrent document processors
-- 256-item embedding batches (configurable)
-- 4 parallel GPU workers per embedding function
-- Pipelined MongoDB upserts (100 docs per batch)
-
-## Data Retention (TTL)
-
-MongoDB supports automatic data expiration via TTL indexes:
-
-```bash
-# Retain events for 30 days
-export MONGODB_EVENTS_TTL_SECONDS=2592000
-
-# Retain compacted memories for 90 days
-export MONGODB_COMPACTED_TTL_SECONDS=7776000
-```
-
-Set to `0` (default) to disable TTL.
-
-## Embedding Model Configuration
-
-- `OLLAMA_EMBED_MODEL`: Default embedding model (default: `qwen3-embedding:0.6b`)
-- `OLLAMA_COMPACT_EMBED_MODEL`: Model for compacted semantic packs
-- `OLLAMA_EMBED_MODEL_BY_PROJECT`: Per-project overrides
-- `OLLAMA_EMBED_MODEL_BY_SOURCE`: Per-source overrides
-- `OLLAMA_EMBED_MODEL_BY_KIND`: Per-kind overrides
-
-Override precedence: `project -> source -> kind -> default`
-
-Override values accept either JSON (`{"chatgpt":"qwen3-embedding:4b"}`) or pair list (`chatgpt=qwen3-embedding:4b;discord=qwen3-embedding:0.6b`).
-
-## Semantic Compaction
-
-- `SEMANTIC_COMPACTION_ENABLED`: Enable/disable semantic compaction
-- `SEMANTIC_COMPACTION_MIN_EVENTS`: Minimum events before compaction runs
-- `SEMANTIC_COMPACTION_MAX_NEIGHBORS`: Maximum neighbors per seed
-- `SEMANTIC_COMPACTION_CHAR_BUDGET`: Character budget per semantic pack
-- `SEMANTIC_COMPACTION_DISTANCE_THRESHOLD`: Distance threshold for clustering
-- `SEMANTIC_COMPACTION_MIN_CLUSTER_SIZE`: Minimum cluster size
-- `SEMANTIC_COMPACTION_MAX_PACKS_PER_RUN`: Maximum packs per compaction run
-
-## Vector Search
-
-MongoDB vector collections are partitioned by model and dimensions:
-- `event_chunks__<model>__d<dim>__<hash>` for hot/raw chunks
-- `compacted_vectors__<model>__d<dim>__<hash>` for compacted vectors
-
-Each partition gets its own Atlas Vector Search index with cosine similarity.
-
-## Import/Export
-
-Export to JSONL for backup:
-```bash
-node dist/cli.js export --output ./backup
-```
-
-Import from JSONL:
-```bash
-node dist/cli.js import --input ./backup
+# Update a specific submodule
+cd packages/graph-weaver && git pull origin main
 ```
