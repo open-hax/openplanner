@@ -136,7 +136,9 @@ export interface GraphNodeEmbeddingDocument {
   embedding_model: string | null;
   embedding_dimensions: number;
   embedding: number[];
+  chunk_index: number;
   chunk_count: number;
+  text?: string;
   updated_at: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -150,6 +152,7 @@ export interface GraphSemanticEdgeDocument {
   edge_type: string;
   project: string | null;
   embedding_model: string | null;
+  graph_version: string | null;
   clustering_version: string | null;
   source: string | null;
   updated_at: Date;
@@ -171,6 +174,39 @@ export interface GraphEdgeDocument {
   updatedAt: Date;
 }
 
+export interface GraphClusterMembershipDocument {
+  _id: string; // `${clustering_version}::${node_id}`
+  node_id: string;
+  graph_version: string | null;
+  clustering_version: string | null;
+  cluster_id: string | null;
+  cluster_size: number | null;
+  embedding_model: string | null;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SemanticGraphRunDocument {
+  _id: string;
+  run_id: string;
+  embedding_model: string | null;
+  embedding_dimensions: number | null;
+  node_count: number | null;
+  final_k: number | null;
+  candidate_factor: number | null;
+  candidate_engine: string | null;
+  rerank_provider: string | null;
+  graph_version: string | null;
+  clustering_version: string | null;
+  status: string | null;
+  started_at: Date | null;
+  finished_at: Date | null;
+  metrics: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface MongoConnection {
   client: MongoClient;
   db: Db;
@@ -183,6 +219,8 @@ export interface MongoConnection {
   graphNodeEmbeddings: Collection<GraphNodeEmbeddingDocument>;
   graphSemanticEdges: Collection<GraphSemanticEdgeDocument>;
   graphEdges: Collection<GraphEdgeDocument>;
+  graphClusterMemberships: Collection<GraphClusterMembershipDocument>;
+  semanticGraphRuns: Collection<SemanticGraphRunDocument>;
   ftsEnabled: boolean; // MongoDB has text search, always true
 }
 
@@ -208,6 +246,8 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphNodeEmbeddings = db.collection<GraphNodeEmbeddingDocument>(config.graphNodeEmbeddingCollection);
   const graphSemanticEdges = db.collection<GraphSemanticEdgeDocument>("graph_semantic_edges");
   const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
+  const graphClusterMemberships = db.collection<GraphClusterMembershipDocument>("graph_cluster_memberships");
+  const semanticGraphRuns = db.collection<SemanticGraphRunDocument>("semantic_graph_runs");
 
   // Create indexes for events
   await events.createIndex({ ts: -1 });
@@ -260,6 +300,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphSemanticEdges.createIndex({ source_node_id: 1, updated_at: -1 as IndexDirection });
   await graphSemanticEdges.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
   await graphSemanticEdges.createIndex({ similarity: -1 as IndexDirection });
+  await graphSemanticEdges.createIndex({ graph_version: 1, updated_at: -1 as IndexDirection });
   await graphSemanticEdges.createIndex({ clustering_version: 1, updated_at: -1 as IndexDirection });
 
   // ALL graph edges (structural + semantic) from graph-weaver
@@ -268,6 +309,16 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphEdges.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
   await graphEdges.createIndex({ edge_kind: 1, updated_at: -1 as IndexDirection });
   await graphEdges.createIndex({ project: 1, updated_at: -1 as IndexDirection });
+
+  // Cluster memberships
+  await graphClusterMemberships.createIndex({ node_id: 1 });
+  await graphClusterMemberships.createIndex({ graph_version: 1, cluster_id: 1 });
+  await graphClusterMemberships.createIndex({ clustering_version: 1, cluster_id: 1 });
+
+  // Semantic graph runs
+  await semanticGraphRuns.createIndex({ run_id: 1 }, { unique: true });
+  await semanticGraphRuns.createIndex({ graph_version: 1 }, { unique: true });
+  await semanticGraphRuns.createIndex({ status: 1, finished_at: -1 as IndexDirection });
 
   // TTL index for events (auto-expire old signals)
   const eventsTtl = config.eventsTtlSeconds ?? DEFAULT_EVENTS_TTL_SECONDS;
@@ -334,6 +385,8 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphNodeEmbeddings,
     graphSemanticEdges,
     graphEdges,
+    graphClusterMemberships,
+    semanticGraphRuns,
     ftsEnabled: true, // MongoDB always has text search
   };
 }
@@ -443,7 +496,9 @@ export async function upsertGraphNodeEmbeddings(
     embedding_model?: string | null;
     embedding_dimensions: number;
     embedding: number[];
+    chunk_index?: number;
     chunk_count: number;
+    text?: string;
     updated_at?: Date;
   }>,
 ): Promise<number> {
@@ -454,7 +509,7 @@ export async function upsertGraphNodeEmbeddings(
     rows.map((row) => ({
       updateOne: {
         filter: {
-          _id: `${row.node_id}::${row.embedding_model ?? ""}::${row.embedding_dimensions}`,
+          _id: `${row.node_id}::${row.embedding_model ?? ""}::${row.embedding_dimensions}::${row.chunk_index ?? 0}`,
         },
         update: {
           $set: {
@@ -464,7 +519,9 @@ export async function upsertGraphNodeEmbeddings(
             embedding_model: row.embedding_model ?? null,
             embedding_dimensions: row.embedding_dimensions,
             embedding: row.embedding,
+            chunk_index: row.chunk_index ?? 0,
             chunk_count: row.chunk_count,
+            ...(row.text != null ? { text: row.text } : {}),
             updated_at: row.updated_at ?? now,
             updatedAt: now,
           },
@@ -490,6 +547,7 @@ export async function upsertGraphSemanticEdges(
     edge_type?: string;
     project?: string | null;
     embedding_model?: string | null;
+    graph_version?: string | null;
     clustering_version?: string | null;
     source?: string | null;
     updated_at?: Date;
@@ -517,6 +575,7 @@ export async function upsertGraphSemanticEdges(
               edge_type: row.edge_type ?? "semantic_similarity",
               project: row.project ?? null,
               embedding_model: row.embedding_model ?? null,
+              graph_version: row.graph_version ?? null,
               clustering_version: row.clustering_version ?? null,
               source: row.source ?? null,
               updated_at: row.updated_at ?? now,

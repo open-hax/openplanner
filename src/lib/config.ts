@@ -29,15 +29,13 @@ export type OpenPlannerConfig = {
   host: string;
   port: number;
   apiKey: string;
-  ollamaBaseUrl: string;
-  ollamaApiKey?: string;
+  embedProviderBaseUrl: string;
+  embedProviderApiKey?: string;
   embeddingModels: EmbeddingModelConfig;
   compactEmbedModel: string;
-  ollamaEmbedTruncate: boolean;
-  ollamaEmbedNumCtx?: number;
-  ollamaEmbedBatchWindowMs: number;
-  ollamaEmbedMaxBatchItems: number;
-  ollamaEmbedCachePath: string;
+  embedProviderBatchWindowMs: number;
+  embedProviderMaxBatchItems: number;
+  embedProviderCachePath: string;
   semanticCompaction: SemanticCompactionConfig;
   mongodb: MongoConfig;
 };
@@ -71,25 +69,18 @@ export function loadConfig(): OpenPlannerConfig {
   const host = mustGet("OPENPLANNER_HOST", "127.0.0.1");
   const port = Number(mustGet("OPENPLANNER_PORT", "7777"));
   const apiKey = mustGet("OPENPLANNER_API_KEY", "change-me");
-  const ollamaBaseUrl = mustGet("OLLAMA_BASE_URL", mustGet("OLLAMA_URL", "http://127.0.0.1:8789"));
-  const ollamaApiKey = process.env.OLLAMA_API_KEY ?? process.env.OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN ?? undefined;
-  const defaultEmbedModel = mustGet("OLLAMA_EMBED_MODEL", "qwen3-embedding:0.6b");
-  const compactEmbedModel = mustGet("OLLAMA_COMPACT_EMBED_MODEL", defaultEmbedModel);
-  const ollamaEmbedTruncate = (process.env.OLLAMA_EMBED_TRUNCATE ?? "false").toLowerCase() !== "false";
-  const ollamaEmbedNumCtxRaw = (process.env.OLLAMA_EMBED_NUM_CTX ?? "").trim();
-  const ollamaEmbedNumCtx = ollamaEmbedNumCtxRaw.length > 0 ? Number(ollamaEmbedNumCtxRaw) : undefined;
-  const finalOllamaEmbedNumCtx = Number.isFinite(ollamaEmbedNumCtx as number) ? (ollamaEmbedNumCtx as number) : undefined;
-  
-  // Larger batch sizes for GPU saturation
-  const ollamaEmbedBatchWindowMs = parsePositiveInt(process.env.OLLAMA_EMBED_BATCH_WINDOW_MS, 50);
-  const ollamaEmbedMaxBatchItems = parsePositiveInt(process.env.OLLAMA_EMBED_MAX_BATCH_ITEMS, 256);
-  
-  const ollamaEmbedCachePath = mustGet("OLLAMA_EMBED_CACHE_PATH", path.join(dataDir, "cache", "ollama-embeddings.jsonl"));
+  const embedProviderBaseUrl = mustGet("EMBED_PROVIDER_BASE_URL", "http://host.docker.internal:8789");
+  const embedProviderApiKey = process.env.EMBED_PROVIDER_API_KEY ?? process.env.OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN ?? undefined;
+  const defaultEmbedModel = mustGet("EMBED_PROVIDER_MODEL", "qwen3-embedding:0.6b");
+  const compactEmbedModel = mustGet("EMBED_PROVIDER_COMPACT_MODEL", defaultEmbedModel);
+  const embedProviderBatchWindowMs = parsePositiveInt(process.env.EMBED_PROVIDER_BATCH_WINDOW_MS, 50);
+  const embedProviderMaxBatchItems = parsePositiveInt(process.env.EMBED_PROVIDER_MAX_BATCH_ITEMS, 256);
+  const embedProviderCachePath = mustGet("EMBED_PROVIDER_CACHE_PATH", path.join(dataDir, "cache", "embed-provider-cache.jsonl"));
   const embeddingModels: EmbeddingModelConfig = {
     defaultModel: defaultEmbedModel,
-    bySource: parseModelMap(process.env.OLLAMA_EMBED_MODEL_BY_SOURCE),
-    byKind: parseModelMap(process.env.OLLAMA_EMBED_MODEL_BY_KIND),
-    byProject: parseModelMap(process.env.OLLAMA_EMBED_MODEL_BY_PROJECT)
+    bySource: parseModelMap(process.env.EMBED_PROVIDER_MODEL_BY_SOURCE),
+    byKind: parseModelMap(process.env.EMBED_PROVIDER_MODEL_BY_KIND),
+    byProject: parseModelMap(process.env.EMBED_PROVIDER_MODEL_BY_PROJECT)
   };
   const semanticCompaction: SemanticCompactionConfig = {
     enabled: parseBool(process.env.SEMANTIC_COMPACTION_ENABLED, true),
@@ -101,10 +92,9 @@ export function loadConfig(): OpenPlannerConfig {
     maxPacksPerRun: parsePositiveInt(process.env.SEMANTIC_COMPACTION_MAX_PACKS_PER_RUN, 256),
   };
 
-  // MongoDB configuration (only storage backend)
   const eventsTtlSeconds = parsePositiveInt(process.env.MONGODB_EVENTS_TTL_SECONDS, 0);
   const compactedTtlSeconds = parsePositiveInt(process.env.MONGODB_COMPACTED_TTL_SECONDS, 0);
-  
+
   const mongodb: MongoConfig = {
     uri: mustGet("MONGODB_URI", "mongodb://localhost:27017"),
     dbName: mustGet("MONGODB_DB", "openplanner"),
@@ -123,15 +113,13 @@ export function loadConfig(): OpenPlannerConfig {
     host,
     port,
     apiKey,
-    ollamaBaseUrl,
-    ollamaApiKey,
+    embedProviderBaseUrl,
+    embedProviderApiKey,
     embeddingModels,
     compactEmbedModel,
-    ollamaEmbedTruncate,
-    ollamaEmbedNumCtx: finalOllamaEmbedNumCtx,
-    ollamaEmbedBatchWindowMs,
-    ollamaEmbedMaxBatchItems,
-    ollamaEmbedCachePath: path.resolve(ollamaEmbedCachePath),
+    embedProviderBatchWindowMs,
+    embedProviderMaxBatchItems,
+    embedProviderCachePath: path.resolve(embedProviderCachePath),
     semanticCompaction,
     mongodb,
   };
