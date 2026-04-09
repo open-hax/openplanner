@@ -101,14 +101,14 @@ export class WebGLGraphView {
   };
 
   // --- WebGL resources
-  private readonly lineProgram = createProgram(this.gl, LINE_VS, LINE_FS);
-  private readonly pointProgram = createProgram(this.gl, POINT_VS, POINT_FS);
+  private readonly lineProgram: ReturnType<typeof createProgram>;
+  private readonly pointProgram: ReturnType<typeof createProgram>;
 
-  private readonly edgeBuffer = this.gl.createBuffer();
-  private readonly edgeHighlightBuffer = this.gl.createBuffer();
-  private readonly nodeBuffer = this.gl.createBuffer();
-  private readonly haloBuffer = this.gl.createBuffer();
-  private readonly overlayBuffer = this.gl.createBuffer();
+  private readonly edgeBuffer: WebGLBuffer;
+  private readonly edgeHighlightBuffer: WebGLBuffer;
+  private readonly nodeBuffer: WebGLBuffer;
+  private readonly haloBuffer: WebGLBuffer;
+  private readonly overlayBuffer: WebGLBuffer;
 
   private edgeVertexCount = 0;
   private edgeHighlightVertexCount = 0;
@@ -117,28 +117,28 @@ export class WebGLGraphView {
   private overlayVertexCount = 0;
 
   // cached locations
-  private readonly lineLoc = {
-    aPos: this.gl.getAttribLocation(this.lineProgram.program, "aPos"),
-    aColor: this.gl.getAttribLocation(this.lineProgram.program, "aColor"),
-    aPhase: this.gl.getAttribLocation(this.lineProgram.program, "aPhase"),
-    uResolution: this.gl.getUniformLocation(this.lineProgram.program, "uResolution"),
-    uPan: this.gl.getUniformLocation(this.lineProgram.program, "uPan"),
-    uScale: this.gl.getUniformLocation(this.lineProgram.program, "uScale"),
-    uTime: this.gl.getUniformLocation(this.lineProgram.program, "uTime"),
-    uPulseSpeed: this.gl.getUniformLocation(this.lineProgram.program, "uPulseSpeed"),
-    uPulseAmplitude: this.gl.getUniformLocation(this.lineProgram.program, "uPulseAmplitude"),
+  private readonly lineLoc: {
+    aPos: number;
+    aColor: number;
+    aPhase: number;
+    uResolution: WebGLUniformLocation | null;
+    uPan: WebGLUniformLocation | null;
+    uScale: WebGLUniformLocation | null;
+    uTime: WebGLUniformLocation | null;
+    uPulseSpeed: WebGLUniformLocation | null;
+    uPulseAmplitude: WebGLUniformLocation | null;
   };
 
-  private readonly pointLoc = {
-    aPos: this.gl.getAttribLocation(this.pointProgram.program, "aPos"),
-    aSize: this.gl.getAttribLocation(this.pointProgram.program, "aSize"),
-    aColor: this.gl.getAttribLocation(this.pointProgram.program, "aColor"),
-    uResolution: this.gl.getUniformLocation(this.pointProgram.program, "uResolution"),
-    uPan: this.gl.getUniformLocation(this.pointProgram.program, "uPan"),
-    uScale: this.gl.getUniformLocation(this.pointProgram.program, "uScale"),
-    uPixelRatio: this.gl.getUniformLocation(this.pointProgram.program, "uPixelRatio"),
-    uSizeScale: this.gl.getUniformLocation(this.pointProgram.program, "uSizeScale"),
-    uAlphaScale: this.gl.getUniformLocation(this.pointProgram.program, "uAlphaScale"),
+  private readonly pointLoc: {
+    aPos: number;
+    aSize: number;
+    aColor: number;
+    uResolution: WebGLUniformLocation | null;
+    uPan: WebGLUniformLocation | null;
+    uScale: WebGLUniformLocation | null;
+    uPixelRatio: WebGLUniformLocation | null;
+    uSizeScale: WebGLUniformLocation | null;
+    uAlphaScale: WebGLUniformLocation | null;
   };
 
   constructor(canvas: HTMLCanvasElement, options?: WebGLGraphViewOptions) {
@@ -150,9 +150,46 @@ export class WebGLGraphView {
     }
     this.gl = gl;
 
-    if (!this.edgeBuffer || !this.edgeHighlightBuffer || !this.nodeBuffer || !this.haloBuffer || !this.overlayBuffer) {
+    this.lineProgram = createProgram(gl, LINE_VS, LINE_FS);
+    this.pointProgram = createProgram(gl, POINT_VS, POINT_FS);
+
+    const edgeBuffer = gl.createBuffer();
+    const edgeHighlightBuffer = gl.createBuffer();
+    const nodeBuffer = gl.createBuffer();
+    const haloBuffer = gl.createBuffer();
+    const overlayBuffer = gl.createBuffer();
+    if (!edgeBuffer || !edgeHighlightBuffer || !nodeBuffer || !haloBuffer || !overlayBuffer) {
       throw new Error("WebGL: createBuffer failed");
     }
+    this.edgeBuffer = edgeBuffer;
+    this.edgeHighlightBuffer = edgeHighlightBuffer;
+    this.nodeBuffer = nodeBuffer;
+    this.haloBuffer = haloBuffer;
+    this.overlayBuffer = overlayBuffer;
+
+    this.lineLoc = {
+      aPos: gl.getAttribLocation(this.lineProgram.program, "aPos"),
+      aColor: gl.getAttribLocation(this.lineProgram.program, "aColor"),
+      aPhase: gl.getAttribLocation(this.lineProgram.program, "aPhase"),
+      uResolution: gl.getUniformLocation(this.lineProgram.program, "uResolution"),
+      uPan: gl.getUniformLocation(this.lineProgram.program, "uPan"),
+      uScale: gl.getUniformLocation(this.lineProgram.program, "uScale"),
+      uTime: gl.getUniformLocation(this.lineProgram.program, "uTime"),
+      uPulseSpeed: gl.getUniformLocation(this.lineProgram.program, "uPulseSpeed"),
+      uPulseAmplitude: gl.getUniformLocation(this.lineProgram.program, "uPulseAmplitude"),
+    };
+
+    this.pointLoc = {
+      aPos: gl.getAttribLocation(this.pointProgram.program, "aPos"),
+      aSize: gl.getAttribLocation(this.pointProgram.program, "aSize"),
+      aColor: gl.getAttribLocation(this.pointProgram.program, "aColor"),
+      uResolution: gl.getUniformLocation(this.pointProgram.program, "uResolution"),
+      uPan: gl.getUniformLocation(this.pointProgram.program, "uPan"),
+      uScale: gl.getUniformLocation(this.pointProgram.program, "uScale"),
+      uPixelRatio: gl.getUniformLocation(this.pointProgram.program, "uPixelRatio"),
+      uSizeScale: gl.getUniformLocation(this.pointProgram.program, "uSizeScale"),
+      uAlphaScale: gl.getUniformLocation(this.pointProgram.program, "uAlphaScale"),
+    };
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

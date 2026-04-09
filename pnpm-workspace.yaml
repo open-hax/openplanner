@@ -1,4 +1,6 @@
 packages:
-  - 'packages/*'
-  - 'packages/*/frontend'
-  - 'packages/*/packages/*'
+  - '.'
+  - 'packages/uxx'
+  - 'packages/webgl-graph-view'
+  - 'packages/knoxx'
+  - 'packages/knoxx/frontend'
