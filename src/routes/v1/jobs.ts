@@ -99,7 +99,10 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
 
         const total = await app.mongo.events.countDocuments({
           kind: "graph.node",
-          text: { $type: "string", $ne: "" },
+          $or: [
+            { text: { $type: "string", $ne: "" } },
+            { "extra.preview": { $type: "string", $ne: "" } },
+          ],
         });
 
         await jobs().update(job.id, {
@@ -113,7 +116,13 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
 
         const cursor = app.mongo.events
           .find(
-            { kind: "graph.node", text: { $type: "string", $ne: "" } },
+            {
+              kind: "graph.node",
+              $or: [
+                { text: { $type: "string", $ne: "" } },
+                { "extra.preview": { $type: "string", $ne: "" } },
+              ],
+            },
             {
               projection: { _id: 1, message: 1, text: 1, project: 1, source: 1, extra: 1 },
               batchSize: mongoBatch,
@@ -179,7 +188,7 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
             continue;
           }
 
-          const text = event.text ?? "";
+          const text = event.text ?? (event.extra as any)?.preview ?? "";
           if (!text.trim()) {
             completed++;
             continue;

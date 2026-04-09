@@ -110,18 +110,27 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
   app.get("/graph/export", async (req: any, reply) => {
     const projectsParam = typeof req.query?.projects === "string" ? req.query.projects.trim() : "";
     const includeLayout = req.query?.includeLayout === "true" || req.query?.includeLayout === true;
-    
+    const includeSemantic = req.query?.includeSemantic === "true" || req.query?.includeSemantic === true;
+    const semanticMinSimilarity = Math.max(0, Math.min(1, Number(req.query?.semanticMinSimilarity ?? 0.7)));
+
     const projects = projectsParam ? projectsParam.split(",").map((p: string) => p.trim()).filter(Boolean) : [];
-    const projectFilter = projects.length > 0 ? { project: { $in: projects } } : {};
+    const projectFilter = projects.length > 0 ? { project: { $in: [...projects, null] } } : {};
+    const nodeProjectFilter = projects.length > 0 ? { project: { $in: projects } } : {};
 
-    // Query nodes and edges in parallel
-    const [nodeDocs, edgeDocs, layoutRows] = await Promise.all([
-      app.mongo.events.find({ kind: "graph.node", ...projectFilter }).toArray(),
-      app.mongo.events.find({ kind: "graph.edge", ...projectFilter }).toArray(),
-      includeLayout ? app.mongo.graphLayoutOverrides.find(projectFilter).toArray() : Promise.resolve([]),
-    ]);
+    const nodeProjection = {
+      "extra.node_id": 1, "extra.node_kind": 1, "extra.label": 1,
+      "extra.path": 1, "extra.url": 1, "extra.lake": 1, "extra.node_type": 1,
+      "extra.content_hash": 1, "extra.preview": 1, "extra.entity_key": 1,
+      project: 1, message: 1,
+    };
 
-    // Build layout lookup
+    const [nodeDocs, edgeDocs, layoutRows, semanticEdgeDocs] = await Promise.all([
+      app.mongo.events.find({ kind: "graph.node", ...nodeProjectFilter }, { projection: nodeProjection }).toArray(),
+      app.mongo.graphEdges.find(projectFilter).toArray(),
+      includeLayout ? app.mongo.graphLayoutOverrides.find(nodeProjectFilter).toArray() : Promise.resolve([]),
+      includeSemantic ? app.mongo.graphSemanticEdges.find({ similarity: { $gte: semanticMinSimilarity } }).toArray() : Promise.resolve([]),
+    ]) as [any[], any[], any[], any[]];
+
     const layoutById = new Map<string, { x: number; y: number }>();
     for (const row of layoutRows) {
       if (typeof row.node_id === "string" && typeof row.x === "number" && typeof row.y === "number") {
@@ -129,10 +138,11 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Transform nodes
+    const nodeIds = new Set<string>();
     const nodes: ExportNode[] = nodeDocs.map((doc: any) => {
       const extra = doc.extra ?? {};
       const nodeId = extra.node_id ?? doc.message ?? doc._id;
+      nodeIds.add(nodeId);
       const layout = layoutById.get(nodeId);
       return {
         id: nodeId,
@@ -151,28 +161,53 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       };
     });
 
-    // Transform edges
     const edges: ExportEdge[] = edgeDocs.map((doc: any) => {
-      const extra = doc.extra ?? {};
+      const src = doc.source_node_id ?? "";
+      const tgt = doc.target_node_id ?? "";
+      const data = doc.data ?? {};
+      const edgeKind = doc.edge_kind ?? data.edge_type ?? "unknown";
       return {
-        id: extra.edge_id ?? doc._id,
-        source: extra.source_node_id ?? "",
-        target: extra.target_node_id ?? "",
-        kind: extra.edge_type ?? "unknown",
-        lake: extra.lake ?? doc.project,
-        edgeType: extra.edge_type,
-        sourceLake: extra.source_lake,
-        targetLake: extra.target_lake,
+        id: doc._id,
+        source: src,
+        target: tgt,
+        kind: edgeKind,
+        lake: data.lake ?? doc.project,
+        edgeType: data.edge_type ?? edgeKind,
+        sourceLake: data.source_lake,
+        targetLake: data.target_lake,
         data: {
-          source: extra.source,
-          target: extra.target,
-          source_host: extra.source_host,
-          target_host: extra.target_host,
-          discovery_channel: extra.discovery_channel,
-          anchor_text: extra.anchor_text,
+          source: data.source,
+          target: data.target,
+          source_host: data.source_host,
+          target_host: data.target_host,
+          discovery_channel: data.discovery_channel,
+          anchor_text: data.anchor_text,
         },
       };
     }).filter((e: ExportEdge) => e.source && e.target);
+
+    if (includeSemantic && semanticEdgeDocs.length > 0) {
+      for (const doc of semanticEdgeDocs) {
+        const src = doc.source_node_id ?? "";
+        const tgt = doc.target_node_id ?? "";
+        if (!src || !tgt) continue;
+        if (!nodeIds.has(src) || !nodeIds.has(tgt)) continue;
+        const edgeKind = doc.edge_type === "semantic_knn" ? "semantic_knn" : "semantic_similarity";
+        edges.push({
+          id: `${src}||${tgt}:${edgeKind}`,
+          source: src,
+          target: tgt,
+          kind: edgeKind,
+          lake: "semantic",
+          edgeType: edgeKind,
+          data: {
+            similarity: doc.similarity,
+            embedding_model: doc.embedding_model,
+            source: doc.source,
+          },
+        });
+      }
+    }
 
     return { ok: true, nodes, edges };
   });
