@@ -1,53 +1,47 @@
 import type { OpenPlannerConfig } from "./config.js";
 import { PersistentEmbeddingCache } from "./embedding-cache.js";
 import { resolveEmbeddingModel } from "./embedding-models.js";
-import { OllamaEmbeddingFunction, ParallelEmbeddingPool } from "./embeddings.js";
+import { EmbedProviderFunction, ParallelEmbeddingPool } from "./embeddings.js";
 
 export type EmbeddingRuntime = {
   hot: {
     getModel: (scope: { source?: string; kind?: string; project?: string }) => string;
-    getEmbeddingFunction: (scope: { source?: string; kind?: string; project?: string }) => OllamaEmbeddingFunction;
-    getEmbeddingFunctionForModel: (model: string) => OllamaEmbeddingFunction;
+    getEmbeddingFunction: (scope: { source?: string; kind?: string; project?: string }) => EmbedProviderFunction;
+    getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
     getParallelPool: (scope: { source?: string; kind?: string; project?: string }) => ParallelEmbeddingPool;
     getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
   };
   compact: {
     getModel: () => string;
-    getEmbeddingFunction: () => OllamaEmbeddingFunction;
-    getEmbeddingFunctionForModel: (model: string) => OllamaEmbeddingFunction;
+    getEmbeddingFunction: () => EmbedProviderFunction;
+    getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
     getParallelPool: () => ParallelEmbeddingPool;
     getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
   };
 };
 
 export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime {
-  const embeddingCache = new Map<string, OllamaEmbeddingFunction>();
+  const embeddingCache = new Map<string, EmbedProviderFunction>();
   const parallelPoolCache = new Map<string, ParallelEmbeddingPool>();
-  const persistentCache = new PersistentEmbeddingCache(cfg.ollamaEmbedCachePath);
+  const persistentCache = new PersistentEmbeddingCache(cfg.embedProviderCachePath);
 
-  const makeEmbeddingFunction = (model: string): OllamaEmbeddingFunction => new OllamaEmbeddingFunction(model, cfg.ollamaBaseUrl, {
-    truncate: cfg.ollamaEmbedTruncate,
-    numCtx: cfg.ollamaEmbedNumCtx,
-    apiKey: cfg.ollamaApiKey,
+  const makeEmbeddingFunction = (model: string): EmbedProviderFunction => new EmbedProviderFunction(model, cfg.embedProviderBaseUrl, {
+    apiKey: cfg.embedProviderApiKey,
     cache: persistentCache,
-    batchWindowMs: cfg.ollamaEmbedBatchWindowMs,
-    maxBatchItems: cfg.ollamaEmbedMaxBatchItems,
-    // Allow up to 4 concurrent batches per function for GPU saturation
+    batchWindowMs: cfg.embedProviderBatchWindowMs,
+    maxBatchItems: cfg.embedProviderMaxBatchItems,
     maxConcurrentBatches: 4,
   });
 
-  const makeParallelPool = (model: string): ParallelEmbeddingPool => new ParallelEmbeddingPool(model, cfg.ollamaBaseUrl, {
-    truncate: cfg.ollamaEmbedTruncate,
-    numCtx: cfg.ollamaEmbedNumCtx,
-    apiKey: cfg.ollamaApiKey,
+  const makeParallelPool = (model: string): ParallelEmbeddingPool => new ParallelEmbeddingPool(model, cfg.embedProviderBaseUrl, {
+    apiKey: cfg.embedProviderApiKey,
     cache: persistentCache,
-    batchWindowMs: cfg.ollamaEmbedBatchWindowMs,
-    maxBatchItems: cfg.ollamaEmbedMaxBatchItems,
-    // 4 workers, each handling multiple concurrent batches
+    batchWindowMs: cfg.embedProviderBatchWindowMs,
+    maxBatchItems: cfg.embedProviderMaxBatchItems,
     workerCount: 4,
   });
 
-  const getEmbeddingFunctionForModel = (model: string): OllamaEmbeddingFunction => {
+  const getEmbeddingFunctionForModel = (model: string): EmbedProviderFunction => {
     const cached = embeddingCache.get(model);
     if (cached) return cached;
     const created = makeEmbeddingFunction(model);

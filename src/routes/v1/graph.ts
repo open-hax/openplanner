@@ -29,23 +29,108 @@ type ExportEdge = {
   data?: Record<string, unknown>;
 };
 
+type ViewNode = {
+  id: string;
+  kind: string;
+  label: string;
+  x: number;
+  y: number;
+  dataJson: string | null;
+};
+
+type ViewEdge = {
+  source: string;
+  target: string;
+  kind: string;
+  dataJson: string | null;
+};
+
+function inferViewNodeFromId(nodeId: string, position: { x: number; y: number }): ViewNode {
+  const [lake = "misc", kind = "node", ...restParts] = String(nodeId).split(":");
+  const rest = restParts.join(":");
+
+  const label = (() => {
+    if (kind === "file") {
+      const parts = rest.split("/").filter(Boolean);
+      return parts[parts.length - 1] ?? nodeId;
+    }
+    if (kind === "url") {
+      try {
+        const url = new URL(rest);
+        return `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`;
+      } catch {
+        return rest || nodeId;
+      }
+    }
+    return rest || nodeId;
+  })();
+
+  const data: Record<string, unknown> = { lake };
+  if (kind === "file") data.path = rest;
+  if (kind === "url") data.url = rest;
+  if (kind === "dep") data.dep = rest;
+
+  return {
+    id: nodeId,
+    kind,
+    label,
+    x: position.x,
+    y: position.y,
+    dataJson: JSON.stringify(data),
+  };
+}
+
+function positiveMod(value: number, mod: number): number {
+  if (mod <= 0) return 0;
+  return ((value % mod) + mod) % mod;
+}
+
+function selectWindowOffset(params: {
+  totalRows: number;
+  windowSize: number;
+  shardIndex: number;
+  shardCount: number;
+  rotationCursor: number;
+}): number {
+  const { totalRows, windowSize, shardIndex, shardCount, rotationCursor } = params;
+  if (totalRows <= windowSize) return 0;
+
+  const availableStarts = Math.max(1, totalRows - windowSize + 1);
+  const shardStride = Math.max(1, windowSize);
+  const shardSlot = (rotationCursor * shardCount) + shardIndex;
+  const slotStart = positiveMod(shardSlot * shardStride, availableStarts);
+  return Math.min(totalRows - windowSize, slotStart);
+}
+
 export const graphRoutes: FastifyPluginAsync = async (app) => {
+  const graphViewCache = new Map<string, { expiresAt: number; value: unknown }>();
+  const graphViewCacheTtlMs = 15_000;
+
   // Graph export for multi-lake graph weaving
   app.get("/graph/export", async (req: any, reply) => {
     const projectsParam = typeof req.query?.projects === "string" ? req.query.projects.trim() : "";
     const includeLayout = req.query?.includeLayout === "true" || req.query?.includeLayout === true;
-    
+    const includeSemantic = req.query?.includeSemantic === "true" || req.query?.includeSemantic === true;
+    const semanticMinSimilarity = Math.max(0, Math.min(1, Number(req.query?.semanticMinSimilarity ?? 0.7)));
+
     const projects = projectsParam ? projectsParam.split(",").map((p: string) => p.trim()).filter(Boolean) : [];
-    const projectFilter = projects.length > 0 ? { project: { $in: projects } } : {};
+    const projectFilter = projects.length > 0 ? { project: { $in: [...projects, null] } } : {};
+    const nodeProjectFilter = projects.length > 0 ? { project: { $in: projects } } : {};
 
-    // Query nodes and edges in parallel
-    const [nodeDocs, edgeDocs, layoutRows] = await Promise.all([
-      app.mongo.events.find({ kind: "graph.node", ...projectFilter }).toArray(),
-      app.mongo.events.find({ kind: "graph.edge", ...projectFilter }).toArray(),
-      includeLayout ? app.mongo.graphLayoutOverrides.find(projectFilter).toArray() : Promise.resolve([]),
-    ]);
+    const nodeProjection = {
+      "extra.node_id": 1, "extra.node_kind": 1, "extra.label": 1,
+      "extra.path": 1, "extra.url": 1, "extra.lake": 1, "extra.node_type": 1,
+      "extra.content_hash": 1, "extra.preview": 1, "extra.entity_key": 1,
+      project: 1, message: 1,
+    };
 
-    // Build layout lookup
+    const [nodeDocs, edgeDocs, layoutRows, semanticEdgeDocs] = await Promise.all([
+      app.mongo.events.find({ kind: "graph.node", ...nodeProjectFilter }, { projection: nodeProjection }).toArray(),
+      app.mongo.graphEdges.find(projectFilter).toArray(),
+      includeLayout ? app.mongo.graphLayoutOverrides.find(nodeProjectFilter).toArray() : Promise.resolve([]),
+      includeSemantic ? app.mongo.graphSemanticEdges.find({ similarity: { $gte: semanticMinSimilarity } }).toArray() : Promise.resolve([]),
+    ]) as [any[], any[], any[], any[]];
+
     const layoutById = new Map<string, { x: number; y: number }>();
     for (const row of layoutRows) {
       if (typeof row.node_id === "string" && typeof row.x === "number" && typeof row.y === "number") {
@@ -53,10 +138,11 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Transform nodes
+    const nodeIds = new Set<string>();
     const nodes: ExportNode[] = nodeDocs.map((doc: any) => {
       const extra = doc.extra ?? {};
       const nodeId = extra.node_id ?? doc.message ?? doc._id;
+      nodeIds.add(nodeId);
       const layout = layoutById.get(nodeId);
       return {
         id: nodeId,
@@ -75,28 +161,53 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       };
     });
 
-    // Transform edges
     const edges: ExportEdge[] = edgeDocs.map((doc: any) => {
-      const extra = doc.extra ?? {};
+      const src = doc.source_node_id ?? "";
+      const tgt = doc.target_node_id ?? "";
+      const data = doc.data ?? {};
+      const edgeKind = doc.edge_kind ?? data.edge_type ?? "unknown";
       return {
-        id: extra.edge_id ?? doc._id,
-        source: extra.source_node_id ?? "",
-        target: extra.target_node_id ?? "",
-        kind: extra.edge_type ?? "unknown",
-        lake: extra.lake ?? doc.project,
-        edgeType: extra.edge_type,
-        sourceLake: extra.source_lake,
-        targetLake: extra.target_lake,
+        id: doc._id,
+        source: src,
+        target: tgt,
+        kind: edgeKind,
+        lake: data.lake ?? doc.project,
+        edgeType: data.edge_type ?? edgeKind,
+        sourceLake: data.source_lake,
+        targetLake: data.target_lake,
         data: {
-          source: extra.source,
-          target: extra.target,
-          source_host: extra.source_host,
-          target_host: extra.target_host,
-          discovery_channel: extra.discovery_channel,
-          anchor_text: extra.anchor_text,
+          source: data.source,
+          target: data.target,
+          source_host: data.source_host,
+          target_host: data.target_host,
+          discovery_channel: data.discovery_channel,
+          anchor_text: data.anchor_text,
         },
       };
     }).filter((e: ExportEdge) => e.source && e.target);
+
+    if (includeSemantic && semanticEdgeDocs.length > 0) {
+      for (const doc of semanticEdgeDocs) {
+        const src = doc.source_node_id ?? "";
+        const tgt = doc.target_node_id ?? "";
+        if (!src || !tgt) continue;
+        if (!nodeIds.has(src) || !nodeIds.has(tgt)) continue;
+        const edgeKind = doc.edge_type === "semantic_knn" ? "semantic_knn" : "semantic_similarity";
+        edges.push({
+          id: `${src}||${tgt}:${edgeKind}`,
+          source: src,
+          target: tgt,
+          kind: edgeKind,
+          lake: "semantic",
+          edgeType: edgeKind,
+          data: {
+            similarity: doc.similarity,
+            embedding_model: doc.embedding_model,
+            source: doc.source,
+          },
+        });
+      }
+    }
 
     return { ok: true, nodes, edges };
   });
@@ -193,6 +304,289 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       edgeCount,
       storageBackend: "mongodb",
     };
+  });
+
+  app.post("/graph/view", async (req: any, reply) => {
+    const maxNodes = Math.max(50, Math.min(20000, Number(req.body?.maxNodes ?? 6000)));
+    const maxEdges = Math.max(50, Math.min(100000, Number(req.body?.maxEdges ?? 12000)));
+    const poolMultiplier = Math.max(2, Math.min(8, Number(req.body?.poolMultiplier ?? 3)));
+    const poolLimit = Math.max(maxNodes, Math.min(50000, Math.floor(req.body?.poolLimit ?? (maxNodes * poolMultiplier))));
+    const componentCount = Math.max(1, Math.min(16, Number(req.body?.componentCount ?? 6)));
+    const shardCount = Math.max(1, Math.min(64, Number(req.body?.shardCount ?? 1)));
+    const shardIndex = positiveMod(Number(req.body?.shardIndex ?? 0), shardCount);
+    const rotationCursor = Math.max(0, Math.floor(Number(req.body?.rotationCursor ?? 0)));
+    const requestedSeedNodeIds = Array.isArray(req.body?.seedNodeIds)
+      ? req.body.seedNodeIds.map(String).filter(Boolean)
+      : [];
+    const project = typeof req.body?.project === "string" ? req.body.project.trim() : "";
+    const minTargetNodes = Math.min(maxNodes, Math.max(1000, Math.floor(maxNodes * 0.75)));
+    const maxAdaptivePoolLimit = Math.max(poolLimit, Math.min(50000, poolLimit * 4));
+    const cacheKey = JSON.stringify({
+      maxNodes,
+      maxEdges,
+      poolLimit,
+      componentCount,
+      shardIndex,
+      shardCount,
+      rotationCursor,
+      project,
+      seeds: requestedSeedNodeIds.slice(0, 8),
+    });
+    const cachedView = graphViewCache.get(cacheKey);
+    if (cachedView && cachedView.expiresAt > Date.now()) {
+      return cachedView.value;
+    }
+
+    const projectFilter = project ? { project } : {};
+    const [totalLayoutRows, totalNodes, totalEdges] = await Promise.all([
+      app.mongo.graphLayoutOverrides.countDocuments(projectFilter),
+      app.mongo.events.countDocuments({ kind: "graph.node", ...(project ? { project } : {}) }),
+      app.mongo.graphEdges.countDocuments(project ? { project } : {}),
+    ]);
+    const buildViewForPoolLimit = async (activePoolLimit: number, activeRotationCursor: number) => {
+      const recentPoolLimit = Math.max(1, Math.floor(activePoolLimit / 2));
+      const stalePoolLimit = Math.max(1, activePoolLimit - recentPoolLimit);
+      const effectiveComponentCount = Math.min(24, componentCount * Math.max(1, Math.floor(activePoolLimit / Math.max(1, poolLimit))));
+
+      const recentOffset = selectWindowOffset({
+        totalRows: totalLayoutRows,
+        windowSize: recentPoolLimit,
+        shardIndex,
+        shardCount,
+        rotationCursor: activeRotationCursor,
+      });
+      const staleOffset = selectWindowOffset({
+        totalRows: totalLayoutRows,
+        windowSize: stalePoolLimit,
+        shardIndex,
+        shardCount,
+        rotationCursor: activeRotationCursor + 17,
+      });
+      const [recentLayoutRows, staleLayoutRows] = await Promise.all([
+        app.mongo.graphLayoutOverrides.find(projectFilter).sort({ updated_at: -1 as any }).skip(recentOffset).limit(recentPoolLimit).toArray(),
+        app.mongo.graphLayoutOverrides.find(projectFilter).sort({ updated_at: 1 as any }).skip(staleOffset).limit(stalePoolLimit).toArray(),
+      ]);
+
+      const layoutRows = [...staleLayoutRows, ...recentLayoutRows];
+      if (layoutRows.length === 0) {
+        return {
+          ok: true,
+          nodes: [],
+          edges: [],
+          meta: {
+            totalNodes,
+            totalEdges,
+            sampledNodes: totalNodes > 0,
+            sampledEdges: totalEdges > 0,
+            shardIndex,
+            shardCount,
+            rotationCursor,
+            rotationCursorUsed: activeRotationCursor,
+            poolLimitUsed: activePoolLimit,
+          },
+        };
+      }
+
+      const candidateNodeIds = [...new Set([
+        ...requestedSeedNodeIds,
+        ...layoutRows.map((row) => String(row.node_id)).filter(Boolean),
+      ])];
+      const layoutById = new Map<string, { x: number; y: number }>();
+      for (const row of layoutRows) {
+        if (typeof row.node_id === "string" && typeof row.x === "number" && typeof row.y === "number") {
+          layoutById.set(row.node_id, { x: row.x, y: row.y });
+        }
+      }
+
+      const staleCandidateIds = [...new Set(staleLayoutRows.map((row) => String(row.node_id)).filter(Boolean))];
+      const recentCandidateIds = [...new Set(recentLayoutRows.map((row) => String(row.node_id)).filter(Boolean))];
+
+      const edgeFilter: Record<string, unknown> = {
+        source_node_id: { $in: candidateNodeIds },
+        target_node_id: { $in: candidateNodeIds },
+        ...(project ? { project } : {}),
+      };
+      const candidateEdges = await app.mongo.graphEdges
+        .find(edgeFilter, {
+          projection: { source_node_id: 1, target_node_id: 1, edge_kind: 1, data: 1, updated_at: 1 },
+        })
+        .limit(Math.max(maxEdges * 8, 50000))
+        .toArray();
+
+      if (candidateEdges.length === 0) {
+        const nodes = candidateNodeIds.slice(0, maxNodes).map((nodeId) => inferViewNodeFromId(nodeId, layoutById.get(nodeId) ?? { x: 0, y: 0 }));
+        return {
+          ok: true,
+          nodes,
+          edges: [],
+          meta: {
+            totalNodes,
+            totalEdges,
+            sampledNodes: nodes.length < totalNodes,
+            sampledEdges: totalEdges > 0,
+            shardIndex,
+            shardCount,
+            rotationCursor,
+            rotationCursorUsed: activeRotationCursor,
+            poolLimitUsed: activePoolLimit,
+          },
+        };
+      }
+
+      const adjacency = new Map<string, Array<{ neighbor: string; edgeIndex: number }>>();
+      const degree = new Map<string, number>();
+      for (let i = 0; i < candidateEdges.length; i += 1) {
+        const edge = candidateEdges[i]!;
+        const sourceId = String(edge.source_node_id);
+        const targetId = String(edge.target_node_id);
+        if (!sourceId || !targetId || sourceId === targetId) continue;
+
+        const sourceNeighbors = adjacency.get(sourceId) ?? [];
+        sourceNeighbors.push({ neighbor: targetId, edgeIndex: i });
+        adjacency.set(sourceId, sourceNeighbors);
+
+        const targetNeighbors = adjacency.get(targetId) ?? [];
+        targetNeighbors.push({ neighbor: sourceId, edgeIndex: i });
+        adjacency.set(targetId, targetNeighbors);
+
+        degree.set(sourceId, (degree.get(sourceId) ?? 0) + 1);
+        degree.set(targetId, (degree.get(targetId) ?? 0) + 1);
+      }
+
+      const connectedSeeds = requestedSeedNodeIds.filter((nodeId: string) => adjacency.has(nodeId));
+      const rankCandidates = (nodeIds: string[]): string[] => nodeIds
+        .filter((nodeId) => adjacency.has(nodeId))
+        .sort((left, right) => (degree.get(right) ?? 0) - (degree.get(left) ?? 0));
+
+      const staleRankedSeeds = rankCandidates(staleCandidateIds);
+      const recentRankedSeeds = rankCandidates(recentCandidateIds);
+      const fallbackRankedSeeds = rankCandidates(candidateNodeIds);
+
+      const seedNodeIds: string[] = [];
+      const seedExclusion = new Set<string>();
+      const tryAddSeed = (nodeId: string | undefined): boolean => {
+        if (!nodeId || seedExclusion.has(nodeId) || !adjacency.has(nodeId)) return false;
+        seedNodeIds.push(nodeId);
+        seedExclusion.add(nodeId);
+        for (const neighbor of adjacency.get(nodeId) ?? []) {
+          seedExclusion.add(neighbor.neighbor);
+        }
+        return true;
+      };
+
+      for (const nodeId of connectedSeeds) {
+        if (seedNodeIds.length >= effectiveComponentCount) break;
+        tryAddSeed(nodeId);
+      }
+
+      let staleIndex = 0;
+      let recentIndex = 0;
+      while (seedNodeIds.length < effectiveComponentCount) {
+        const addedStale = tryAddSeed(staleRankedSeeds[staleIndex]);
+        if (staleIndex < staleRankedSeeds.length) staleIndex += 1;
+        if (seedNodeIds.length >= effectiveComponentCount) break;
+        const addedRecent = tryAddSeed(recentRankedSeeds[recentIndex]);
+        if (recentIndex < recentRankedSeeds.length) recentIndex += 1;
+        if (!addedStale && !addedRecent && staleIndex >= staleRankedSeeds.length && recentIndex >= recentRankedSeeds.length) {
+          break;
+        }
+      }
+
+      for (const nodeId of fallbackRankedSeeds) {
+        if (seedNodeIds.length >= effectiveComponentCount) break;
+        tryAddSeed(nodeId);
+      }
+
+      if (seedNodeIds.length === 0 && candidateNodeIds.length > 0) {
+        seedNodeIds.push(candidateNodeIds[0]!);
+      }
+
+      const selectedNodeIds = new Set<string>();
+      const selectedEdgeIndexes = new Set<number>();
+      const queue: string[] = [...seedNodeIds];
+
+      while (queue.length > 0 && selectedNodeIds.size < maxNodes) {
+        const current = queue.shift()!;
+        if (selectedNodeIds.has(current)) continue;
+        selectedNodeIds.add(current);
+
+        const neighbors = [...(adjacency.get(current) ?? [])]
+          .sort((left, right) => (degree.get(right.neighbor) ?? 0) - (degree.get(left.neighbor) ?? 0));
+
+        for (const neighbor of neighbors) {
+          if (selectedNodeIds.size < maxNodes) {
+            selectedEdgeIndexes.add(neighbor.edgeIndex);
+            if (!selectedNodeIds.has(neighbor.neighbor)) queue.push(neighbor.neighbor);
+          }
+        }
+      }
+
+      const treeEdges = [...selectedEdgeIndexes]
+        .map((edgeIndex) => candidateEdges[edgeIndex])
+        .filter((edge): edge is NonNullable<typeof edge> => !!edge)
+        .filter((edge) => selectedNodeIds.has(String(edge.source_node_id)) && selectedNodeIds.has(String(edge.target_node_id)));
+
+      const seenEdgeKeys = new Set(treeEdges.map((edge) => `${edge.edge_kind}::${edge.source_node_id}::${edge.target_node_id}`));
+      const extraEdges = candidateEdges
+        .filter((edge) => selectedNodeIds.has(String(edge.source_node_id)) && selectedNodeIds.has(String(edge.target_node_id)))
+        .filter((edge) => !seenEdgeKeys.has(`${edge.edge_kind}::${edge.source_node_id}::${edge.target_node_id}`))
+        .sort((left, right) => {
+          const leftScore = (degree.get(String(left.source_node_id)) ?? 0) + (degree.get(String(left.target_node_id)) ?? 0);
+          const rightScore = (degree.get(String(right.source_node_id)) ?? 0) + (degree.get(String(right.target_node_id)) ?? 0);
+          return rightScore - leftScore;
+        });
+
+      const selectedEdges = [...treeEdges, ...extraEdges].slice(0, maxEdges);
+      const selectedNodes = [...selectedNodeIds]
+        .map((nodeId) => inferViewNodeFromId(nodeId, layoutById.get(nodeId) ?? { x: 0, y: 0 }));
+      const edges: ViewEdge[] = selectedEdges.map((edge) => ({
+        source: String(edge.source_node_id),
+        target: String(edge.target_node_id),
+        kind: String(edge.edge_kind),
+        dataJson: edge.data ? JSON.stringify(edge.data) : null,
+      }));
+
+      return {
+        ok: true,
+        nodes: selectedNodes,
+        edges,
+        meta: {
+          totalNodes,
+          totalEdges,
+          sampledNodes: selectedNodes.length < totalNodes,
+          sampledEdges: edges.length < totalEdges,
+          shardIndex,
+          shardCount,
+          rotationCursor,
+          rotationCursorUsed: activeRotationCursor,
+          poolLimitUsed: activePoolLimit,
+        },
+      };
+    };
+
+    const buildAdaptiveViewForCursor = async (activeRotationCursor: number) => {
+      let activePoolLimit = poolLimit;
+      let response = await buildViewForPoolLimit(activePoolLimit, activeRotationCursor);
+      while (response.nodes.length < minTargetNodes && activePoolLimit < maxAdaptivePoolLimit) {
+        activePoolLimit = Math.min(maxAdaptivePoolLimit, activePoolLimit * 2);
+        response = await buildViewForPoolLimit(activePoolLimit, activeRotationCursor);
+      }
+      return response;
+    };
+
+    let response = await buildAdaptiveViewForCursor(rotationCursor);
+    let bestResponse = response;
+    for (let cursorOffset = 1; cursorOffset <= 3 && bestResponse.nodes.length < minTargetNodes; cursorOffset += 1) {
+      const candidateResponse = await buildAdaptiveViewForCursor(rotationCursor + cursorOffset);
+      if (candidateResponse.nodes.length > bestResponse.nodes.length) {
+        bestResponse = candidateResponse;
+      }
+    }
+
+    response = bestResponse;
+
+    graphViewCache.set(cacheKey, { expiresAt: Date.now() + graphViewCacheTtlMs, value: response });
+    return response;
   });
 
   // Similar nodes by vector search
@@ -476,31 +870,94 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const nodeIds = Array.isArray(req.body?.nodeIds) ? req.body.nodeIds : [];
     const edgeKinds = Array.isArray(req.body?.edgeKinds) ? req.body.edgeKinds : null;
     const limit = Math.max(1, Math.min(50000, Number(req.body?.limit ?? 10000)));
+    const includeEventFallback = req.body?.includeEventFallback === true;
+    const includeBoundaryEdges = req.body?.includeBoundaryEdges === true;
 
     if (nodeIds.length === 0) {
       return { edges: [] };
     }
 
-    const filter: Record<string, unknown> = {
-      $or: [
-        { source_node_id: { $in: nodeIds.map(String) } },
-        { target_node_id: { $in: nodeIds.map(String) } },
-      ],
-    };
+    const stringNodeIds = nodeIds.map(String);
+    const filter: Record<string, unknown> = includeBoundaryEdges
+      ? {
+          $or: [
+            { source_node_id: { $in: stringNodeIds } },
+            { target_node_id: { $in: stringNodeIds } },
+          ],
+        }
+      : {
+          source_node_id: { $in: stringNodeIds },
+          target_node_id: { $in: stringNodeIds },
+        };
     if (edgeKinds) {
       filter.edge_kind = { $in: edgeKinds };
     }
 
     const rows = await app.mongo.graphEdges.find(filter).limit(limit).toArray();
 
-    const edges = rows.map((row: any) => ({
-      source: row.source_node_id,
-      target: row.target_node_id,
-      edgeKind: row.edge_kind,
-      layer: row.layer,
-      data: row.data,
-      updatedAt: row.updated_at,
-    }));
+    const edgesByKey = new Map<string, {
+      source: string;
+      target: string;
+      edgeKind: string;
+      layer: string | null;
+      data: unknown;
+      updatedAt: Date | null;
+    }>();
+
+    for (const row of rows) {
+      const edge = {
+        source: row.source_node_id,
+        target: row.target_node_id,
+        edgeKind: row.edge_kind,
+        layer: row.layer,
+        data: row.data,
+        updatedAt: row.updated_at,
+      };
+      const key = `${edge.edgeKind}::${edge.source}::${edge.target}`;
+      edgesByKey.set(key, edge);
+    }
+
+    if (includeEventFallback) {
+      const eventFilter: Record<string, unknown> = {
+        kind: "graph.edge",
+        ...(includeBoundaryEdges
+          ? {
+              $or: [
+                { "extra.source_node_id": { $in: stringNodeIds } },
+                { "extra.target_node_id": { $in: stringNodeIds } },
+              ],
+            }
+          : {
+              "extra.source_node_id": { $in: stringNodeIds },
+              "extra.target_node_id": { $in: stringNodeIds },
+            }),
+      };
+      if (edgeKinds) {
+        eventFilter["extra.edge_type"] = { $in: edgeKinds };
+      }
+
+      const eventRows = await app.mongo.events.find(eventFilter).limit(limit).toArray();
+
+      for (const row of eventRows) {
+        const extra = (row.extra ?? {}) as Record<string, unknown>;
+        const source = typeof extra.source_node_id === "string" ? extra.source_node_id : "";
+        const target = typeof extra.target_node_id === "string" ? extra.target_node_id : "";
+        const edgeKind = typeof extra.edge_type === "string" ? extra.edge_type : "unknown";
+        if (!source || !target) continue;
+        const key = `${edgeKind}::${source}::${target}`;
+        if (edgesByKey.has(key)) continue;
+        edgesByKey.set(key, {
+          source,
+          target,
+          edgeKind,
+          layer: typeof extra.layer === "string" ? extra.layer : null,
+          data: extra,
+          updatedAt: row.ts instanceof Date ? row.ts : null,
+        });
+      }
+    }
+
+    const edges = [...edgesByKey.values()].slice(0, limit);
 
     return { edges };
   });
@@ -508,6 +965,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
   // Get all edges for graph traversal (paginated)
   app.get("/graph/semantic-edges", async (req: any, reply) => {
     const project = typeof req.query?.project === "string" ? req.query.project.trim() : undefined;
+    const graphVersion = typeof req.query?.graph_version === "string" ? req.query.graph_version.trim() : undefined;
     const minSimilarity = Number(req.query?.minSimilarity ?? -1);
     const limit = Math.max(1, Math.min(50000, Number(req.query?.limit ?? 10000)));
 
@@ -516,6 +974,18 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     };
     if (project) filter.project = project;
 
+    if (graphVersion) {
+      filter.graph_version = graphVersion;
+    } else {
+      const canonicalRun = await app.mongo.semanticGraphRuns.findOne(
+        { status: "complete" },
+        { sort: { finished_at: -1 as any } },
+      );
+      if (canonicalRun?.graph_version) {
+        filter.graph_version = canonicalRun.graph_version;
+      }
+    }
+
     const rows = await app.mongo.graphSemanticEdges.find(filter).limit(limit).toArray();
 
     const edges = rows.map((row: any) => ({
@@ -523,9 +993,164 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       target: row.target_node_id,
       similarity: row.similarity,
       edgeType: row.edge_type,
+      graphVersion: row.graph_version,
     }));
 
     return { ok: true, count: edges.length, edges };
+  });
+
+  // ============================================================
+  // Graph-version-aware semantic graph runs
+  // ============================================================
+
+  app.get("/graph/runs", async (req: any) => {
+    const status = typeof req.query?.status === "string" ? req.query.status.trim() : undefined;
+    const limit = Math.max(1, Math.min(1000, Number(req.query?.limit ?? 50)));
+
+    const filter: Record<string, unknown> = {};
+    if (status) filter.status = status;
+
+    const rows = await app.mongo.semanticGraphRuns
+      .find(filter, { sort: { finished_at: -1 as any }, limit })
+      .toArray();
+
+    return {
+      ok: true,
+      count: rows.length,
+      runs: rows.map((r) => ({
+        runId: r.run_id,
+        graphVersion: r.graph_version,
+        clusteringVersion: r.clustering_version,
+        embeddingModel: r.embedding_model,
+        embeddingDimensions: r.embedding_dimensions,
+        nodeCount: r.node_count,
+        finalK: r.final_k,
+        candidateFactor: r.candidate_factor,
+        candidateEngine: r.candidate_engine,
+        rerankProvider: r.rerank_provider,
+        status: r.status,
+        startedAt: r.started_at,
+        finishedAt: r.finished_at,
+        metrics: r.metrics,
+      })),
+    };
+  });
+
+  app.get("/graph/runs/latest", async (req: any, reply: any) => {
+    const status = typeof req.query?.status === "string" ? req.query.status.trim() : "complete";
+    const row = await app.mongo.semanticGraphRuns.findOne(
+      { status: { $in: [status, "clustered"] } },
+      { sort: { finished_at: -1 as any } },
+    );
+
+    if (!row) {
+      return reply.status(404).send({ ok: false, error: "no canonical run found" });
+    }
+
+    return {
+      ok: true,
+      runId: row.run_id,
+      graphVersion: row.graph_version,
+      clusteringVersion: row.clustering_version,
+      embeddingModel: row.embedding_model,
+      embeddingDimensions: row.embedding_dimensions,
+      nodeCount: row.node_count,
+      finalK: row.final_k,
+      candidateFactor: row.candidate_factor,
+      status: row.status,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      metrics: row.metrics,
+    };
+  });
+
+  // ============================================================
+  // Cluster membership endpoints (S8)
+  // ============================================================
+
+  app.get("/graph/clusters", async (req: any) => {
+    const graphVersion = typeof req.query?.graph_version === "string"
+      ? req.query.graph_version.trim()
+      : undefined;
+    const clusteringVersion = typeof req.query?.clustering_version === "string"
+      ? req.query.clustering_version.trim()
+      : undefined;
+    const limit = Math.max(1, Math.min(10000, Number(req.query?.limit ?? 1000)));
+
+    const filter: Record<string, unknown> = {};
+    if (graphVersion) filter.graph_version = graphVersion;
+    if (clusteringVersion) filter.clustering_version = clusteringVersion;
+
+    const rows = await app.mongo.graphClusterMemberships
+      .find(filter, { limit: limit * 2 })
+      .toArray();
+
+    const clusterMap = new Map<string, { clusterId: string; size: number; members: Set<string> }>();
+    for (const row of rows) {
+      if (!row.cluster_id) continue;
+      if (!clusterMap.has(row.cluster_id)) {
+        clusterMap.set(row.cluster_id, {
+          clusterId: row.cluster_id,
+          size: 0,
+          members: new Set(),
+        });
+      }
+      clusterMap.get(row.cluster_id)!.size++;
+    }
+
+    const clusters = Array.from(clusterMap.values())
+      .sort((a, b) => b.size - a.size)
+      .slice(0, limit)
+      .map((c) => ({ clusterId: c.clusterId, size: c.size }));
+
+    return { ok: true, count: clusters.length, clusters };
+  });
+
+  app.get("/graph/clusters/:cluster_id/members", async (req: any) => {
+    const { cluster_id: clusterId } = req.params as { cluster_id: string };
+    const graphVersion = typeof req.query?.graph_version === "string"
+      ? req.query.graph_version.trim()
+      : undefined;
+    const clusteringVersion = typeof req.query?.clustering_version === "string"
+      ? req.query.clustering_version.trim()
+      : undefined;
+    const limit = Math.max(1, Math.min(50000, Number(req.query?.limit ?? 1000)));
+
+    const filter: Record<string, unknown> = { cluster_id: clusterId };
+    if (graphVersion) filter.graph_version = graphVersion;
+    if (clusteringVersion) filter.clustering_version = clusteringVersion;
+
+    const rows = await app.mongo.graphClusterMemberships
+      .find(filter, { limit })
+      .toArray();
+
+    const nodes = rows
+      .map((r) => r.node_id)
+      .filter((id): id is string => !!id);
+
+    return { ok: true, count: nodes.length, clusterId, nodes };
+  });
+
+  app.get("/graph/nodes/:node_id/cluster", async (req: any) => {
+    const { node_id: nodeId } = req.params as { node_id: string };
+
+    const row = await app.mongo.graphClusterMemberships.findOne(
+      { node_id: nodeId },
+      { sort: { updated_at: -1 as any } },
+    );
+
+    if (!row) {
+      return { ok: true, nodeId, cluster: null };
+    }
+
+    return {
+      ok: true,
+      nodeId,
+      cluster: row.cluster_id,
+      clusteringVersion: row.clustering_version,
+      graphVersion: row.graph_version,
+      clusterSize: row.cluster_size,
+    };
   });
 
   // ============================================================
@@ -657,7 +1282,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       allNodeIds.add(edge.source_node_id);
       allNodeIds.add(edge.target_node_id);
     }
-    seedNodeIds.forEach((id: string) => allNodeIds.add(String(id)));
+    seedNodeIds.forEach((id: string) => {
+      allNodeIds.add(String(id));
+    });
 
     const layouts = await app.mongo.graphLayoutOverrides.find({
       node_id: { $in: [...allNodeIds] },

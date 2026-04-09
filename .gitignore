@@ -1,0 +1,17 @@
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Data lake / database artifacts (regenerable)
+openplanner-lake/
+
+# Editor / LSP caches
+.clj-kondo/
+.cpcache/
+.shadow-cljs/
+
+# OS
+.DS_Store

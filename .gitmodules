@@ -19,3 +19,33 @@
 [submodule "packages/graph-runtime"]
 	path = packages/graph-runtime
 	url = git@github.com:octave-commons/graph-runtime.git
+[submodule "packages/knoxx"]
+	path = packages/knoxx
+	url = git@github.com:open-hax/knoxx.git
+	branch = fork-tax/20260404-recursive-knoxx
+[submodule "packages/workbench"]
+	path = packages/workbench
+	url = git@github.com:open-hax/workbench.git
+	branch = device/stealth
+[submodule "packages/clients"]
+	path = packages/clients
+	url = git@github.com:open-hax/clients.git
+[submodule "packages/cephalon"]
+	path = packages/cephalon
+	url = git@github.com:octave-commons/cephalon.git
+	branch = fork-tax/20260405-recursive-cephalon
+[submodule "packages/janus"]
+	path = packages/janus
+	url = git@github.com:open-hax/janus.git
+[submodule "packages/mcp-fs-oauth"]
+	path = packages/mcp-fs-oauth
+	url = git@github.com:open-hax/mcp-fs-oauth.git
+[submodule "packages/openplanner-cljs-client"]
+	path = packages/openplanner-cljs-client
+	url = git@github.com:open-hax/openplanner-cljs-client.git
+[submodule "packages/opencode-openplanner-plugin-cljs"]
+	path = packages/opencode-openplanner-plugin-cljs
+	url = git@github.com:open-hax/opencode-openplanner-plugin-cljs.git
+[submodule "packages/reconstituter"]
+	path = packages/reconstituter
+	url = git@github.com:open-hax/reconstituter.git
