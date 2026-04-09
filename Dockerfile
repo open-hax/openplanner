@@ -11,6 +11,8 @@ COPY .env.example ./.env.example
 
 RUN npm run build
 
+USER 1000:1000
+
 ENV NODE_ENV=production
 ENV OPENPLANNER_HOST=0.0.0.0
 ENV OPENPLANNER_PORT=7777
