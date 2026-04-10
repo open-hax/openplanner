@@ -18,6 +18,20 @@ function validateEvent(ev: EventEnvelopeV1) {
   if (!ev.kind) throw new Error("event.kind required");
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export const eventRoutes: FastifyPluginAsync = async (app) => {
   app.post<{ Body: EventIngestRequest }>("/events", async (req, reply) => {
     const body = req.body;
@@ -66,7 +80,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
           const embeddingRuntime = (app as any).embeddingRuntime;
           const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
           const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
-          await indexTextInMongoVectors({
+          await withTimeout(indexTextInMongoVectors({
             mongo: app.mongo,
             tier: "hot",
             parentId: ev.id,
@@ -87,18 +101,9 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
               title: (ev.extra as Record<string, unknown> | undefined)?.title ?? (sr as any).message ?? ev.id,
             },
             embeddingFunction,
-          });
+          }), 2000, `event vector index ${ev.id}`);
         } catch (err) {
-          app.log.error(err, "Failed to index event into MongoDB vectors");
-          const detail = err instanceof Error ? err.message : String(err);
-          return reply.status(503).send({
-            ok: false,
-            error: "embedding_index_failed",
-            detail,
-            persisted_ids: [...ids],
-            failed_id: ev.id,
-            storageBackend: "mongodb",
-          });
+          app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
         }
       }
     }
