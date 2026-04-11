@@ -2,14 +2,18 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-COPY package.json package-lock.json tsconfig.json ./
+COPY package.json tsconfig.json ./
 
-RUN npm ci
+# Use npm install to regenerate lock file if needed
+RUN npm install
 
 COPY src ./src
 COPY .env.example ./.env.example
 
 RUN npm run build
+
+# Remove dev dependencies to slim image
+RUN npm prune --production
 
 USER 1000:1000
 

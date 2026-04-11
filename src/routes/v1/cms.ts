@@ -263,6 +263,117 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     return toCmsDocument(document, tenantId);
   });
 
+  app.post("/cms/publish/:id/:garden_id", async (req, reply) => {
+    const id = String((req.params as { id: string }).id);
+    const gardenId = String((req.params as { garden_id: string }).garden_id);
+    const query = (req.query ?? {}) as Record<string, string | undefined>;
+
+    const existing = await getDocumentById(app, id);
+    if (!existing || existing.kind !== "docs") {
+      return reply.status(404).send({ detail: "Document not found" });
+    }
+
+    // Validate garden exists and is active
+    const garden = await app.mongo.gardens.findOne({ garden_id: gardenId, status: "active" });
+    if (!garden) {
+      return reply.status(404).send({ detail: "Garden not found or inactive" });
+    }
+
+    const skipTranslation = query.skip_translation === "true";
+    const targetLanguagesOverride = query.target_languages?.split(",").map((l) => l.trim()).filter(Boolean);
+
+    // Build garden_publications entry
+    const now = new Date();
+    const existingPublications = (existing.metadata?.garden_publications as Array<Record<string, unknown>>) ?? [];
+    const existingPubIndex = existingPublications.findIndex((p) => p.garden_id === gardenId);
+
+    const newPublication = {
+      garden_id: gardenId,
+      published_at: now.toISOString(),
+      published_by: "openplanner-cms",
+      translation_status: "pending" as const,
+      translated_languages: [] as string[],
+    };
+
+    const gardenPublications = [...existingPublications];
+    if (existingPubIndex >= 0) {
+      gardenPublications[existingPubIndex] = newPublication;
+    } else {
+      gardenPublications.push(newPublication);
+    }
+
+    const published: DocumentRecord = {
+      ...existing,
+      visibility: "public",
+      publishedAt: now.toISOString(),
+      metadata: {
+        ...existing.metadata,
+        garden_publications: gardenPublications,
+      },
+      ts: now.toISOString(),
+    };
+
+    const result = await persistAndMaybeIndex(app, documentToEvent(published, existing));
+    if (result.warning) {
+      return reply.status(503).send({ detail: result.warning, persisted: true, indexed: false });
+    }
+
+    // Queue translation jobs if auto_translate is enabled
+    const translationJobs: Array<{ job_id: string; target_lang: string; status: string }> = [];
+    const targetLanguages = targetLanguagesOverride ?? garden.target_languages ?? [];
+
+    if (garden.auto_translate && !skipTranslation && targetLanguages.length > 0) {
+      const jobsCollection = app.mongo.db.collection("translation_jobs");
+
+      for (const targetLang of targetLanguages) {
+        const job = {
+          document_id: id,
+          garden_id: gardenId,
+          project: existing.project,
+          source_lang: existing.language ?? "en",
+          target_language: targetLang,
+          status: "queued",
+          created_at: now,
+        };
+
+        const jobResult = await jobsCollection.insertOne(job);
+        translationJobs.push({
+          job_id: jobResult.insertedId.toString(),
+          target_lang: targetLang,
+          status: "queued",
+        });
+      }
+
+      // Update publication with translation status
+      if (translationJobs.length > 0) {
+        const updatedPublication = {
+          ...newPublication,
+          translation_status: "in_progress" as const,
+        };
+        gardenPublications[gardenPublications.length - 1] = updatedPublication;
+
+        await app.mongo.events.updateOne(
+          { _id: id },
+          {
+            $set: {
+              "extra.metadata.garden_publications": gardenPublications,
+            },
+          }
+        );
+      }
+    }
+
+    return {
+      status: "published",
+      doc_id: id,
+      garden_id: gardenId,
+      visibility: "public",
+      indexed: result.indexed,
+      translation_jobs: translationJobs,
+    };
+  });
+
+  // Legacy endpoint for backward compatibility
   app.post("/cms/publish/:id", async (req, reply) => {
     const id = String((req.params as { id: string }).id);
     const existing = await getDocumentById(app, id);
@@ -273,14 +384,21 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     const metadata = existing.metadata ?? {};
     const gardenId = typeof metadata.garden_id === "string" ? metadata.garden_id.trim() : "";
     if (!gardenId) {
-      return reply.status(400).send({ detail: "garden_id metadata is required before publishing" });
+      return reply.status(400).send({ detail: "Use /cms/publish/:id/:garden_id to specify garden" });
     }
 
+    // Redirect to new endpoint behavior
+    const garden = await app.mongo.gardens.findOne({ garden_id: gardenId, status: "active" });
+    if (!garden) {
+      return reply.status(404).send({ detail: "Garden not found or inactive" });
+    }
+
+    const now = new Date();
     const published: DocumentRecord = {
       ...existing,
       visibility: "public",
-      publishedAt: new Date().toISOString(),
-      ts: new Date().toISOString(),
+      publishedAt: now.toISOString(),
+      ts: now.toISOString(),
     };
 
     const result = await persistAndMaybeIndex(app, documentToEvent(published, existing));
@@ -310,6 +428,43 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return { status: "archived", doc_id: id, indexed: result.indexed };
+  });
+
+  app.delete("/cms/publish/:id/:garden_id", async (req, reply) => {
+    const id = String((req.params as { id: string }).id);
+    const gardenId = String((req.params as { garden_id: string }).garden_id);
+
+    const existing = await getDocumentById(app, id);
+    if (!existing || existing.kind !== "docs") {
+      return reply.status(404).send({ detail: "Document not found" });
+    }
+
+    const gardenPublications = (existing.metadata?.garden_publications as Array<Record<string, unknown>>) ?? [];
+    const pubIndex = gardenPublications.findIndex((p) => p.garden_id === gardenId);
+
+    if (pubIndex < 0) {
+      return reply.status(404).send({ detail: "Document not published to this garden" });
+    }
+
+    // Remove the garden publication
+    gardenPublications.splice(pubIndex, 1);
+
+    const unpublished: DocumentRecord = {
+      ...existing,
+      visibility: gardenPublications.length > 0 ? existing.visibility : "internal",
+      metadata: {
+        ...existing.metadata,
+        garden_publications: gardenPublications,
+      },
+      ts: new Date().toISOString(),
+    };
+
+    const result = await persistAndMaybeIndex(app, documentToEvent(unpublished, existing));
+    if (result.warning) {
+      return reply.status(503).send({ detail: result.warning, persisted: true, indexed: false });
+    }
+
+    return { status: "unpublished", doc_id: id, garden_id: gardenId, indexed: result.indexed };
   });
 
   app.get("/cms/public", async (req) => {
