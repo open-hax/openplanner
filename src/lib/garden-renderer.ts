@@ -5,6 +5,7 @@
  */
 
 import { marked } from "marked";
+import { codeToHtml, createHighlighter, type Highlighter } from "shiki";
 import type { GardenDocument } from "./mongodb.js";
 
 export type ThemeName = "monokai" | "night-owl" | "proxy-console";
@@ -16,6 +17,29 @@ export interface GardenRenderOptions {
   includeNav?: boolean;
   /** Base URL for links */
   baseUrl?: string;
+}
+
+// Shiki theme mapping
+const SHIKI_THEMES: Record<ThemeName, string> = {
+  monokai: "vitesse-dark",
+  "night-owl": "night-owl",
+  "proxy-console": "github-dark",
+};
+
+// Cache for highlighter instance
+let highlighterCache: Highlighter | null = null;
+
+/**
+ * Get or create a shiki highlighter instance
+ */
+async function getHighlighter(): Promise<Highlighter> {
+  if (!highlighterCache) {
+    highlighterCache = await createHighlighter({
+      themes: ["vitesse-dark", "night-owl", "github-dark"],
+      langs: ["javascript", "typescript", "python", "bash", "json", "markdown", "html", "css", "yaml", "rust", "go"],
+    });
+  }
+  return highlighterCache;
 }
 
 // Theme CSS variable definitions (matching uxx tokens)
@@ -171,16 +195,74 @@ function configureMarked(): void {
 }
 
 /**
- * Render markdown content to HTML with theme styling
+ * Highlight code with shiki
  */
-export function renderMarkdown(
+async function highlightCode(
+  code: string,
+  lang: string | undefined,
+  theme: ThemeName
+): Promise<string> {
+  try {
+    const highlighter = await getHighlighter();
+    const shikiTheme = SHIKI_THEMES[theme];
+    
+    // Normalize language name
+    const normalizedLang = lang?.toLowerCase() || "text";
+    
+    // Check if language is supported
+    const loadedLangs = highlighter.getLoadedLanguages();
+    const safeLang = loadedLangs.includes(normalizedLang) ? normalizedLang : "text";
+    
+    const html = await codeToHtml(code, {
+      lang: safeLang,
+      theme: shikiTheme,
+    });
+    
+    return html;
+  } catch {
+    // Fallback to plain code block if highlighting fails
+    return `<pre class="shiki"><code>${escapeHtml(code)}</code></pre>`;
+  }
+}
+
+/**
+ * Render markdown content to HTML with theme styling and syntax highlighting
+ */
+export async function renderMarkdown(
   content: string,
   theme: ThemeName
-): string {
+): Promise<string> {
   configureMarked();
 
-  // Parse markdown to HTML
-  const html = marked.parse(content) as string;
+  // Custom renderer for code blocks
+  const renderer = new marked.Renderer();
+  
+  const originalCode = renderer.code;
+  renderer.code = function({ text, lang }: { text: string; lang?: string }) {
+    // Return a placeholder that we'll replace later
+    // Note: marked doesn't support async renderers directly, so we use sync fallback
+    return `<pre class="shiki-placeholder" data-lang="${lang || 'text'}"><code>${escapeHtml(text)}</code></pre>`;
+  };
+
+  // Parse markdown to HTML with custom renderer
+  let html = marked.parse(content, { renderer }) as string;
+  
+  // Process code blocks with shiki asynchronously
+  const codeBlockRegex = /<pre class="shiki-placeholder" data-lang="([^"]*)"><code>([^<]*)<\/code><\/pre>/g;
+  const matches = Array.from(html.matchAll(codeBlockRegex));
+  
+  for (const match of matches) {
+    const [fullMatch, lang, encodedCode] = match;
+    const code = encodedCode
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#039;/g, "'");
+    
+    const highlighted = await highlightCode(code, lang, theme);
+    html = html.replace(fullMatch, highlighted);
+  }
 
   // Wrap with themed styling
   return `
@@ -192,7 +274,7 @@ export function renderMarkdown(
 /**
  * Render a full garden page with navigation and themed content
  */
-export function renderGardenPage(
+export async function renderGardenPage(
   garden: GardenDocument,
   document: {
     title: string;
@@ -201,11 +283,11 @@ export function renderGardenPage(
     language?: string;
   },
   options: GardenRenderOptions = {}
-): string {
+): Promise<string> {
   const theme = getThemeName(garden);
   const themeCss = getThemeCss(theme);
   const navHtml = options.includeNav !== false ? renderNav(garden, options) : "";
-  const contentHtml = renderMarkdown(document.content, theme);
+  const contentHtml = await renderMarkdown(document.content, theme);
 
   if (!options.fullDocument) {
     return `
@@ -510,6 +592,22 @@ function getGardenStyles(): string {
     .garden-content pre code {
       padding: 0;
       background: transparent;
+    }
+
+    /* Shiki syntax highlighting */
+    .garden-content pre.shiki {
+      margin: 16px 0;
+      padding: 16px;
+      border-radius: var(--uxx-radius-md);
+      overflow-x: auto;
+    }
+
+    .garden-content pre.shiki code {
+      padding: 0;
+      background: transparent;
+      font-family: var(--uxx-font-family-mono);
+      font-size: 14px;
+      line-height: 1.5;
     }
 
     .garden-content blockquote {

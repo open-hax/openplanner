@@ -352,7 +352,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       };
     });
 
-    const html = renderGardenIndex(garden, documents, {
+    const html = await renderGardenIndex(garden, documents, {
       fullDocument: true,
       includeNav: true,
     });
@@ -389,11 +389,11 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
 
     const extra = (doc.extra ?? {}) as DocExtra;
 
-    const html = renderGardenPage(
+    const html = await renderGardenPage(
       garden,
       {
         title: extra.title ?? "Untitled",
-        content: extra.content ?? "",
+        content: doc.text ?? extra.content ?? "",
         source_path: extra.source_path,
         language: extra.language,
       },
