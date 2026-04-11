@@ -81,6 +81,25 @@ function countBy<T extends string>(values: T[]): Record<string, number> {
   }, {});
 }
 
+async function countFieldValues(
+  collection: any,
+  filter: Record<string, unknown>,
+  fieldPath: string,
+  fallback = "unknown"
+): Promise<Record<string, number>> {
+  const rows = await collection.aggregate([
+    { $match: filter },
+    { $group: { _id: `$${fieldPath}`, count: { $sum: 1 } } },
+  ]).toArray();
+
+  return (rows as Array<Record<string, unknown>>).reduce((acc: Record<string, number>, row) => {
+    const raw = row._id;
+    const key = typeof raw === "string" && raw.trim() ? raw : fallback;
+    acc[key] = Number(row.count ?? 0);
+    return acc;
+  }, {});
+}
+
 function draftMarkdown(topic: string, tone: string, audience: string): string {
   return [
     `# ${topic || "Untitled draft"}`,
@@ -113,7 +132,7 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     const domain = query.domain;
     const source = query.source;
     const gardenId = query.garden_id;
-    const limit = Math.max(1, Math.min(500, Number(query.limit ?? 50)));
+    const limit = query.limit === undefined ? null : Math.max(1, Number(query.limit));
     const offset = Math.max(0, Number(query.offset ?? 0));
 
     const filter: Record<string, unknown> = {
@@ -125,14 +144,19 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     if (domain) filter["extra.domain"] = domain;
     if (gardenId) filter["extra.metadata.garden_id"] = gardenId;
 
-    const rows = await app.mongo.events.find(filter).sort({ ts: -1 }).limit(limit + offset).toArray();
+    const total = await app.mongo.events.countDocuments(filter);
+    const byVisibility = await countFieldValues(app.mongo.events, filter, "extra.visibility", "internal");
+
+    let cursor = app.mongo.events.find(filter).sort({ ts: -1 }).skip(offset);
+    if (limit !== null) cursor = cursor.limit(limit);
+
+    const rows = await cursor.toArray();
     const documents = rows.map((row: Record<string, unknown>) => toCmsDocument(rowToDocument(row), tenantId));
-    const paged = documents.slice(offset, offset + limit);
 
     return {
-      documents: paged,
-      total: documents.length,
-      by_visibility: countBy(documents.map((doc) => doc.visibility)),
+      documents,
+      total,
+      by_visibility: byVisibility,
     };
   });
 
@@ -470,22 +494,27 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/cms/public", async (req) => {
     const query = (req.query ?? {}) as Record<string, string | undefined>;
     const tenantId = tenantProject(query.tenant_id);
-    const limit = Math.max(1, Math.min(500, Number(query.limit ?? 50)));
+    const limit = query.limit === undefined ? null : Math.max(1, Number(query.limit));
     const offset = Math.max(0, Number(query.offset ?? 0));
 
-    const rows = await app.mongo.events.find({
+    const filter = {
       kind: "docs",
       project: tenantId,
       "extra.visibility": "public",
-    }).sort({ ts: -1 }).limit(limit + offset).toArray();
+    };
 
+    const total = await app.mongo.events.countDocuments(filter);
+
+    let cursor = app.mongo.events.find(filter).sort({ ts: -1 }).skip(offset);
+    if (limit !== null) cursor = cursor.limit(limit);
+
+    const rows = await cursor.toArray();
     const documents = rows.map((row: Record<string, unknown>) => toCmsDocument(rowToDocument(row), tenantId));
-    const paged = documents.slice(offset, offset + limit);
 
     return {
-      documents: paged,
-      total: documents.length,
-      by_visibility: countBy(documents.map((doc) => doc.visibility)),
+      documents,
+      total,
+      by_visibility: { public: total },
     };
   });
 
@@ -493,17 +522,21 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     const query = (req.query ?? {}) as Record<string, string | undefined>;
     const tenantId = tenantProject(query.tenant_id);
 
-    const rows = await app.mongo.events.find({
+    const filter = {
       kind: "docs",
       project: tenantId,
-    }).limit(1000).toArray();
+    };
 
-    const documents = rows.map((row: Record<string, unknown>) => toCmsDocument(rowToDocument(row), tenantId));
+    const [total, byVisibility, byDomain] = await Promise.all([
+      app.mongo.events.countDocuments(filter),
+      countFieldValues(app.mongo.events, filter, "extra.visibility", "internal"),
+      countFieldValues(app.mongo.events, filter, "extra.domain", "general"),
+    ]);
 
     return {
-      total: documents.length,
-      by_visibility: countBy(documents.map((doc) => doc.visibility)),
-      by_domain: countBy(documents.map((doc) => doc.domain || "general")),
+      total,
+      by_visibility: byVisibility,
+      by_domain: byDomain,
     };
   });
 };
