@@ -331,4 +331,84 @@ export const gardenRoutes: FastifyPluginAsync = async (app) => {
 
     return { ok: true, garden_id, stats };
   });
+
+  /**
+   * GET /v1/gardens/:id/documents
+   * List documents published to a garden
+   */
+  app.get("/gardens/:id/documents", async (req, reply) => {
+    const garden_id = String((req.params as { id: string }).id);
+    const query = (req.query ?? {}) as Record<string, string | undefined>;
+
+    const garden = await gardens.findOne({ garden_id });
+    if (!garden) {
+      return reply.status(404).send({ error: "garden not found" });
+    }
+
+    const language = query.language;
+    const visibility = query.visibility;
+    const domain = query.domain;
+    const limit = Math.min(parseInt(query.limit ?? "50", 10), 200);
+    const offset = parseInt(query.offset ?? "0", 10);
+
+    // Build filter for documents published to this garden
+    const filter: Record<string, unknown> = {
+      kind: "docs",
+      "extra.metadata.garden_publications.garden_id": garden_id,
+    };
+
+    if (visibility) {
+      filter["extra.visibility"] = visibility;
+    }
+
+    if (domain) {
+      filter["extra.domain"] = domain;
+    }
+
+    // If language specified, prefer translated versions
+    const pipeline: object[] = [
+      { $match: filter },
+      { $sort: { ts: -1 } },
+      { $skip: offset },
+      { $limit: limit },
+    ];
+
+    const docs = await app.mongo.events.aggregate(pipeline).toArray();
+    const total = await app.mongo.events.countDocuments(filter);
+
+    const documents = docs.map((doc) => {
+      const extra = doc.extra ?? {};
+      const metadata = extra.metadata ?? {};
+      const gardenPubs = (metadata.garden_publications as Array<Record<string, unknown>>) ?? [];
+      const thisPub = gardenPubs.find((p) => p.garden_id === garden_id) ?? {};
+
+      return {
+        doc_id: doc._id,
+        title: extra.title,
+        domain: extra.domain,
+        language: extra.language,
+        visibility: extra.visibility,
+        source_path: extra.source_path,
+        published_at: (thisPub.published_at as string) ?? null,
+        translation_status: (thisPub.translation_status as string) ?? null,
+        translated_languages: (thisPub.translated_languages as string[]) ?? [],
+        created_at: doc.ts,
+        updated_at: extra.updated_at ?? doc.ts,
+      };
+    });
+
+    return {
+      ok: true,
+      garden: {
+        garden_id: garden.garden_id,
+        title: garden.title,
+        default_language: garden.default_language,
+        target_languages: garden.target_languages,
+      },
+      total,
+      offset,
+      limit,
+      documents,
+    };
+  });
 };
