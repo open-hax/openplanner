@@ -355,7 +355,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     const html = await renderGardenIndex(garden, documents, {
       fullDocument: true,
       includeNav: true,
-      baseUrl: `/v1/public/gardens/${garden_id}/html`,
+      baseUrl: `/api/openplanner/v1/public/gardens/${garden_id}/html`,
     });
 
     reply.type("text/html; charset=utf-8");
@@ -401,7 +401,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       {
         fullDocument: true,
         includeNav: true,
-        baseUrl: `/v1/public/gardens/${garden_id}/html`,
+        baseUrl: `/api/openplanner/v1/public/gardens/${garden_id}/html`,
       }
     );
 
