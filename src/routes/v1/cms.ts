@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { DocumentPatchRequest, DocumentRecord } from "../../lib/types.js";
-import { documentToEvent, getDocumentById, persistAndMaybeIndex, rowToDocument } from "./documents.js";
+import { buildDocumentFilter, countFieldValues, documentToEvent, getDocumentById, persistAndMaybeIndex, rowToDocument } from "./documents.js";
 
 type CmsDocument = {
   doc_id: string;
@@ -74,32 +74,6 @@ function toCmsDocument(document: DocumentRecord, tenantId?: string): CmsDocument
   };
 }
 
-function countBy<T extends string>(values: T[]): Record<string, number> {
-  return values.reduce<Record<string, number>>((acc, value) => {
-    acc[value] = (acc[value] ?? 0) + 1;
-    return acc;
-  }, {});
-}
-
-async function countFieldValues(
-  collection: any,
-  filter: Record<string, unknown>,
-  fieldPath: string,
-  fallback = "unknown"
-): Promise<Record<string, number>> {
-  const rows = await collection.aggregate([
-    { $match: filter },
-    { $group: { _id: `$${fieldPath}`, count: { $sum: 1 } } },
-  ]).toArray();
-
-  return (rows as Array<Record<string, unknown>>).reduce((acc: Record<string, number>, row) => {
-    const raw = row._id;
-    const key = typeof raw === "string" && raw.trim() ? raw : fallback;
-    acc[key] = Number(row.count ?? 0);
-    return acc;
-  }, {});
-}
-
 function draftMarkdown(topic: string, tone: string, audience: string): string {
   return [
     `# ${topic || "Untitled draft"}`,
@@ -128,20 +102,15 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
   app.get("/cms/documents", async (req) => {
     const query = (req.query ?? {}) as Record<string, string | undefined>;
     const tenantId = tenantProject(query.tenant_id);
-    const visibility = query.visibility;
-    const domain = query.domain;
-    const source = query.source;
     const gardenId = query.garden_id;
     const limit = query.limit === undefined ? null : Math.max(1, Number(query.limit));
     const offset = Math.max(0, Number(query.offset ?? 0));
 
-    const filter: Record<string, unknown> = {
-      kind: "docs",
+    const filter = buildDocumentFilter({
+      ...query,
       project: tenantId,
-    };
-    if (visibility) filter["extra.visibility"] = visibility;
-    if (source) filter.source = source;
-    if (domain) filter["extra.domain"] = domain;
+      kind: query.kind ?? "docs",
+    });
     if (gardenId) filter["extra.metadata.garden_id"] = gardenId;
 
     const total = await app.mongo.events.countDocuments(filter);
@@ -522,21 +491,29 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     const query = (req.query ?? {}) as Record<string, string | undefined>;
     const tenantId = tenantProject(query.tenant_id);
 
-    const filter = {
-      kind: "docs",
+    const filter = buildDocumentFilter({
+      ...query,
       project: tenantId,
-    };
+      kind: query.kind ?? "docs",
+    });
+    const projectFilter = buildDocumentFilter({ project: tenantId });
 
-    const [total, byVisibility, byDomain] = await Promise.all([
+    const [total, projectTotal, byVisibility, byDomain, byKind, bySource] = await Promise.all([
       app.mongo.events.countDocuments(filter),
+      app.mongo.events.countDocuments(projectFilter),
       countFieldValues(app.mongo.events, filter, "extra.visibility", "internal"),
       countFieldValues(app.mongo.events, filter, "extra.domain", "general"),
+      countFieldValues(app.mongo.events, projectFilter, "kind", "docs"),
+      countFieldValues(app.mongo.events, projectFilter, "source", "unknown"),
     ]);
 
     return {
       total,
+      project_total: projectTotal,
       by_visibility: byVisibility,
       by_domain: byDomain,
+      by_kind: byKind,
+      by_source: bySource,
     };
   });
 };

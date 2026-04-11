@@ -11,6 +11,15 @@ import type {
 
 export const DOCUMENT_KINDS = new Set(["docs", "code", "config", "data"]);
 
+function csvTokens(value: unknown): string[] {
+  if (typeof value !== "string") return [];
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseJson(value: unknown): Record<string, unknown> {
   if (!value) return {};
   if (typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
@@ -27,6 +36,87 @@ function parseJson(value: unknown): Record<string, unknown> {
 
 function normalizeVisibility(value: unknown): DocumentRecord["visibility"] {
   return value === "review" || value === "public" || value === "archived" ? value : "internal";
+}
+
+export function buildDocumentFilter(query: Record<string, string | undefined>): Record<string, unknown> {
+  const filter: Record<string, unknown> = { kind: { $in: [...DOCUMENT_KINDS] } };
+
+  const projects = csvTokens(query.projects ?? query.project);
+  if (projects.length === 1) {
+    filter.project = projects[0];
+  } else if (projects.length > 1) {
+    filter.project = { $in: projects };
+  }
+
+  const rawKinds = csvTokens(query.kinds ?? query.kind);
+  const includeAllKinds = rawKinds.includes("all");
+  const kinds = rawKinds.filter((kind) => DOCUMENT_KINDS.has(kind));
+  if (!includeAllKinds && kinds.length === 1) {
+    filter.kind = kinds[0];
+  } else if (!includeAllKinds && kinds.length > 1) {
+    filter.kind = { $in: kinds };
+  }
+
+  const visibilities = csvTokens(query.visibility).filter((value) =>
+    ["internal", "review", "public", "archived"].includes(value),
+  );
+  if (visibilities.length === 1) {
+    filter["extra.visibility"] = visibilities[0];
+  } else if (visibilities.length > 1) {
+    filter["extra.visibility"] = { $in: visibilities };
+  }
+
+  const sources = csvTokens(query.source);
+  if (sources.length === 1) {
+    filter.source = sources[0];
+  } else if (sources.length > 1) {
+    filter.source = { $in: sources };
+  }
+
+  const domains = csvTokens(query.domain);
+  if (domains.length === 1) {
+    filter["extra.domain"] = domains[0];
+  } else if (domains.length > 1) {
+    filter["extra.domain"] = { $in: domains };
+  }
+
+  const createdBy = query.createdBy ?? query.created_by;
+  if (createdBy) filter["extra.created_by"] = createdBy;
+
+  const sourcePathPrefix = (query.sourcePathPrefix ?? query.source_path_prefix ?? query.path_prefix ?? "").trim();
+  if (sourcePathPrefix) {
+    filter["extra.source_path"] = { $regex: `^${escapeRegex(sourcePathPrefix)}` };
+  }
+
+  const metadataSourceId = query.metadataSourceId ?? query.metadata_source_id;
+  if (metadataSourceId) filter["extra.metadata.source_id"] = metadataSourceId;
+
+  const metadataLake = query.metadataLake ?? query.metadata_lake;
+  if (metadataLake) filter["extra.metadata.lake"] = metadataLake;
+
+  const metadataDatabaseId = query.metadataDatabaseId ?? query.metadata_database_id;
+  if (metadataDatabaseId) filter["extra.metadata.database-id"] = metadataDatabaseId;
+
+  return filter;
+}
+
+export async function countFieldValues(
+  collection: any,
+  filter: Record<string, unknown>,
+  fieldPath: string,
+  fallback = "unknown",
+): Promise<Record<string, number>> {
+  const rows = await collection.aggregate([
+    { $match: filter },
+    { $group: { _id: `$${fieldPath}`, count: { $sum: 1 } } },
+  ]).toArray();
+
+  return (rows as Array<Record<string, unknown>>).reduce((acc: Record<string, number>, row) => {
+    const raw = row._id;
+    const key = typeof raw === "string" && raw.trim() ? raw : fallback;
+    acc[key] = Number(row.count ?? 0);
+    return acc;
+  }, {});
 }
 
 export function rowToDocument(row: Record<string, unknown>): DocumentRecord {
@@ -220,29 +310,58 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true, document: normalized, ...result };
   });
 
+  app.get("/documents", async (req) => {
+    const query = (req.query ?? {}) as Record<string, string | undefined>;
+    const limit = query.limit === undefined ? null : Math.max(1, Number(query.limit));
+    const offset = Math.max(0, Number(query.offset ?? 0));
+    const filter = buildDocumentFilter(query);
+    const total = await app.mongo.events.countDocuments(filter);
+
+    let cursor = app.mongo.events.find(filter).sort({ ts: -1 }).skip(offset);
+    if (limit !== null) cursor = cursor.limit(limit);
+
+    const rows = await cursor.toArray();
+    return {
+      ok: true,
+      count: rows.length,
+      total,
+      offset,
+      limit,
+      rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)),
+      storageBackend: "mongodb",
+    };
+  });
+
+  app.get("/documents/stats", async (req) => {
+    const query = (req.query ?? {}) as Record<string, string | undefined>;
+    const filter = buildDocumentFilter(query);
+
+    const [total, byProject, byKind, byVisibility, bySource, byDomain] = await Promise.all([
+      app.mongo.events.countDocuments(filter),
+      countFieldValues(app.mongo.events, filter, "project", "devel"),
+      countFieldValues(app.mongo.events, filter, "kind", "docs"),
+      countFieldValues(app.mongo.events, filter, "extra.visibility", "internal"),
+      countFieldValues(app.mongo.events, filter, "source", "unknown"),
+      countFieldValues(app.mongo.events, filter, "extra.domain", "general"),
+    ]);
+
+    return {
+      ok: true,
+      total,
+      by_project: byProject,
+      by_kind: byKind,
+      by_visibility: byVisibility,
+      by_source: bySource,
+      by_domain: byDomain,
+      storageBackend: "mongodb",
+    };
+  });
+
   app.get("/documents/:id", async (req, reply) => {
     const id = String((req.params as { id: string }).id);
     const doc = await getDocumentById(app, id);
     if (!doc) return reply.status(404).send({ error: "document not found" });
     return { ok: true, document: doc };
-  });
-
-  app.get("/documents", async (req) => {
-    const query = (req.query ?? {}) as Record<string, string | undefined>;
-    const limit = Math.max(1, Math.min(200, Number(query.limit ?? 50)));
-    const visibility = query.visibility;
-    const project = query.project;
-    const kind = query.kind;
-    const source = query.source;
-
-    const filter: Record<string, unknown> = { kind: { $in: [...DOCUMENT_KINDS] } };
-    if (project) filter.project = project;
-    if (kind) filter.kind = kind;
-    if (source) filter.source = source;
-    if (visibility) filter["extra.visibility"] = visibility;
-    
-    const rows = await app.mongo.events.find(filter).sort({ ts: -1 }).limit(limit).toArray();
-    return { ok: true, count: rows.length, rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)), storageBackend: "mongodb" };
   });
 
   app.patch<{ Body: DocumentPatchRequest }>("/documents/:id", async (req, reply) => {
