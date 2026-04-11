@@ -361,7 +361,7 @@ export function renderGardenIndex(
     <ul class="garden-document-list">
       ${documents.map(doc => `
         <li class="garden-document-item">
-          <a href="${baseUrl}/docs/${doc.doc_id}">
+          <a href="${baseUrl}/${doc.doc_id}">
             <span class="doc-title">${escapeHtml(doc.title)}</span>
             ${doc.source_path ? `<span class="doc-path">${escapeHtml(doc.source_path)}</span>` : ""}
           </a>
