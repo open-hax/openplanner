@@ -2,42 +2,45 @@ import type { FastifyPluginAsync } from "fastify";
 import type { GardenDocument } from "../../lib/mongodb.js";
 
 type GardenStatus = "draft" | "active" | "archived";
-type VisibilityDefault = "internal" | "review" | "public";
+
+interface GardenNav {
+  items: {
+    label: string;
+    path: string;
+    children?: { label: string; path: string }[];
+  }[];
+}
 
 interface CreateGardenPayload {
   garden_id: string;
   title: string;
   description?: string;
-  domain?: string;
-  base_path?: string;
+  theme?: string;
   default_language?: string;
   target_languages?: string[];
   source_filter?: {
-    projects?: string[];
-    domains?: string[];
-    tags?: string[];
+    project?: string;
+    kind?: string;
+    domain?: string;
+    path_prefix?: string;
   } | null;
-  auto_translate?: boolean;
-  require_review?: boolean;
-  visibility_default?: VisibilityDefault;
+  nav?: GardenNav;
   owner_id?: string;
 }
 
 interface UpdateGardenPayload {
   title?: string;
   description?: string | null;
-  domain?: string;
-  base_path?: string | null;
+  theme?: string;
   default_language?: string;
   target_languages?: string[];
   source_filter?: {
-    projects?: string[];
-    domains?: string[];
-    tags?: string[];
+    project?: string;
+    kind?: string;
+    domain?: string;
+    path_prefix?: string;
   } | null;
-  auto_translate?: boolean;
-  require_review?: boolean;
-  visibility_default?: VisibilityDefault;
+  nav?: GardenNav | null;
   status?: GardenStatus;
 }
 
@@ -45,18 +48,16 @@ interface GardenResponse {
   garden_id: string;
   title: string;
   description: string | null;
-  domain: string;
-  base_path: string | null;
+  theme: string;
   default_language: string;
   target_languages: string[];
   source_filter: {
-    projects?: string[];
-    domains?: string[];
-    tags?: string[];
+    project?: string;
+    kind?: string;
+    domain?: string;
+    path_prefix?: string;
   } | null;
-  auto_translate: boolean;
-  require_review: boolean;
-  visibility_default: VisibilityDefault;
+  nav: GardenNav | null;
   owner_id: string;
   created_by: string;
   status: GardenStatus;
@@ -73,18 +74,15 @@ function toResponse(doc: GardenDocument): GardenResponse {
   return {
     garden_id: doc.garden_id,
     title: doc.title,
-    description: doc.description,
-    domain: doc.domain,
-    base_path: doc.base_path,
-    default_language: doc.default_language,
-    target_languages: doc.target_languages,
-    source_filter: doc.source_filter,
-    auto_translate: doc.auto_translate,
-    require_review: doc.require_review,
-    visibility_default: doc.visibility_default,
-    owner_id: doc.owner_id,
-    created_by: doc.created_by,
-    status: doc.status,
+    description: doc.description ?? null,
+    theme: doc.theme ?? "default",
+    default_language: doc.default_language ?? "en",
+    target_languages: doc.target_languages ?? [],
+    source_filter: doc.source_filter ?? null,
+    nav: doc.nav ?? null,
+    owner_id: doc.owner_id ?? "system",
+    created_by: doc.created_by ?? "system",
+    status: doc.status ?? "active",
     stats: doc.stats
       ? {
           documents_count: doc.stats.documents_count,
@@ -152,14 +150,11 @@ export const gardenRoutes: FastifyPluginAsync = async (app) => {
       garden_id,
       title: payload.title.trim(),
       description: payload.description?.trim() ?? null,
-      domain: payload.domain ?? "internal",
-      base_path: payload.base_path?.trim() ?? null,
+      theme: payload.theme ?? "default",
       default_language: payload.default_language ?? "en",
       target_languages: payload.target_languages ?? [],
       source_filter: payload.source_filter ?? null,
-      auto_translate: payload.auto_translate ?? false,
-      require_review: payload.require_review ?? false,
-      visibility_default: payload.visibility_default ?? "internal",
+      nav: payload.nav ?? null,
       owner_id: payload.owner_id ?? "anonymous",
       created_by: payload.owner_id ?? "anonymous",
       status: "draft",
@@ -206,14 +201,11 @@ export const gardenRoutes: FastifyPluginAsync = async (app) => {
 
     if (payload.title !== undefined) updates.title = payload.title.trim();
     if (payload.description !== undefined) updates.description = payload.description?.trim() ?? null;
-    if (payload.domain !== undefined) updates.domain = payload.domain;
-    if (payload.base_path !== undefined) updates.base_path = payload.base_path?.trim() ?? null;
+    if (payload.theme !== undefined) updates.theme = payload.theme;
     if (payload.default_language !== undefined) updates.default_language = payload.default_language;
     if (payload.target_languages !== undefined) updates.target_languages = payload.target_languages;
     if (payload.source_filter !== undefined) updates.source_filter = payload.source_filter;
-    if (payload.auto_translate !== undefined) updates.auto_translate = payload.auto_translate;
-    if (payload.require_review !== undefined) updates.require_review = payload.require_review;
-    if (payload.visibility_default !== undefined) updates.visibility_default = payload.visibility_default;
+    if (payload.nav !== undefined) updates.nav = payload.nav;
     if (payload.status !== undefined) updates.status = payload.status;
 
     await gardens.updateOne({ garden_id }, { $set: updates });
