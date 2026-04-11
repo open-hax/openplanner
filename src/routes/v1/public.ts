@@ -316,4 +316,94 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       results,
     };
   });
+
+  /**
+   * GET /v1/public/gardens/:garden_id/html
+   * Render garden index page as themed HTML
+   */
+  app.get("/public/gardens/:garden_id/html", async (req, reply) => {
+    const garden_id = String((req.params as { garden_id: string }).garden_id);
+
+    const { renderGardenIndex } = await import("../../lib/garden-renderer.js");
+
+    const garden = await gardens.findOne({ garden_id, status: "active" });
+    if (!garden) {
+      return reply.status(404).send({ error: "garden not found or inactive" });
+    }
+
+    // Get documents in this garden
+    const docs = await events
+      .find({
+        kind: "docs",
+        "extra.visibility": "public",
+        "extra.metadata.garden_publications.garden_id": garden_id,
+      })
+      .sort({ ts: -1 })
+      .limit(100)
+      .toArray();
+
+    const documents = docs.map((doc) => {
+      const extra = (doc.extra ?? {}) as DocExtra;
+      return {
+        doc_id: doc._id,
+        title: extra.title ?? "Untitled",
+        source_path: extra.source_path,
+        language: extra.language,
+      };
+    });
+
+    const html = renderGardenIndex(garden, documents, {
+      fullDocument: true,
+      includeNav: true,
+    });
+
+    reply.type("text/html; charset=utf-8");
+    return html;
+  });
+
+  /**
+   * GET /v1/public/gardens/:garden_id/html/:doc_id
+   * Render single document as themed HTML
+   */
+  app.get("/public/gardens/:garden_id/html/:doc_id", async (req, reply) => {
+    const garden_id = String((req.params as { garden_id: string }).garden_id);
+    const doc_id = String((req.params as { doc_id: string }).doc_id);
+
+    const { renderGardenPage } = await import("../../lib/garden-renderer.js");
+
+    const garden = await gardens.findOne({ garden_id, status: "active" });
+    if (!garden) {
+      return reply.status(404).send({ error: "garden not found or inactive" });
+    }
+
+    const doc = await events.findOne({
+      _id: doc_id,
+      kind: "docs",
+      "extra.visibility": "public",
+      "extra.metadata.garden_publications.garden_id": garden_id,
+    });
+
+    if (!doc) {
+      return reply.status(404).send({ error: "document not found in this garden" });
+    }
+
+    const extra = (doc.extra ?? {}) as DocExtra;
+
+    const html = renderGardenPage(
+      garden,
+      {
+        title: extra.title ?? "Untitled",
+        content: extra.content ?? "",
+        source_path: extra.source_path,
+        language: extra.language,
+      },
+      {
+        fullDocument: true,
+        includeNav: true,
+      }
+    );
+
+    reply.type("text/html; charset=utf-8");
+    return html;
+  });
 };
