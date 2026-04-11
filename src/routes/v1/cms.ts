@@ -318,11 +318,11 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(503).send({ detail: result.warning, persisted: true, indexed: false });
     }
 
-    // Queue translation jobs if auto_translate is enabled
+    // Queue translation jobs if target languages are configured
     const translationJobs: Array<{ job_id: string; target_lang: string; status: string }> = [];
     const targetLanguages = targetLanguagesOverride ?? garden.target_languages ?? [];
 
-    if (garden.auto_translate && !skipTranslation && targetLanguages.length > 0) {
+    if (!skipTranslation && targetLanguages.length > 0) {
       const jobsCollection = app.mongo.db.collection("translation_jobs");
 
       for (const targetLang of targetLanguages) {

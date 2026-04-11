@@ -212,25 +212,29 @@ export interface GardenDocument {
   garden_id: string;
   title: string;
   description: string | null;
-  domain: string;
-  base_path: string | null;
-  default_language: string;
-  target_languages: string[];
-  source_filter: {
-    projects?: string[];
-    domains?: string[];
-    tags?: string[];
+  theme?: string;
+  default_language?: string;
+  target_languages?: string[];
+  source_filter?: {
+    project?: string;
+    kind?: string;
+    domain?: string;
+    path_prefix?: string;
   } | null;
-  auto_translate: boolean;
-  require_review: boolean;
-  visibility_default: "internal" | "review" | "public";
-  owner_id: string;
-  created_by: string;
-  status: "draft" | "active" | "archived";
-  stats: {
+  nav?: {
+    items: {
+      label: string;
+      path: string;
+      children?: { label: string; path: string }[];
+    }[];
+  } | null;
+  owner_id?: string;
+  created_by?: string;
+  status?: "draft" | "active" | "archived";
+  stats?: {
     documents_count: number;
     translations_count: number;
-    last_published_at: Date | null;
+    last_published_at?: Date;
   } | null;
   createdAt: Date;
   updatedAt: Date;
@@ -355,96 +359,6 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await gardens.createIndex({ garden_id: 1 }, { unique: true });
   await gardens.createIndex({ owner_id: 1, createdAt: -1 as IndexDirection });
   await gardens.createIndex({ status: 1, createdAt: -1 as IndexDirection });
-  await gardens.createIndex({ domain: 1 });
-
-  // Seed default gardens if collection is empty
-  const gardenCount = await gardens.countDocuments();
-  if (gardenCount === 0) {
-    const now = new Date();
-    await gardens.insertMany([
-      {
-        _id: "query",
-        garden_id: "query",
-        title: "Query Garden",
-        description: "Federated lake search and grounded synthesis",
-        domain: "internal",
-        base_path: null,
-        default_language: "en",
-        target_languages: [],
-        source_filter: { projects: ["devel", "web", "bluesky", "cephalon-hive"] },
-        auto_translate: false,
-        require_review: false,
-        visibility_default: "internal",
-        owner_id: "system",
-        created_by: "system",
-        status: "active",
-        stats: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        _id: "ingestion",
-        garden_id: "ingestion",
-        title: "Ingestion Garden",
-        description: "Source management, file routing, and background ingest",
-        domain: "internal",
-        base_path: null,
-        default_language: "en",
-        target_languages: [],
-        source_filter: { projects: ["devel", "web", "bluesky"] },
-        auto_translate: false,
-        require_review: false,
-        visibility_default: "internal",
-        owner_id: "system",
-        created_by: "system",
-        status: "active",
-        stats: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        _id: "devel-deps-garden",
-        garden_id: "devel-deps-garden",
-        title: "Dependency Garden",
-        description: "Review workspace dependency topology and isolates",
-        domain: "internal",
-        base_path: null,
-        default_language: "en",
-        target_languages: [],
-        source_filter: { projects: ["devel"] },
-        auto_translate: false,
-        require_review: false,
-        visibility_default: "internal",
-        owner_id: "system",
-        created_by: "system",
-        status: "active",
-        stats: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        _id: "truth-workbench",
-        garden_id: "truth-workbench",
-        title: "Truth Workbench",
-        description: "Truth-resolution and control-plane review",
-        domain: "internal",
-        base_path: null,
-        default_language: "en",
-        target_languages: [],
-        source_filter: { projects: ["devel", "bluesky", "cephalon-hive"] },
-        auto_translate: false,
-        require_review: false,
-        visibility_default: "internal",
-        owner_id: "system",
-        created_by: "system",
-        status: "active",
-        stats: null,
-        createdAt: now,
-        updatedAt: now,
-      },
-    ]);
-    console.log("[mongodb] Seeded 4 default gardens");
-  }
 
   // TTL index for events (auto-expire old signals)
   const eventsTtl = config.eventsTtlSeconds ?? DEFAULT_EVENTS_TTL_SECONDS;

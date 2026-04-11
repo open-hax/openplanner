@@ -69,10 +69,9 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         garden_id: garden.garden_id,
         title: garden.title,
         description: garden.description,
-        domain: garden.domain,
-        default_language: garden.default_language,
+        default_language: garden.default_language ?? "en",
       },
-      languages: [garden.default_language, ...garden.target_languages],
+      languages: [garden.default_language ?? "en", ...(garden.target_languages ?? [])],
       stats: {
         documents_count: documentsCount,
       },
@@ -92,7 +91,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: "garden not found or inactive" });
     }
 
-    const language = query.language ?? garden.default_language;
+    const language = query.language ?? garden.default_language ?? "en";
     const pathPrefix = query.path;
     const search = query.search;
     const limit = Math.min(parseInt(query.limit ?? "50", 10), 200);
@@ -128,7 +127,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       const gardenPubs = (metadata.garden_publications as Array<Record<string, unknown>>) ?? [];
       const thisPub = gardenPubs.find((p) => p.garden_id === garden_id) ?? {};
       const availableLanguages = getAvailableLanguages(
-        garden.target_languages,
+        garden.target_languages ?? [],
         extra.language ?? "en",
         gardenPubs
       );
@@ -149,7 +148,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       garden: {
         garden_id: garden.garden_id,
         title: garden.title,
-        default_language: garden.default_language,
+        default_language: garden.default_language ?? "en",
       },
       requested_language: language,
       total,
@@ -173,7 +172,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: "garden not found or inactive" });
     }
 
-    const requestedLanguage = query.language ?? garden.default_language;
+    const requestedLanguage = query.language ?? garden.default_language ?? "en";
 
     // Find the document
     const doc = await events.findOne({
@@ -192,7 +191,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     const gardenPubs = (metadata.garden_publications as Array<Record<string, unknown>>) ?? [];
     const thisPub = gardenPubs.find((p) => p.garden_id === garden_id) ?? {};
     const availableLanguages = getAvailableLanguages(
-      garden.target_languages,
+      garden.target_languages ?? [],
       extra.language ?? "en",
       gardenPubs
     );
@@ -219,7 +218,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
 
     // Build translations metadata
     const translations: { language: string; status: string }[] = [];
-    for (const lang of garden.target_languages) {
+    for (const lang of garden.target_languages ?? []) {
       const status = availableLanguages.includes(lang) ? "available" : "pending";
       translations.push({ language: lang, status });
     }

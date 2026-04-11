@@ -308,7 +308,7 @@ export const gardenRoutes: FastifyPluginAsync = async (app) => {
     const stats = {
       documents_count: documentsCount,
       translations_count: translationsCount,
-      last_published_at: lastPublished?.ts ?? null,
+      last_published_at: lastPublished?.ts ?? undefined,
     };
 
     await gardens.updateOne(
