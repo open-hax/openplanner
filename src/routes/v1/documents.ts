@@ -9,7 +9,7 @@ import type {
   EventEnvelopeV1,
 } from "../../lib/types.js";
 
-const DOCUMENT_KINDS = new Set(["docs", "code", "config", "data"]);
+export const DOCUMENT_KINDS = new Set(["docs", "code", "config", "data"]);
 
 function parseJson(value: unknown): Record<string, unknown> {
   if (!value) return {};
@@ -29,7 +29,7 @@ function normalizeVisibility(value: unknown): DocumentRecord["visibility"] {
   return value === "review" || value === "public" || value === "archived" ? value : "internal";
 }
 
-function rowToDocument(row: Record<string, unknown>): DocumentRecord {
+export function rowToDocument(row: Record<string, unknown>): DocumentRecord {
   const extra = parseJson(row.extra);
   const metadata = (extra.metadata && typeof extra.metadata === "object") ? (extra.metadata as Record<string, unknown>) : {};
   const ts = row.ts instanceof Date ? row.ts.toISOString() : String(row.ts ?? new Date().toISOString());
@@ -38,7 +38,7 @@ function rowToDocument(row: Record<string, unknown>): DocumentRecord {
     id: String(row.id),
     title: String(extra.title ?? row.message ?? row.id),
     content: String(row.text ?? ""),
-    project: String(row.project ?? "devel-docs"),
+    project: String(row.project ?? "devel"),
     kind: (DOCUMENT_KINDS.has(String(row.kind)) ? String(row.kind) : "docs") as DocumentRecord["kind"],
     visibility: normalizeVisibility(extra.visibility),
     source: row.source ? String(row.source) : undefined,
@@ -56,7 +56,7 @@ function rowToDocument(row: Record<string, unknown>): DocumentRecord {
   };
 }
 
-function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventEnvelopeV1 {
+export function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventEnvelopeV1 {
   const ts = doc.ts ?? original?.ts ?? new Date().toISOString();
   const publishedAt = doc.visibility === "public"
     ? (doc.publishedAt ?? original?.publishedAt ?? new Date().toISOString())
@@ -96,7 +96,7 @@ function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventE
   };
 }
 
-async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ indexed: boolean; warning?: string }> {
+export async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promise<{ indexed: boolean; warning?: string }> {
   await persistEvent(app, ev);
   try {
     const indexed = await indexDocument(app, ev);
@@ -180,7 +180,7 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
   return true;
 }
 
-async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
+export async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
   const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
   return row ? rowToDocument(row as Record<string, unknown>) : null;
 }

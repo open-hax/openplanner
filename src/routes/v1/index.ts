@@ -3,6 +3,7 @@ import { healthRoutes } from "./health.js";
 import { blobRoutes } from "./blobs.js";
 import { eventRoutes } from "./events.js";
 import { documentRoutes } from "./documents.js";
+import { cmsRoutes } from "./cms.js";
 import { gardenRoutes } from "./gardens.js";
 import { searchRoutes } from "./search.js";
 import { sessionRoutes } from "./sessions.js";
@@ -17,6 +18,7 @@ export const v1Routes: FastifyPluginAsync = async (app) => {
   await app.register(blobRoutes);
   await app.register(eventRoutes);
   await app.register(documentRoutes);
+  await app.register(cmsRoutes);
   await app.register(gardenRoutes);
   await app.register(searchRoutes);
   await app.register(sessionRoutes);
