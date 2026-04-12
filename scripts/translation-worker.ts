@@ -146,7 +146,8 @@ function splitIntoSegments(text: string, maxChars: number = SEGMENT_SIZE): strin
 async function translateText(
   text: string,
   sourceLang: string,
-  targetLang: string
+  targetLang: string,
+  fewShotExamples?: Array<{ source_text: string; target_text: string }>
 ): Promise<MtTranslateResponse> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -156,11 +157,29 @@ async function translateText(
     headers["Authorization"] = `Bearer ${MT_PROVIDER_API_KEY}`;
   }
 
-  // Use chat completion API for translation
-  const prompt = `Translate the following text from ${sourceLang} to ${targetLang}. Preserve formatting, technical terms, and code examples. Output only the translated text without any explanation.
+  // Build prompt with few-shot examples if available
+  let prompt: string;
+
+  if (fewShotExamples && fewShotExamples.length > 0) {
+    const examplesSection = fewShotExamples
+      .map((ex, i) => `Example ${i + 1}:\nSource (${sourceLang}): ${ex.source_text.slice(0, 200)}...\nTarget (${targetLang}): ${ex.target_text.slice(0, 200)}...`)
+      .join("\n\n");
+
+    prompt = `You are a professional translator. Translate the following text from ${sourceLang} to ${targetLang}. Preserve formatting, technical terms, and code examples.
+
+Here are some example translations for reference:
+${examplesSection}
+
+Now translate this text:
+${text}
+
+Output only the translated text without any explanation.`;
+  } else {
+    prompt = `Translate the following text from ${sourceLang} to ${targetLang}. Preserve formatting, technical terms, and code examples. Output only the translated text without any explanation.
 
 Text to translate:
 ${text}`;
+  }
 
   const response = await fetch(`${MT_PROVIDER_URL}/v1/chat/completions`, {
     method: "POST",
@@ -193,6 +212,43 @@ ${text}`;
     translated_text: translatedText,
     confidence: 0.8, // Default confidence for LLM translations
   };
+}
+
+/**
+ * Query graph memory for similar translation examples
+ */
+async function getFewShotExamples(
+  db: Db,
+  sourceText: string,
+  sourceLang: string,
+  targetLang: string,
+  limit: number = 3
+): Promise<Array<{ source_text: string; target_text: string }>> {
+  try {
+    const nodes = await db
+      .collection("graph_nodes")
+      .find({
+        kind: "translation_example",
+        "data.source_lang": sourceLang,
+        "data.target_lang": targetLang,
+        $or: [
+          { "data.source_text": { $regex: sourceText.slice(0, 30), $options: "i" } },
+          { "data.domain": { $exists: true } },
+        ],
+      })
+      .limit(limit)
+      .toArray();
+
+    return nodes
+      .filter((n) => n.data?.source_text && n.data?.target_text)
+      .map((n) => ({
+        source_text: n.data.source_text,
+        target_text: n.data.target_text,
+      }));
+  } catch (err) {
+    console.error("[translation-worker] Failed to query few-shot examples:", err);
+    return [];
+  }
 }
 
 /**
@@ -237,6 +293,19 @@ async function processJob(
 
     console.log(`[translation-worker] Translating ${segmentsToProcess.length} segments for job ${job._id}`);
 
+    // Get few-shot examples from graph memory for zero-shot learning
+    const fewShotExamples = await getFewShotExamples(
+      db,
+      text.slice(0, 500),
+      job.source_lang,
+      job.target_language,
+      3
+    );
+
+    if (fewShotExamples.length > 0) {
+      console.log(`[translation-worker] Using ${fewShotExamples.length} few-shot examples from graph memory`);
+    }
+
     // Translate each segment
     const translatedSegments: TranslationSegment[] = [];
 
@@ -247,7 +316,8 @@ async function processJob(
         const result = await translateText(
           sourceText,
           job.source_lang,
-          job.target_language
+          job.target_language,
+          fewShotExamples
         );
 
         translatedSegments.push({

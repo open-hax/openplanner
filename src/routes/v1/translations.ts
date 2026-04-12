@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import { ObjectId } from "mongodb";
 
 /**
@@ -44,6 +44,122 @@ interface TranslationLabel {
   corrected_text?: string;
   editor_notes?: string;
   created_at: Date;
+}
+
+/**
+ * Graph memory integration for zero-shot learning
+ * Upserts approved translations to graph memory for MT context enrichment
+ */
+async function upsertTranslationToGraphMemory(
+  app: FastifyInstance,
+  segment: TranslationSegment,
+  correctedText?: string
+): Promise<{ success: boolean; error?: string }> {
+  const targetText = correctedText || segment.translated_text;
+  if (!targetText || !segment.source_text) {
+    return { success: false, error: "Missing source or target text" };
+  }
+
+  const nodeId = `translation:${segment.source_lang}:${segment.target_lang}:${segment._id}`;
+  const nodeLabel = `${segment.source_lang}→${segment.target_lang}: ${segment.source_text.slice(0, 50)}...`;
+
+  try {
+    // Upsert to graph_nodes collection
+    await app.mongo.db.collection("graph_nodes").updateOne(
+      { id: nodeId },
+      {
+        $set: {
+          id: nodeId,
+          kind: "translation_example",
+          label: nodeLabel,
+          data: {
+            source_text: segment.source_text,
+            target_text: targetText,
+            source_lang: segment.source_lang,
+            target_lang: segment.target_lang,
+            document_id: segment.document_id,
+            domain: segment.domain,
+            content_type: segment.content_type,
+            quality: "approved",
+            segment_id: segment._id?.toString(),
+          },
+          updated_at: new Date(),
+        },
+        $setOnInsert: {
+          created_at: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    // Also create edge
+    await app.mongo.db.collection("graph_edges").updateOne(
+      { id: `translation:doc:${segment.document_id}:${segment._id}` },
+      {
+        $set: {
+          id: `translation:doc:${segment.document_id}:${segment._id}`,
+          source: segment.document_id,
+          target: nodeId,
+          kind: "has_translation",
+          data: {
+            source_lang: segment.source_lang,
+            target_lang: segment.target_lang,
+          },
+          updated_at: new Date(),
+        },
+        $setOnInsert: {
+          created_at: new Date(),
+        },
+      },
+      { upsert: true }
+    );
+
+    return { success: true };
+  } catch (err) {
+    console.error("Failed to upsert translation to graph memory:", err);
+    return { success: false, error: String(err) };
+  }
+}
+
+/**
+ * Query graph memory for similar translation examples (zero-shot context)
+ */
+async function queryTranslationExamples(
+  app: FastifyInstance,
+  sourceText: string,
+  sourceLang: string,
+  targetLang: string,
+  limit: number = 5
+): Promise<Array<{ source_text: string; target_text: string; similarity?: number }>> {
+  try {
+    // Query by language pair and text similarity
+    // For now, use regex-based partial match; later can use vector similarity
+    const nodes = await app.mongo.db
+      .collection("graph_nodes")
+      .find({
+        kind: "translation_example",
+        "data.source_lang": sourceLang,
+        "data.target_lang": targetLang,
+        $or: [
+          { "data.source_text": { $regex: sourceText.slice(0, 30), $options: "i" } },
+          { "data.domain": { $exists: true } },
+        ],
+      })
+      .limit(limit)
+      .toArray();
+
+    return nodes.map((n) => {
+      const data = n.data as Record<string, unknown> | undefined;
+      return {
+        source_text: String(data?.source_text ?? ""),
+        target_text: String(data?.target_text ?? ""),
+        similarity: data?.domain ? 0.5 : 0.3,
+      };
+    });
+  } catch (err) {
+    console.error("Failed to query translation examples:", err);
+    return [];
+  }
 }
 
 export const translationRoutes: FastifyPluginAsync = async (app) => {
@@ -202,6 +318,16 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       }
     );
 
+    // Upsert approved translation to graph memory for zero-shot learning
+    let graphMemoryResult: { success: boolean; error?: string } | undefined;
+    if (newStatus === "approved") {
+      graphMemoryResult = await upsertTranslationToGraphMemory(
+        app,
+        segment as TranslationSegment,
+        label.corrected_text
+      );
+    }
+
     return {
       ok: true,
       label: {
@@ -210,6 +336,7 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
         _id: undefined,
       },
       new_status: newStatus,
+      graph_memory: graphMemoryResult,
     };
   });
 
@@ -479,6 +606,76 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
         id: j._id.toString(),
         _id: undefined,
       })),
+    };
+  });
+
+  /**
+   * Get translation examples from graph memory (zero-shot context)
+   * GET /v1/translations/examples
+   * Used by MT pipeline to get few-shot examples for better translations
+   */
+  app.get("/translations/examples", async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>;
+    const sourceText = query.source_text || "";
+    const sourceLang = query.source_lang || "en";
+    const targetLang = query.target_lang || "";
+    const limit = Math.min(10, Math.max(1, Number(query.limit ?? 5)));
+
+    if (!targetLang) {
+      return reply.status(400).send({ error: "target_lang is required" });
+    }
+
+    const examples = await queryTranslationExamples(
+      app,
+      sourceText,
+      sourceLang,
+      targetLang,
+      limit
+    );
+
+    return {
+      source_lang: sourceLang,
+      target_lang: targetLang,
+      examples,
+      count: examples.length,
+    };
+  });
+
+  /**
+   * Get graph memory stats for translations
+   * GET /v1/translations/graph-stats
+   */
+  app.get("/translations/graph-stats", async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>;
+
+    const filter: Record<string, unknown> = { kind: "translation_example" };
+    if (query.source_lang) filter["data.source_lang"] = query.source_lang;
+    if (query.target_lang) filter["data.target_lang"] = query.target_lang;
+
+    const totalNodes = await app.mongo.db.collection("graph_nodes").countDocuments(filter);
+
+    // Group by language pair
+    const byLanguagePair = await app.mongo.db
+      .collection("graph_nodes")
+      .aggregate([
+        { $match: filter },
+        {
+          $group: {
+            _id: {
+              source_lang: "$data.source_lang",
+              target_lang: "$data.target_lang",
+            },
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+
+    return {
+      total_translation_nodes: totalNodes,
+      by_language_pair: Object.fromEntries(
+        byLanguagePair.map((p) => [`${p._id.source_lang}→${p._id.target_lang}`, p.count])
+      ),
     };
   });
 };
