@@ -541,7 +541,8 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       {
         fullDocument: true,
         includeNav: true,
-        baseUrl: `/api/openplanner/v1/public/gardens/${garden_id}/html`,
+        // Include document ID so language selector navigates to the same document
+        baseUrl: `/api/openplanner/v1/public/gardens/${garden_id}/html/${doc._id}`,
         requestedLanguage,
         targetLanguages: garden.target_languages,
       }
