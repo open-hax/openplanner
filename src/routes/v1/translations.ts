@@ -459,6 +459,46 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   /**
+   * Create single translation segment
+   * POST /v1/translations/segments
+   */
+  app.post("/translations/segments", async (req, reply) => {
+    const body = req.body as Record<string, unknown>;
+
+    const doc: TranslationSegment = {
+      source_text: String(body.source_text || ""),
+      translated_text: String(body.translated_text || ""),
+      source_lang: String(body.source_lang || "en"),
+      target_lang: String(body.target_lang || ""),
+      document_id: String(body.document_id || ""),
+      segment_index: Number(body.segment_index ?? 0),
+      status: "pending",
+      garden_id: body.garden_id ? String(body.garden_id) : undefined,
+      mt_model: body.mt_model ? String(body.mt_model) : undefined,
+      confidence: body.confidence ? Number(body.confidence) : undefined,
+      domain: body.domain ? String(body.domain) : undefined,
+      content_type: body.content_type ? String(body.content_type) : undefined,
+      org_id: body.org_id ? String(body.org_id) : undefined,
+      project: body.project ? String(body.project) : undefined,
+      created_at: new Date(),
+      updated_at: new Date(),
+    };
+
+    // Validate required fields
+    if (!doc.source_text || !doc.translated_text || !doc.target_lang || !doc.document_id) {
+      return reply.status(400).send({ error: "Missing required fields: source_text, translated_text, target_lang, document_id" });
+    }
+
+    const result = await segmentsCollection.insertOne(doc);
+
+    return {
+      ok: true,
+      id: result.insertedId.toString(),
+      status: doc.status,
+    };
+  });
+
+  /**
    * Export SFT training data (JSONL)
    * GET /v1/translations/export/sft
    */
