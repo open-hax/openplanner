@@ -30,6 +30,7 @@ type CreateCmsDocumentPayload = {
   domain?: string;
   language?: string;
   source_path?: string | null;
+  visibility?: "internal" | "review" | "public" | "archived";
   metadata?: Record<string, unknown>;
 };
 
@@ -155,7 +156,7 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
       content,
       project: tenantId,
       kind: "docs",
-      visibility: "internal",
+      visibility: payload.visibility ?? "internal",
       source: "manual",
       sourcePath: payload.source_path ?? undefined,
       domain: payload.domain ?? "general",
@@ -184,6 +185,7 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
       ...existing,
       title: payload.title ?? existing.title,
       content: payload.content ?? existing.content,
+      visibility: payload.visibility ?? existing.visibility,
       sourcePath: payload.source_path ?? existing.sourcePath ?? undefined,
       domain: payload.domain ?? existing.domain ?? "general",
       language: payload.language ?? existing.language ?? "en",
