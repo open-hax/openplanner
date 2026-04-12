@@ -1,4 +1,5 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyInstance } from "fastify";
+import type { WithId, Collection } from "mongodb";
 import type { GardenDocument, EventDocument } from "../../lib/mongodb.js";
 
 interface PublicDocumentResponse {
@@ -39,6 +40,51 @@ function getAvailableLanguages(
     }
   }
   return Array.from(langs);
+}
+
+/**
+ * Find a document by ID or path within a garden
+ */
+async function findDocumentByIdOrPath(
+  eventsCollection: Collection<EventDocument>,
+  garden_id: string,
+  doc_id_or_path: string
+): Promise<WithId<EventDocument> | null> {
+  // First try exact doc_id match (UUID)
+  let doc = await eventsCollection.findOne({
+    _id: doc_id_or_path,
+    kind: "docs",
+    "extra.visibility": "public",
+    "extra.metadata.garden_publications.garden_id": garden_id,
+  });
+
+  // If not found, try path-based lookup against source_path
+  if (!doc) {
+    // Normalize the path: handle variations like "getting-started", "/getting-started", "getting-started.md"
+    const normalizedPath = doc_id_or_path.replace(/^\//, "").replace(/\.md$/, "");
+    
+    // Try to find document with matching source_path
+    // Match patterns like: /docs/getting-started.md, getting-started.md, /getting-started, etc.
+    doc = await eventsCollection.findOne({
+      kind: "docs",
+      "extra.visibility": "public",
+      "extra.metadata.garden_publications.garden_id": garden_id,
+      $or: [
+        // Exact match on normalized path
+        { "extra.source_path": `/${normalizedPath}.md` },
+        { "extra.source_path": `${normalizedPath}.md` },
+        { "extra.source_path": `/${normalizedPath}` },
+        { "extra.source_path": normalizedPath },
+        // Match filename at end of path
+        { "extra.source_path": { $regex: `/${normalizedPath}\\.md$` } },
+        { "extra.source_path": { $regex: `/${normalizedPath}$` } },
+        // Match slug in metadata
+        { "extra.metadata.slug": normalizedPath },
+      ],
+    });
+  }
+
+  return doc;
 }
 
 export const publicRoutes: FastifyPluginAsync = async (app) => {
@@ -164,7 +210,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
    */
   app.get("/public/gardens/:garden_id/documents/:doc_id", async (req, reply) => {
     const garden_id = String((req.params as { garden_id: string }).garden_id);
-    const doc_id = String((req.params as { doc_id: string }).doc_id);
+    const doc_id_or_path = String((req.params as { doc_id: string }).doc_id);
     const query = (req.query ?? {}) as Record<string, string | undefined>;
 
     const garden = await gardens.findOne({ garden_id, status: "active" });
@@ -174,13 +220,8 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
 
     const requestedLanguage = query.language ?? garden.default_language ?? "en";
 
-    // Find the document
-    const doc = await events.findOne({
-      _id: doc_id,
-      kind: "docs",
-      "extra.visibility": "public",
-      "extra.metadata.garden_publications.garden_id": garden_id,
-    });
+    // Find the document by ID or path
+    const doc = await findDocumentByIdOrPath(events, garden_id, doc_id_or_path);
 
     if (!doc) {
       return reply.status(404).send({ error: "document not found in this garden" });
@@ -204,7 +245,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     if (requestedLanguage !== docLanguage && availableLanguages.includes(requestedLanguage)) {
       // Look for translation in translation_segments collection
       const translation = await app.mongo.db.collection("translation_segments").findOne({
-        document_id: doc_id,
+        document_id: doc._id,
         garden_id,
         target_language: requestedLanguage,
         status: "approved",
@@ -224,7 +265,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const response: PublicDocumentResponse = {
-      doc_id: doc._id,
+      doc_id: String(doc._id),
       title: extra.title ?? "Untitled",
       content,
       language: servedLanguage,
@@ -365,10 +406,11 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
   /**
    * GET /v1/public/gardens/:garden_id/html/:doc_id
    * Render single document as themed HTML
+   * Supports both UUID doc_id and path-based lookups (e.g., /getting-started)
    */
   app.get("/public/gardens/:garden_id/html/:doc_id", async (req, reply) => {
     const garden_id = String((req.params as { garden_id: string }).garden_id);
-    const doc_id = String((req.params as { doc_id: string }).doc_id);
+    const doc_id_or_path = String((req.params as { doc_id: string }).doc_id);
 
     const { renderGardenPage } = await import("../../lib/garden-renderer.js");
 
@@ -377,12 +419,8 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: "garden not found or inactive" });
     }
 
-    const doc = await events.findOne({
-      _id: doc_id,
-      kind: "docs",
-      "extra.visibility": "public",
-      "extra.metadata.garden_publications.garden_id": garden_id,
-    });
+    // Find the document by ID or path
+    const doc = await findDocumentByIdOrPath(events, garden_id, doc_id_or_path);
 
     if (!doc) {
       return reply.status(404).send({ error: "document not found in this garden" });
