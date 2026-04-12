@@ -102,6 +102,15 @@ function selectWindowOffset(params: {
   return Math.min(totalRows - windowSize, slotStart);
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesNodeType(nodeId: string, nodeTypes: string[] | null): boolean {
+  if (!nodeTypes || nodeTypes.length === 0) return true;
+  return nodeTypes.some((nodeType) => nodeId.includes(`:${nodeType}:`) || nodeId.endsWith(`:${nodeType}`));
+}
+
 export const graphRoutes: FastifyPluginAsync = async (app) => {
   const graphViewCache = new Map<string, { expiresAt: number; value: unknown }>();
   const graphViewCacheTtlMs = 15_000;
@@ -144,10 +153,22 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       const nodeId = extra.node_id ?? doc.message ?? doc._id;
       nodeIds.add(nodeId);
       const layout = layoutById.get(nodeId);
+
+      const rawLabel = extra.label ?? extra.path ?? doc.message ?? "";
+      const preview = typeof extra.preview === "string" ? extra.preview : "";
+      let label = rawLabel;
+      if (!label && preview) {
+        label = preview.length > 80 ? preview.slice(0, 77) + "..." : preview;
+      }
+      if (!label) {
+        const parts = nodeId.split(":");
+        label = parts.length > 2 ? parts.slice(2).join(":").slice(0, 60) : nodeId.slice(0, 60);
+      }
+
       return {
         id: nodeId,
         kind: extra.node_kind ?? "unknown",
-        label: extra.label ?? extra.path ?? doc.message ?? nodeId,
+        label,
         lake: extra.lake ?? doc.project,
         nodeType: extra.node_type,
         data: {
@@ -1556,6 +1577,346 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         seeds: seedNodeIds.length,
         visited: visited.size,
         edges: traversedEdges.length,
+      },
+    };
+  });
+
+  app.post("/graph/memory", async (req: any, reply) => {
+    const q = req.body?.q;
+    const lakes = Array.isArray(req.body?.lakes) ? req.body.lakes : null;
+    const nodeTypes = Array.isArray(req.body?.nodeTypes) ? req.body.nodeTypes : null;
+    const k = Number(req.body?.k ?? 15);
+    const maxCost = Number(req.body?.maxCost ?? 2.0);
+    const maxNodes = Number(req.body?.maxNodes ?? 60);
+    const minSimilarity = Number(req.body?.minSimilarity ?? 0.55);
+    const minVectorSimilarity = Number(req.body?.minVectorSimilarity ?? 0.35);
+    const maxCandidates = Number(req.body?.maxCandidates ?? 10000);
+    const includeText = req.body?.includeText !== false;
+
+    if (!q || typeof q !== "string") {
+      return reply.status(400).send({ error: "q is required" });
+    }
+
+    const embeddingRuntime = (app as any).embeddingRuntime;
+    const embedModel = process.env.EMBED_PROVIDER_MODEL ?? "qwen3-embedding:0.6b";
+    const embeddingProvider = embeddingRuntime?.hot?.getEmbeddingFunctionForModel?.(embedModel);
+
+    if (!embeddingProvider) {
+      return reply.status(503).send({ error: "embedding function unavailable" });
+    }
+
+    const lakeRegexes = lakes?.map((lake: string) => new RegExp(`^${escapeRegex(lake)}:`)) ?? [];
+
+    let seedNodeIds: string[] = [];
+    let seedScoresMap = new Map<string, number>();
+    let vectorHitCount = 0;
+
+    try {
+      const [queryEmbedding] = await embeddingProvider.generate([q]);
+      if (queryEmbedding && Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
+        const vectorSearchLimit = Math.min(maxCandidates, Math.max(k * 4, 50));
+        const vectorSearchNumCandidates = Math.max(
+          vectorSearchLimit,
+          Math.min(maxCandidates, Math.max(vectorSearchLimit * 10, 200)),
+        );
+
+        try {
+          const rawVectorMatches = await app.mongo.graphNodeEmbeddings.aggregate([
+            {
+              $vectorSearch: {
+                index: "embedding_vector",
+                path: "embedding",
+                queryVector: queryEmbedding,
+                numCandidates: vectorSearchNumCandidates,
+                limit: vectorSearchLimit,
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                node_id: 1,
+                project: 1,
+                score: { $meta: "vectorSearchScore" },
+              },
+            },
+          ]).toArray() as Array<{ node_id?: string; project?: string; score?: number }>;
+
+          const scored = rawVectorMatches
+            .map((doc) => ({
+              nodeId: String(doc.node_id ?? ""),
+              score: typeof doc.score === "number" ? doc.score : Number.NEGATIVE_INFINITY,
+              project: String(doc.project ?? ""),
+            }))
+            .filter((doc) => doc.nodeId.length > 0)
+            .filter((doc) => doc.score >= minVectorSimilarity)
+            .filter((doc) => lakeRegexes.length === 0 || lakeRegexes.some((pattern: RegExp) => pattern.test(doc.nodeId)))
+            .filter((doc) => matchesNodeType(doc.nodeId, nodeTypes))
+            .sort((a, b) => b.score - a.score);
+
+          const topK = scored.slice(0, k);
+          vectorHitCount = scored.length;
+          seedNodeIds = topK.map((entry) => entry.nodeId);
+          for (const entry of topK) seedScoresMap.set(entry.nodeId, entry.score);
+        } catch (error) {
+          req.log.warn({ err: error }, "memory: native vector search unavailable, using fallback");
+
+          const embedFilter: Record<string, unknown> = { embedding: { $exists: true } };
+          if (lakeRegexes.length > 0) {
+            embedFilter.node_id = { $in: lakeRegexes };
+          }
+
+          const totalCandidates = await app.mongo.graphNodeEmbeddings.countDocuments(embedFilter);
+          const fetchLimit = Math.min(50000, Math.max(k, maxCandidates), totalCandidates);
+          const scored: Array<{ nodeId: string; score: number; project: string }> = [];
+
+          const vexxBaseUrl = process.env.VEXX_BASE_URL || "http://host.docker.internal:8787";
+          const vexxTimeoutMs = 30000;
+          const fetchBatchSize = 500;
+
+          const cursor = app.mongo.graphNodeEmbeddings.find(
+            embedFilter,
+            { projection: { node_id: 1, embedding: 1, project: 1 } },
+          ).limit(fetchLimit).batchSize(fetchBatchSize);
+
+          let done = false;
+          while (!done) {
+            const batchDocs: any[] = [];
+            for (let i = 0; i < fetchBatchSize; i += 1) {
+              const doc = await cursor.next();
+              if (doc === null) {
+                done = true;
+                break;
+              }
+              batchDocs.push(doc);
+            }
+
+            const validDocs = batchDocs.filter((doc: any) => {
+              const embedding = doc.embedding as number[];
+              return embedding && embedding.length === queryEmbedding.length;
+            });
+            if (validDocs.length === 0) continue;
+
+            const batchEmbeddings = validDocs.map((doc: any) => doc.embedding as number[]);
+
+            try {
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), vexxTimeoutMs);
+              const res = await fetch(`${vexxBaseUrl}/v1/cosine/matrix`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  left: [queryEmbedding],
+                  right: batchEmbeddings,
+                  device: "AUTO",
+                }),
+                signal: controller.signal,
+              });
+              clearTimeout(timeout);
+
+              if (res.ok) {
+                const payload = await res.json() as { matrix?: number[] };
+                const matrix = payload.matrix;
+                if (Array.isArray(matrix) && matrix.length === validDocs.length) {
+                  for (let i = 0; i < validDocs.length; i += 1) {
+                    const similarity = matrix[i]!;
+                    const doc = validDocs[i]!;
+                    const nodeId = String(doc.node_id ?? doc._id ?? "");
+                    if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
+                    scored.push({ nodeId, score: similarity, project: doc.project ?? "" });
+                  }
+                  continue;
+                }
+              }
+            } catch {
+              // Fall through to local cosine.
+            }
+
+            for (const doc of validDocs) {
+              const embedding = doc.embedding as number[];
+              let dot = 0;
+              let normA = 0;
+              let normB = 0;
+              for (let index = 0; index < queryEmbedding.length; index += 1) {
+                dot += queryEmbedding[index]! * embedding[index]!;
+                normA += queryEmbedding[index]! * queryEmbedding[index]!;
+                normB += embedding[index]! * embedding[index]!;
+              }
+              const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+              if (denominator === 0) continue;
+              const similarity = dot / denominator;
+              const nodeId = String(doc.node_id ?? doc._id ?? "");
+              if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
+              scored.push({ nodeId, score: similarity, project: doc.project ?? "" });
+            }
+          }
+
+          scored.sort((a, b) => b.score - a.score);
+          const topK = scored.slice(0, k);
+          vectorHitCount = scored.length;
+          seedNodeIds = topK.map((entry) => entry.nodeId);
+          for (const entry of topK) seedScoresMap.set(entry.nodeId, entry.score);
+        }
+      }
+    } catch (err) {
+      return reply.status(500).send({ error: "embedding generation failed", details: String(err) });
+    }
+
+    if (seedNodeIds.length === 0) {
+      return {
+        query: q,
+        clusters: [],
+        nodes: [],
+        edges: [],
+        stats: { vectorHits: vectorHitCount, seeds: 0, visited: 0, edges: 0 },
+      };
+    }
+
+    const semanticEdgeFilters: Array<Record<string, unknown>> = [
+      { similarity: { $gte: minSimilarity } },
+      {
+        $or: [
+          { source_node_id: { $in: seedNodeIds } },
+          { target_node_id: { $in: seedNodeIds } },
+        ],
+      },
+    ];
+
+    if (lakeRegexes.length > 0) {
+      semanticEdgeFilters.push({
+        $or: [
+          ...lakeRegexes.map((pattern: RegExp) => ({ source_node_id: pattern })),
+          ...lakeRegexes.map((pattern: RegExp) => ({ target_node_id: pattern })),
+        ],
+      });
+    }
+
+    const semanticEdges = await app.mongo.graphSemanticEdges.find({ $and: semanticEdgeFilters }).toArray();
+
+    const adjacency = new Map<string, Array<{ neighbor: string; similarity: number; cost: number }>>();
+    for (const edge of semanticEdges) {
+      const sourceId = edge.source_node_id;
+      const targetId = edge.target_node_id;
+      const sim = edge.similarity;
+      const cost = 1 - sim;
+
+      const sn = adjacency.get(sourceId) ?? [];
+      sn.push({ neighbor: targetId, similarity: sim, cost });
+      adjacency.set(sourceId, sn);
+
+      const tn = adjacency.get(targetId) ?? [];
+      tn.push({ neighbor: sourceId, similarity: sim, cost });
+      adjacency.set(targetId, tn);
+    }
+
+    const distances = new Map<string, number>();
+    const predecessors = new Map<string, { from: string; edge: { similarity: number } }>();
+    const visited = new Set<string>();
+    const pq: Array<{ nodeId: string; cost: number }> = [];
+
+    for (const nodeId of seedNodeIds) {
+      const sim = seedScoresMap.get(nodeId) ?? 0.5;
+      distances.set(nodeId, 0);
+      pq.push({ nodeId, cost: 0 });
+    }
+
+    while (pq.length > 0 && visited.size < maxNodes) {
+      pq.sort((a, b) => a.cost - b.cost);
+      const current = pq.shift()!;
+      if (visited.has(current.nodeId)) continue;
+      if (current.cost > maxCost) continue;
+      visited.add(current.nodeId);
+
+      const neighbors = adjacency.get(current.nodeId) ?? [];
+      for (const { neighbor, similarity, cost } of neighbors) {
+        if (visited.has(neighbor)) continue;
+        const newDist = current.cost + cost;
+        if (newDist > maxCost) continue;
+        const existingDist = distances.get(neighbor);
+        if (existingDist === undefined || newDist < existingDist) {
+          distances.set(neighbor, newDist);
+          predecessors.set(neighbor, { from: current.nodeId, edge: { similarity } });
+          pq.push({ nodeId: neighbor, cost: newDist });
+        }
+      }
+    }
+
+    const traversedEdges: Array<{ source: string; target: string; similarity: number }> = [];
+    for (const [nodeId, pred] of predecessors) {
+      traversedEdges.push({ source: pred.from, target: nodeId, similarity: pred.edge.similarity });
+    }
+
+    const lakeCluster = (id: string): string => {
+      for (const lake of ["devel", "web", "bluesky", "knoxx-session"]) {
+        if (id.startsWith(lake + ":")) return lake;
+      }
+      return "other";
+    };
+
+    const nodeTypeOf = (id: string): string => {
+      const parts = id.split(":");
+      return parts.length >= 2 ? parts[1] : "unknown";
+    };
+
+    const clusterMap = new Map<string, Array<typeof resultNodes extends (infer T)[] ? T : never>>();
+    const resultNodes = [...visited].map(id => {
+      const traversalCost = distances.get(id) ?? 0;
+      const vectorScore = seedScoresMap.get(id) ?? 0;
+      const score = vectorScore > 0 ? vectorScore : 1 / (1 + traversalCost);
+      return {
+        id,
+        score,
+        traversalCost,
+        isSeed: seedScoresMap.has(id),
+        lake: lakeCluster(id),
+        nodeType: nodeTypeOf(id),
+      };
+    }).sort((a, b) => b.score - a.score).slice(0, maxNodes);
+
+    for (const node of resultNodes) {
+      const clusterKey = node.lake;
+      if (!clusterMap.has(clusterKey)) clusterMap.set(clusterKey, []);
+      clusterMap.get(clusterKey)!.push(node);
+    }
+
+    let textMap: Map<string, string> | null = null;
+    if (includeText && resultNodes.length > 0) {
+      textMap = new Map();
+      const sample = resultNodes.slice(0, 20);
+      const nodeDocs = await app.mongo.events.find(
+        { id: { $in: sample.map((n: any) => n.id) } },
+        { projection: { id: 1, text: 1, "extra.preview": 1 } }
+      ).toArray();
+      for (const doc of nodeDocs) {
+        const txt = doc.text || (doc.extra as any)?.preview || "";
+        if (txt) textMap.set(doc.id, typeof txt === "string" ? txt.slice(0, 300) : String(txt).slice(0, 300));
+      }
+    }
+
+    const clusters = [...clusterMap.entries()].map(([lake, nodes]) => ({
+      lake,
+      count: nodes.length,
+      topNodes: nodes.slice(0, 5).map((n: any) => ({
+        id: n.id,
+        score: n.score,
+        nodeType: n.nodeType,
+        text: textMap?.get(n.id) ?? null,
+      })),
+    })).sort((a, b) => b.count - a.count);
+
+    return {
+      query: q,
+      clusters,
+      nodes: resultNodes.map((n: any) => ({
+        ...n,
+        text: textMap?.get(n.id) ?? null,
+      })),
+      edges: traversedEdges,
+      stats: {
+        vectorHits: vectorHitCount,
+        seeds: seedNodeIds.length,
+        visited: visited.size,
+        edges: traversedEdges.length,
+        clusters: clusters.length,
       },
     };
   });
