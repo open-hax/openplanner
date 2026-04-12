@@ -158,23 +158,17 @@ async function translateText(
     headers["Authorization"] = `Bearer ${MT_PROVIDER_API_KEY}`;
   }
 
-  // Build prompt - simple and direct works best for GLM translation
+  // Build prompt - use format that works best for GLM models
   let prompt: string;
 
   if (fewShotExamples && fewShotExamples.length > 0) {
     const examplesSection = fewShotExamples
-      .map((ex) => `${ex.source_text.slice(0, 150)}\n---\n${ex.target_text.slice(0, 150)}`)
+      .map((ex) => `${ex.source_text}\n---\n${ex.target_text}`)
       .join("\n\n");
 
-    prompt = `Translate to ${targetLang}:
-
-${examplesSection}
-
-${text}`;
+    prompt = `Examples:\n${examplesSection}\n\n${targetLang} translation:\n${text}`;
   } else {
-    prompt = `Translate to ${targetLang}:
-
-${text}`;
+    prompt = `${targetLang} translation of:\n${text}`;
   }
 
   const response = await fetch(`${MT_PROVIDER_URL}/v1/chat/completions`, {
