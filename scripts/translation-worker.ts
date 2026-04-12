@@ -142,6 +142,57 @@ function splitIntoSegments(text: string, maxChars: number = SEGMENT_SIZE): strin
 }
 
 /**
+ * Extract clean translation from model output that may contain reasoning
+ */
+function extractTranslation(rawContent: string, _sourceText: string): string {
+  // If the content is short and doesn't have reasoning patterns, return as-is
+  if (rawContent.length < 100 && !rawContent.includes("\n")) {
+    return rawContent;
+  }
+
+  // Common reasoning patterns to strip
+  const reasoningPatterns = [
+    /^We are translating.*?\n/i,
+    /^The text is:.*?\n/i,
+    /^Let's break it down:.*?\n/i,
+    /^Let me (think|analyze|break).*?\n/i,
+    /^Putting it together:.*?\n/i,
+    /^Option \d+:.*?\n/i,
+    /^Alternative.*?:\n/i,
+    /^However, note that.*?\n/i,
+    /^Considering the context.*?\n/i,
+    /^Final translation:.*?\n/i,
+    /^This (uses|translates|is).*?\n/i,
+    /^We can also (say|use).*?\n/i,
+  ];
+
+  let cleaned = rawContent;
+
+  // Apply each pattern to strip reasoning lines
+  for (const pattern of reasoningPatterns) {
+    cleaned = cleaned.replace(pattern, "");
+  }
+
+  // If there are multiple "Option N:" sections, take the last one (usually the final answer)
+  const optionMatches = cleaned.split(/Option \d+:\s*/i);
+  if (optionMatches.length > 1) {
+    // Take the last option, which is typically the final refined answer
+    cleaned = optionMatches[optionMatches.length - 1].trim();
+  }
+
+  // Strip leading/trailing quotes if the model added them
+  if ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith('"') && cleaned.endsWith('"'))) {
+    cleaned = cleaned.slice(1, -1);
+  }
+
+  // Remove multiple consecutive blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+
+  return cleaned;
+}
+
+/**
  * Call MT service to translate text
  */
 async function translateText(
@@ -179,6 +230,10 @@ async function translateText(
       model: MT_PROVIDER_MODEL,
       messages: [
         {
+          role: "system",
+          content: "You are a professional translator. Translate the given text accurately and naturally. Output ONLY the translation. Do not include explanations, reasoning, alternatives, or any other commentary. Do not prefix with 'Translation:' or similar. Just the translated text.",
+        },
+        {
           role: "user",
           content: prompt,
         },
@@ -198,12 +253,15 @@ async function translateText(
     choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
   };
 
-  // GLM models reason first, then output translation in content
-  // reasoning_content contains the thinking process, content has the final answer
-  const translatedText =
-    data.choices?.[0]?.message?.content?.trim() ||
-    data.choices?.[0]?.message?.reasoning_content?.trim() ||
-    "";
+  // GLM models may include reasoning in content - need to extract just the translation
+  let rawContent = data.choices?.[0]?.message?.content?.trim() || "";
+
+  // Strip reasoning/thinking patterns that models sometimes include
+  // Common patterns: "We are translating...", "Let's break it down", etc.
+  // Also strip multiple "Option N:" alternatives, keeping only the final one
+  const cleanTranslation = extractTranslation(rawContent, text);
+
+  const translatedText = cleanTranslation || rawContent;
 
   return {
     translated_text: translatedText,
