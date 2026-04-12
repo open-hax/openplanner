@@ -6,9 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
-    "dev": "tsc -w",
-    "translation-worker": "node --import tsx scripts/translation-worker.ts",
-    "translation-worker:dist": "node dist/scripts/translation-worker.js"
+    "dev": "tsc -w"
   },
   "dependencies": {
     "@fastify/multipart": "^8.2.0",

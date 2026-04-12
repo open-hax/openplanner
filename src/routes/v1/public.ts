@@ -33,14 +33,10 @@ function getAvailableLanguages(
   docLang: string,
   gardenPubs: Array<Record<string, unknown>>
 ): string[] {
-  const langs = new Set<string>([docLang]);
-  const thisPub = gardenPubs[0];
-  if (thisPub?.translated_languages) {
-    for (const lang of thisPub.translated_languages as string[]) {
-      langs.add(lang);
-    }
-  }
-  return Array.from(langs);
+  // Start with just the document's source language
+  // Note: We don't trust translated_languages from metadata anymore - 
+  // actual availability is determined by checking translation_segments collection
+  return [docLang];
 }
 
 /**
@@ -232,20 +228,21 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     const metadata = extra.metadata ?? {};
     const gardenPubs = (metadata.garden_publications as Array<Record<string, unknown>>) ?? [];
     const thisPub = gardenPubs.find((p) => p.garden_id === garden_id) ?? {};
-    const availableLanguages = getAvailableLanguages(
-      garden.target_languages ?? [],
-      extra.language ?? "en",
-      gardenPubs
-    );
-
+    
     // Check if we need to serve a translation
     const docLanguage = extra.language ?? "en";
+    
+    // Check actual translation availability from translation_segments collection
+    const translationLangs = await app.mongo.db.collection("translation_segments")
+      .distinct("target_lang", { document_id: doc._id, garden_id });
+    const actualAvailableLanguages = [docLanguage, ...translationLangs];
+
     // Content is in doc.text (from events collection), not extra.content
     let content = doc.text ?? extra.content ?? "";
     let servedLanguage = docLanguage;
     let translationStatus: "pending" | "in_review" | "approved" | "rejected" | undefined;
 
-    if (requestedLanguage !== docLanguage && availableLanguages.includes(requestedLanguage)) {
+    if (requestedLanguage !== docLanguage && actualAvailableLanguages.includes(requestedLanguage)) {
       // Look for translation in translation_segments collection
       // Note: We serve translations regardless of approval status so operators can preview.
       // The translation_status field indicates whether the content has been reviewed.
@@ -294,10 +291,10 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Build translations metadata
+    // Build translations metadata using actual segment availability
     const translations: { language: string; status: string }[] = [];
     for (const lang of garden.target_languages ?? []) {
-      const status = availableLanguages.includes(lang) ? "available" : "pending";
+      const status = translationLangs.includes(lang) ? "available" : "pending";
       translations.push({ language: lang, status });
     }
 
@@ -309,7 +306,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       source_path: extra.source_path ?? null,
       domain: extra.domain ?? null,
       published_at: (thisPub.published_at as string) ?? null,
-      available_languages: availableLanguages,
+      available_languages: actualAvailableLanguages,
       translations,
       translation_status: translationStatus,
     };
@@ -474,59 +471,65 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     let servedLanguage = docLanguage;
     let translationStatus: "pending" | "in_review" | "approved" | "rejected" | undefined;
 
-    // Handle translation lookup if a different language is requested
-    if (requestedLanguage !== docLanguage) {
-      const gardenPubs = (extra.metadata?.garden_publications as Array<Record<string, unknown>>) ?? [];
-      const availableLanguages = getAvailableLanguages(
-        garden.target_languages ?? [],
-        docLanguage,
-        gardenPubs
-      );
+    // Check actual translation availability from translation_segments collection
+    const translationLangs = await app.mongo.db.collection("translation_segments")
+      .distinct("target_lang", { document_id: doc._id, garden_id });
+    const docAvailableLanguages = [docLanguage, ...translationLangs];
 
-      if (availableLanguages.includes(requestedLanguage)) {
-        // Look for translation segments - aggregate all and sort by segment_index
-        const segments = await app.mongo.db.collection("translation_segments")
+    // Handle translation lookup if a different language is requested
+    if (requestedLanguage !== docLanguage && translationLangs.includes(requestedLanguage)) {
+      // Look for translation segments - aggregate all and sort by segment_index
+      const segments = await app.mongo.db.collection("translation_segments")
+        .find({
+          document_id: doc._id,
+          garden_id,
+          target_lang: requestedLanguage,
+        })
+        .sort({ segment_index: 1 })
+        .toArray();
+
+      let fallbackSegments: typeof segments = [];
+      if (segments.length === 0) {
+        fallbackSegments = await app.mongo.db.collection("translation_segments")
           .find({
             document_id: doc._id,
-            garden_id,
             target_lang: requestedLanguage,
           })
           .sort({ segment_index: 1 })
           .toArray();
+      }
 
-        let fallbackSegments: typeof segments = [];
-        if (segments.length === 0) {
-          fallbackSegments = await app.mongo.db.collection("translation_segments")
-            .find({
-              document_id: doc._id,
-              target_lang: requestedLanguage,
-            })
-            .sort({ segment_index: 1 })
-            .toArray();
-        }
+      const allSegments = segments.length > 0 ? segments : fallbackSegments;
 
-        const allSegments = segments.length > 0 ? segments : fallbackSegments;
-
-        if (allSegments.length > 0 && allSegments[0].translated_text) {
-          // Concatenate all translated segments
-          content = allSegments
-            .map((s) => s.translated_text as string)
-            .filter(Boolean)
-            .join("\n\n");
-          servedLanguage = requestedLanguage;
-          // Use the most restrictive status from all segments
-          const statuses = allSegments.map((s) => s.status as string);
-          if (statuses.includes("rejected")) {
-            translationStatus = "rejected";
-          } else if (statuses.includes("pending")) {
-            translationStatus = "pending";
-          } else if (statuses.includes("in_review")) {
-            translationStatus = "in_review";
-          } else {
-            translationStatus = "approved";
-          }
+      if (allSegments.length > 0 && allSegments[0].translated_text) {
+        // Concatenate all translated segments
+        content = allSegments
+          .map((s) => s.translated_text as string)
+          .filter(Boolean)
+          .join("\n\n");
+        servedLanguage = requestedLanguage;
+        // Use the most restrictive status from all segments
+        const statuses = allSegments.map((s) => s.status as string);
+        if (statuses.includes("rejected")) {
+          translationStatus = "rejected";
+        } else if (statuses.includes("pending")) {
+          translationStatus = "pending";
+        } else if (statuses.includes("in_review")) {
+          translationStatus = "in_review";
+        } else {
+          translationStatus = "approved";
         }
       }
+    }
+
+    // Build translations metadata for the dropdown
+    const translationsMeta: { language: string; status: string }[] = [];
+    for (const lang of garden.target_languages ?? []) {
+      const hasSegments = translationLangs.includes(lang);
+      translationsMeta.push({ 
+        language: lang, 
+        status: hasSegments ? "available" : "pending" 
+      });
     }
 
     const html = await renderGardenPage(
@@ -537,6 +540,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         source_path: extra.source_path,
         language: servedLanguage,
         translationStatus,
+        availableLanguages: docAvailableLanguages,
       },
       {
         fullDocument: true,
@@ -545,6 +549,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         baseUrl: `/api/openplanner/v1/public/gardens/${garden_id}/html/${doc._id}`,
         requestedLanguage,
         targetLanguages: garden.target_languages,
+        translations: translationsMeta,
       }
     );
 

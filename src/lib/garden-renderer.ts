@@ -21,6 +21,8 @@ export interface GardenRenderOptions {
   requestedLanguage?: string;
   /** Available target languages for this garden */
   targetLanguages?: string[];
+  /** Languages that have translations available with their status */
+  translations?: { language: string; status: string }[];
 }
 
 export interface GardenDocumentInput {
@@ -29,6 +31,8 @@ export interface GardenDocumentInput {
   source_path?: string | null;
   language?: string;
   translationStatus?: "pending" | "in_review" | "approved" | "rejected";
+  /** Available languages including the source language */
+  availableLanguages?: string[];
 }
 
 // Shiki theme mapping
@@ -319,7 +323,9 @@ function renderLanguageSelector(
   currentLanguage: string,
   defaultLanguage: string,
   targetLanguages: string[] | undefined,
-  baseUrl: string
+  baseUrl: string,
+  availableLanguages?: string[],
+  translations?: { language: string; status: string }[]
 ): string {
   if (!targetLanguages || targetLanguages.length === 0) {
     return "";
@@ -341,11 +347,29 @@ function renderLanguageSelector(
     it: "Italiano",
   };
 
+  const translationStatus = new Map((translations ?? []).map(t => [t.language, t.status]));
+  const hasTranslation = (lang: string) => (availableLanguages ?? []).includes(lang);
+
   const options = uniqueLanguages.map(lang => {
     const isSelected = lang === currentLanguage;
     const selectedAttr = isSelected ? ' selected' : '';
     const name = languageNames[lang] ?? lang;
-    return `<option value="${lang}"${selectedAttr}>${name}</option>`;
+    const isAvailable = hasTranslation(lang);
+    const status = translationStatus.get(lang);
+    
+    // Show status indicator
+    let indicator = '';
+    if (lang !== defaultLanguage) {
+      if (isAvailable && status === 'available') {
+        indicator = ' ✓'; // Translation available
+      } else if (isAvailable) {
+        indicator = ` (${status})`; // Has segments but not fully ready
+      } else {
+        indicator = ' (pending)'; // Not yet translated
+      }
+    }
+    
+    return `<option value="${lang}"${selectedAttr}>${name}${indicator}</option>`;
   }).join("");
 
   return `
@@ -374,7 +398,9 @@ export async function renderGardenPage(
     document.language ?? "en",
     garden.default_language ?? "en",
     options.targetLanguages,
-    options.baseUrl ?? `/gardens/${garden.garden_id}`
+    options.baseUrl ?? `/gardens/${garden.garden_id}`,
+    document.availableLanguages,
+    options.translations
   );
 
   if (!options.fullDocument) {
