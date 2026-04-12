@@ -47,6 +47,82 @@ export const migrations: Migration[] = [
       await perceptionEvents.createIndex({ "signal.author.did": 1, createdAt: -1 });
     },
   },
+  {
+    id: "003_tenant_policies",
+    name: "tenant_policies",
+    description: "Add tenant_policies collection for multi-tenant control plane",
+    up: async (ctx) => {
+      const tenantPolicies = ctx.mongo.db.collection("tenant_policies");
+      await tenantPolicies.createIndex({ tenant_id: 1 }, { unique: true });
+      await tenantPolicies.createIndex({ created_at: -1 });
+    },
+  },
+  {
+    id: "004_model_profiles",
+    name: "model_profiles",
+    description: "Add model_profiles collection for per-tenant model configuration",
+    up: async (ctx) => {
+      const modelProfiles = ctx.mongo.db.collection("model_profiles");
+      await modelProfiles.createIndex({ profile_id: 1 }, { unique: true });
+      await modelProfiles.createIndex({ tenant_id: 1 });
+      await modelProfiles.createIndex({ is_default: 1 });
+    },
+  },
+  {
+    id: "005_tenants_enhanced",
+    name: "tenants_enhanced",
+    description: "Add status, isolation_mode, and reference fields to tenants",
+    up: async (ctx) => {
+      const tenants = ctx.mongo.db.collection("tenants");
+      
+      // Add indexes
+      await tenants.createIndex({ slug: 1 }, { unique: true, sparse: true });
+      await tenants.createIndex({ status: 1 });
+      
+      // Backfill default values for existing tenants
+      await tenants.updateMany(
+        { status: { $exists: false } },
+        { $set: { status: "active", isolation_mode: "shared", updated_at: new Date() } }
+      );
+    },
+  },
+  {
+    id: "006_events_tenant_id",
+    name: "events_tenant_id",
+    description: "Add tenant_id to events collection, backfill from project field",
+    up: async (ctx) => {
+      const events = ctx.mongo.db.collection("events");
+      
+      // Add index
+      await events.createIndex({ tenant_id: 1 });
+      await events.createIndex({ tenant_id: 1, kind: 1 });
+      
+      // Backfill tenant_id from project (project acts as tenant surrogate)
+      // Only for documents (kind: docs, code, config, data)
+      const documentKinds = ["docs", "code", "config", "data"];
+      await events.updateMany(
+        { kind: { $in: documentKinds }, tenant_id: { $exists: false }, project: { $ne: null } },
+        { $set: { tenant_id: "$project" } }
+      );
+      
+      // For other events, set tenant_id to 'default'
+      await events.updateMany(
+        { tenant_id: { $exists: false } },
+        { $set: { tenant_id: "default" } }
+      );
+    },
+  },
+  {
+    id: "007_audit_log",
+    name: "audit_log",
+    description: "Add audit_log collection for tenant-scoped action logging",
+    up: async (ctx) => {
+      const auditLog = ctx.mongo.db.collection("audit_log");
+      await auditLog.createIndex({ tenant_id: 1, ts: -1 });
+      await auditLog.createIndex({ user_id: 1, ts: -1 });
+      await auditLog.createIndex({ action: 1, ts: -1 });
+    },
+  },
 ];
 
 export async function loadAppliedMigrations(dataDir: string): Promise<Set<string>> {
