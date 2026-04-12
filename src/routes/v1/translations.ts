@@ -671,6 +671,68 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
   });
 
   /**
+   * Get next queued translation job
+   * GET /v1/translations/jobs/next
+   * Used by translation agent to fetch work
+   */
+  app.get("/translations/jobs/next", async (req, reply) => {
+    const jobsCollection = app.mongo.db.collection("translation_jobs");
+    const job = await jobsCollection.findOne(
+      { status: "queued" },
+      { sort: { created_at: 1 } }
+    );
+
+    if (!job) {
+      return { job: null };
+    }
+
+    return {
+      job: {
+        ...job,
+        id: job._id.toString(),
+        _id: undefined,
+      },
+    };
+  });
+
+  /**
+   * Update translation job status
+   * POST /v1/translations/jobs/:id/status
+   * Used by translation agent to mark jobs processing/complete/failed
+   */
+  app.post("/translations/jobs/:id/status", async (req, reply) => {
+    const jobId = (req.params as { id: string }).id;
+    const body = req.body as { status: string; error?: string };
+
+    if (!["processing", "complete", "failed"].includes(body.status)) {
+      return reply.status(400).send({ error: "Invalid status. Must be: processing, complete, or failed" });
+    }
+
+    const jobsCollection = app.mongo.db.collection("translation_jobs");
+    const update: Record<string, unknown> = {
+      status: body.status,
+    };
+
+    if (body.status === "processing") {
+      update.started_at = new Date();
+    } else if (body.status === "complete" || body.status === "failed") {
+      update.completed_at = new Date();
+      if (body.error) update.error = body.error;
+    }
+
+    const result = await jobsCollection.updateOne(
+      { _id: new ObjectId(jobId) },
+      { $set: update }
+    );
+
+    if (result.matchedCount === 0) {
+      return reply.status(404).send({ error: "Job not found" });
+    }
+
+    return { success: true, job_id: jobId, status: body.status };
+  });
+
+  /**
    * Get translation jobs status
    * GET /v1/translations/jobs
    */
