@@ -486,7 +486,7 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
                       {
                         $size: {
                           $filter: {
-                            input: "$labels",
+                            input: { $ifNull: ["$labels", []] },
                             as: "label",
                             cond: { $ne: ["$$label.corrected_text", null] },
                           },
