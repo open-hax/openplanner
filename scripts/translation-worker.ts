@@ -151,33 +151,29 @@ async function translateText(
 ): Promise<MtTranslateResponse> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    "Accept-Encoding": "identity", // Disable compression to avoid zlib issues
   };
 
   if (MT_PROVIDER_API_KEY) {
     headers["Authorization"] = `Bearer ${MT_PROVIDER_API_KEY}`;
   }
 
-  // Build prompt with few-shot examples if available
+  // Build prompt - simple and direct works best for GLM translation
   let prompt: string;
 
   if (fewShotExamples && fewShotExamples.length > 0) {
     const examplesSection = fewShotExamples
-      .map((ex, i) => `Example ${i + 1}:\nSource (${sourceLang}): ${ex.source_text.slice(0, 200)}...\nTarget (${targetLang}): ${ex.target_text.slice(0, 200)}...`)
+      .map((ex) => `${ex.source_text.slice(0, 150)}\n---\n${ex.target_text.slice(0, 150)}`)
       .join("\n\n");
 
-    prompt = `You are a professional translator. Translate the following text from ${sourceLang} to ${targetLang}. Preserve formatting, technical terms, and code examples.
+    prompt = `Translate to ${targetLang}:
 
-Here are some example translations for reference:
 ${examplesSection}
 
-Now translate this text:
-${text}
-
-Output only the translated text without any explanation.`;
+${text}`;
   } else {
-    prompt = `Translate the following text from ${sourceLang} to ${targetLang}. Preserve formatting, technical terms, and code examples. Output only the translated text without any explanation.
+    prompt = `Translate to ${targetLang}:
 
-Text to translate:
 ${text}`;
   }
 
@@ -192,7 +188,8 @@ ${text}`;
           content: prompt,
         },
       ],
-      max_tokens: Math.max(100, Math.ceil(text.length * 2)),
+      // GLM models reason first, then output. Need extra tokens for reasoning.
+      max_tokens: Math.max(500, Math.ceil(text.length * 1.5)),
       temperature: 0.3,
     }),
   });
@@ -203,10 +200,15 @@ ${text}`;
   }
 
   const data = await response.json() as {
-    choices?: Array<{ message?: { content?: string } }>;
+    choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
   };
 
-  const translatedText = data.choices?.[0]?.message?.content?.trim() ?? "";
+  // GLM models reason first, then output translation in content
+  // reasoning_content contains the thinking process, content has the final answer
+  const translatedText =
+    data.choices?.[0]?.message?.content?.trim() ||
+    data.choices?.[0]?.message?.reasoning_content?.trim() ||
+    "";
 
   return {
     translated_text: translatedText,

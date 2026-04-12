@@ -556,33 +556,40 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const targetLangs = (body.target_languages as string[]) || ["es", "de"];
+    const gardenId = body.garden_id as string | undefined;
     const text = String(document.text || "");
 
     if (!text.trim()) {
       return reply.status(400).send({ error: "Document has no content to translate" });
     }
 
-    // Create translation job
-    const job = {
-      document_id: documentId,
-      project: document.project,
-      source_lang: "en",
-      target_languages: targetLangs,
-      status: "queued",
-      created_at: new Date(),
-    };
-
-    // Insert into jobs collection (or trigger MT pipeline)
+    // Create one job per target language (matches CMS behavior)
     const jobsCollection = app.mongo.db.collection("translation_jobs");
-    const result = await jobsCollection.insertOne(job);
+    const jobIds: string[] = [];
+
+    for (const targetLang of targetLangs) {
+      const job = {
+        document_id: documentId,
+        garden_id: gardenId,
+        project: document.project,
+        source_lang: "en",
+        target_language: targetLang, // Singular, matching worker expectation
+        status: "queued",
+        created_at: new Date(),
+      };
+
+      const result = await jobsCollection.insertOne(job);
+      jobIds.push(result.insertedId.toString());
+    }
 
     return {
       ok: true,
-      job_id: result.insertedId.toString(),
+      job_id: jobIds[0],
+      job_ids: jobIds,
       document_id: documentId,
       target_languages: targetLangs,
       status: "queued",
-      message: "Translation job created. MT pipeline will process it.",
+      message: "Translation job(s) created. MT pipeline will process them.",
     };
   });
 
