@@ -39,6 +39,7 @@ interface TranslationSegment {
   source_lang: string;
   target_lang: string;
   document_id: string;
+  garden_id?: string;
   segment_index: number;
   status: "pending" | "in_review" | "approved" | "rejected";
   mt_model?: string;
@@ -248,6 +249,43 @@ async function getFewShotExamples(
 }
 
 /**
+ * Update garden publication metadata after successful translation
+ */
+async function updateGardenPublicationMetadata(
+  eventsCollection: Collection<DocumentEvent>,
+  documentId: string,
+  gardenId: string,
+  targetLang: string
+): Promise<void> {
+  try {
+    // Find the document and update the garden_publications entry
+    const result = await eventsCollection.updateOne(
+      {
+        _id: documentId,
+        "extra.metadata.garden_publications.garden_id": gardenId,
+      },
+      {
+        $addToSet: {
+          "extra.metadata.garden_publications.$.translated_languages": targetLang,
+        },
+        $set: {
+          "extra.metadata.garden_publications.$.translation_status": "partial",
+          "extra.metadata.garden_publications.$.translation_updated_at": new Date(),
+        },
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      console.log(`[translation-worker] Updated publication metadata for ${documentId} in garden ${gardenId}: added ${targetLang}`);
+    } else {
+      console.warn(`[translation-worker] No publication metadata updated for ${documentId} in garden ${gardenId}`);
+    }
+  } catch (err) {
+    console.error(`[translation-worker] Failed to update publication metadata for ${documentId}:`, err);
+  }
+}
+
+/**
  * Process a single translation job
  */
 async function processJob(
@@ -322,6 +360,7 @@ async function processJob(
           source_lang: job.source_lang,
           target_lang: job.target_language,
           document_id: job.document_id,
+          garden_id: job.garden_id,
           segment_index: i,
           status: "pending",
           mt_model: MT_PROVIDER_MODEL,
@@ -342,6 +381,7 @@ async function processJob(
           source_lang: job.source_lang,
           target_lang: job.target_language,
           document_id: job.document_id,
+          garden_id: job.garden_id,
           segment_index: i,
           status: "rejected",
           mt_model: MT_PROVIDER_MODEL,
@@ -367,6 +407,16 @@ async function processJob(
         },
       }
     );
+
+    // Write back to garden publication metadata
+    if (job.garden_id) {
+      await updateGardenPublicationMetadata(
+        eventsCollection,
+        job.document_id,
+        job.garden_id,
+        job.target_language
+      );
+    }
 
     console.log(`[translation-worker] Job ${job._id} complete: ${translatedSegments.length} segments translated`);
   } catch (error) {
@@ -415,6 +465,7 @@ async function run(): Promise<void> {
     await segmentsCollection.createIndex({ document_id: 1, segment_index: 1 });
     await segmentsCollection.createIndex({ status: 1 });
     await segmentsCollection.createIndex({ target_lang: 1 });
+    await segmentsCollection.createIndex({ garden_id: 1 });
 
     console.log("[translation-worker] Starting poll loop...");
 

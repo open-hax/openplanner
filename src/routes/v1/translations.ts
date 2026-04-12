@@ -13,6 +13,7 @@ interface TranslationSegment {
   source_lang: string;
   target_lang: string;
   document_id: string;
+  garden_id?: string;
   segment_index: number;
   status: "pending" | "in_review" | "approved" | "rejected";
   mt_model?: string;
@@ -171,6 +172,7 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
   await segmentsCollection.createIndex({ document_id: 1, segment_index: 1 });
   await segmentsCollection.createIndex({ status: 1 });
   await segmentsCollection.createIndex({ target_lang: 1 });
+  await segmentsCollection.createIndex({ garden_id: 1 });
   await segmentsCollection.createIndex({ org_id: 1 });
   await labelsCollection.createIndex({ segment_id: 1, created_at: -1 });
 
@@ -203,12 +205,37 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
 
     const total = await segmentsCollection.countDocuments(filter);
 
-    // Return formatted response
+    // Fetch label counts for each segment
+    const segmentIds = segments.map((s) => s._id.toString());
+    const labelCounts = await labelsCollection
+      .aggregate<{ _id: string; count: number }>([
+        { $match: { segment_id: { $in: segmentIds } } },
+        { $group: { _id: "$segment_id", count: { $sum: 1 } } },
+      ])
+      .toArray();
+
+    const labelCountMap = new Map(labelCounts.map((l) => [l._id, l.count]));
+
+    // Return formatted response with label counts
     return {
       segments: segments.map((s) => ({
-        ...s,
         id: s._id.toString(),
-        _id: undefined,
+        source_text: s.source_text,
+        translated_text: s.translated_text,
+        source_lang: s.source_lang,
+        target_lang: s.target_lang,
+        document_id: s.document_id,
+        segment_index: s.segment_index,
+        status: s.status,
+        confidence: s.confidence ?? null,
+        mt_model: s.mt_model ?? null,
+        domain: s.domain ?? null,
+        garden_id: s.garden_id ?? null,
+        tenant_id: s.org_id ?? null,
+        org_id: s.org_id ?? null,
+        labels: [], // Labels not included in list; fetch segment detail for full labels
+        label_count: labelCountMap.get(s._id.toString()) ?? 0,
+        ts: s.created_at?.toISOString?.() ?? null,
       })),
       total,
       has_more: offset + segments.length < total,
@@ -239,15 +266,37 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       .sort({ created_at: -1 })
       .toArray();
 
+    // Return segment with normalized label timestamps (ts instead of created_at)
     return {
-      ...segment,
       id: segment._id.toString(),
-      _id: undefined,
+      source_text: segment.source_text,
+      translated_text: segment.translated_text,
+      source_lang: segment.source_lang,
+      target_lang: segment.target_lang,
+      document_id: segment.document_id,
+      segment_index: segment.segment_index,
+      status: segment.status,
+      confidence: segment.confidence ?? null,
+      mt_model: segment.mt_model ?? null,
+      domain: segment.domain ?? null,
+      garden_id: segment.garden_id ?? null,
+      tenant_id: segment.org_id ?? null,
+      org_id: segment.org_id ?? null,
       labels: labels.map((l) => ({
-        ...l,
         id: l._id.toString(),
-        _id: undefined,
+        segment_id: l.segment_id,
+        labeler_id: l.labeler_id,
+        labeler_email: l.labeler_email,
+        adequacy: l.adequacy,
+        fluency: l.fluency,
+        terminology: l.terminology,
+        risk: l.risk,
+        overall: l.overall,
+        corrected_text: l.corrected_text ?? null,
+        editor_notes: l.editor_notes ?? null,
+        ts: l.created_at?.toISOString?.() ?? null,
       })),
+      ts: segment.created_at?.toISOString?.() ?? null,
     };
   });
 
@@ -478,37 +527,51 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
             rejected: { $sum: { $cond: [{ $eq: ["$status", "rejected"] }, 1, 0] } },
             pending: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } },
             in_review: { $sum: { $cond: [{ $eq: ["$status", "in_review"] }, 1, 0] } },
-            with_corrections: {
-              $sum: {
-                $cond: [
-                  {
-                    $gt: [
-                      {
-                        $size: {
-                          $filter: {
-                            input: { $ifNull: ["$labels", []] },
-                            as: "label",
-                            cond: { $ne: ["$$label.corrected_text", null] },
-                          },
-                        },
-                      },
-                      0,
-                    ],
-                  },
-                  1,
-                  0,
-                ],
-              },
-            },
           },
         },
       ])
       .toArray();
 
+    // Get corrections count from labels collection
+    // First get all segment IDs for this project/org
+    const segmentIds = await segmentsCollection
+      .find(projectFilter, { projection: { _id: 1, target_lang: 1 } })
+      .toArray();
+
+    const segmentIdStrings = segmentIds.map((s) => s._id.toString());
+    const segmentLangMap = new Map(segmentIds.map((s) => [s._id.toString(), s.target_lang]));
+
+    // Count segments with corrections per language
+    const correctionsByLang = await labelsCollection
+      .aggregate<{ _id: string; count: number }>([
+        {
+          $match: {
+            segment_id: { $in: segmentIdStrings },
+            corrected_text: { $exists: true, $nin: [null, ""] },
+          },
+        },
+        {
+          $group: {
+            _id: "$segment_id",
+            count: { $sum: 1 },
+          },
+        },
+      ])
+      .toArray();
+
+    // Map corrections to languages
+    const correctionsByLanguage: Record<string, number> = {};
+    for (const c of correctionsByLang) {
+      const lang = segmentLangMap.get(c._id);
+      if (lang) {
+        correctionsByLanguage[lang] = (correctionsByLanguage[lang] ?? 0) + 1;
+      }
+    }
+
     // Get labeler statistics
     const labelers = await labelsCollection
       .aggregate([
-        { $match: projectFilter },
+        { $match: { segment_id: { $in: segmentIdStrings } } },
         {
           $group: {
             _id: "$labeler_email",
@@ -528,10 +591,24 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
+    // Build languages object with corrections
+    const languagesObj: Record<string, Record<string, number>> = {};
+    for (const lang of languages) {
+      languagesObj[lang._id] = {
+        total_segments: lang.total,
+        approved: lang.approved,
+        rejected: lang.rejected,
+        pending: lang.pending,
+        in_review: lang.in_review,
+        with_corrections: correctionsByLanguage[lang._id] ?? 0,
+        avg_labels_per_segment: 0, // Computed below if we have label data
+      };
+    }
+
     return {
       project: query.project || "all",
       generated_at: new Date().toISOString(),
-      languages: Object.fromEntries(languages.map((l) => [l._id, l])),
+      languages: languagesObj,
       labelers: labelers.map((l) => ({
         email: l._id,
         segments_labeled: l.segments_labeled,

@@ -244,12 +244,22 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
 
     if (requestedLanguage !== docLanguage && availableLanguages.includes(requestedLanguage)) {
       // Look for translation in translation_segments collection
-      const translation = await app.mongo.db.collection("translation_segments").findOne({
+      // First try with garden_id (worker now sets it), then fall back to document_id only
+      let translation = await app.mongo.db.collection("translation_segments").findOne({
         document_id: doc._id,
         garden_id,
-        target_language: requestedLanguage,
+        target_lang: requestedLanguage,
         status: "approved",
       });
+
+      // Fallback for legacy segments without garden_id
+      if (!translation) {
+        translation = await app.mongo.db.collection("translation_segments").findOne({
+          document_id: doc._id,
+          target_lang: requestedLanguage,
+          status: "approved",
+        });
+      }
 
       if (translation && translation.translated_text) {
         content = translation.translated_text as string;
