@@ -240,7 +240,8 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
 
     // Check if we need to serve a translation
     const docLanguage = extra.language ?? "en";
-    let content = extra.content ?? "";
+    // Content is in doc.text (from events collection), not extra.content
+    let content = doc.text ?? extra.content ?? "";
     let servedLanguage = docLanguage;
     let translationStatus: "pending" | "in_review" | "approved" | "rejected" | undefined;
 
@@ -248,25 +249,48 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       // Look for translation in translation_segments collection
       // Note: We serve translations regardless of approval status so operators can preview.
       // The translation_status field indicates whether the content has been reviewed.
-      // First try with garden_id (worker now sets it), then fall back to document_id only
-      let translation = await app.mongo.db.collection("translation_segments").findOne({
-        document_id: doc._id,
-        garden_id,
-        target_lang: requestedLanguage,
-      });
+      // Documents are split into multiple segments - aggregate all and sort by segment_index
+      const segments = await app.mongo.db.collection("translation_segments")
+        .find({
+          document_id: doc._id,
+          garden_id,
+          target_lang: requestedLanguage,
+        })
+        .sort({ segment_index: 1 })
+        .toArray();
 
       // Fallback for legacy segments without garden_id
-      if (!translation) {
-        translation = await app.mongo.db.collection("translation_segments").findOne({
-          document_id: doc._id,
-          target_lang: requestedLanguage,
-        });
+      let fallbackSegments: typeof segments = [];
+      if (segments.length === 0) {
+        fallbackSegments = await app.mongo.db.collection("translation_segments")
+          .find({
+            document_id: doc._id,
+            target_lang: requestedLanguage,
+          })
+          .sort({ segment_index: 1 })
+          .toArray();
       }
 
-      if (translation && translation.translated_text) {
-        content = translation.translated_text as string;
+      const allSegments = segments.length > 0 ? segments : fallbackSegments;
+      
+      if (allSegments.length > 0 && allSegments[0].translated_text) {
+        // Concatenate all translated segments
+        content = allSegments
+          .map((s) => s.translated_text as string)
+          .filter(Boolean)
+          .join("\n\n");
         servedLanguage = requestedLanguage;
-        translationStatus = (translation.status as "pending" | "in_review" | "approved" | "rejected") ?? "pending";
+        // Use the most restrictive status from all segments
+        const statuses = allSegments.map((s) => s.status as string);
+        if (statuses.includes("rejected")) {
+          translationStatus = "rejected";
+        } else if (statuses.includes("pending")) {
+          translationStatus = "pending";
+        } else if (statuses.includes("in_review")) {
+          translationStatus = "in_review";
+        } else {
+          translationStatus = "approved";
+        }
       }
     }
 
@@ -460,24 +484,47 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       );
 
       if (availableLanguages.includes(requestedLanguage)) {
-        // Look for translation (no approval filter - allow previewing pending translations)
-        let translation = await app.mongo.db.collection("translation_segments").findOne({
-          document_id: doc._id,
-          garden_id,
-          target_lang: requestedLanguage,
-        });
-
-        if (!translation) {
-          translation = await app.mongo.db.collection("translation_segments").findOne({
+        // Look for translation segments - aggregate all and sort by segment_index
+        const segments = await app.mongo.db.collection("translation_segments")
+          .find({
             document_id: doc._id,
+            garden_id,
             target_lang: requestedLanguage,
-          });
+          })
+          .sort({ segment_index: 1 })
+          .toArray();
+
+        let fallbackSegments: typeof segments = [];
+        if (segments.length === 0) {
+          fallbackSegments = await app.mongo.db.collection("translation_segments")
+            .find({
+              document_id: doc._id,
+              target_lang: requestedLanguage,
+            })
+            .sort({ segment_index: 1 })
+            .toArray();
         }
 
-        if (translation && translation.translated_text) {
-          content = translation.translated_text as string;
+        const allSegments = segments.length > 0 ? segments : fallbackSegments;
+
+        if (allSegments.length > 0 && allSegments[0].translated_text) {
+          // Concatenate all translated segments
+          content = allSegments
+            .map((s) => s.translated_text as string)
+            .filter(Boolean)
+            .join("\n\n");
           servedLanguage = requestedLanguage;
-          translationStatus = (translation.status as "pending" | "in_review" | "approved" | "rejected") ?? "pending";
+          // Use the most restrictive status from all segments
+          const statuses = allSegments.map((s) => s.status as string);
+          if (statuses.includes("rejected")) {
+            translationStatus = "rejected";
+          } else if (statuses.includes("pending")) {
+            translationStatus = "pending";
+          } else if (statuses.includes("in_review")) {
+            translationStatus = "in_review";
+          } else {
+            translationStatus = "approved";
+          }
         }
       }
     }
