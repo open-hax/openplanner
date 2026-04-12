@@ -12,6 +12,7 @@ interface PublicDocumentResponse {
   published_at: string | null;
   available_languages: string[];
   translations: { language: string; status: string }[];
+  translation_status?: "pending" | "in_review" | "approved" | "rejected";
 }
 
 interface DocExtra {
@@ -241,15 +242,17 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     const docLanguage = extra.language ?? "en";
     let content = extra.content ?? "";
     let servedLanguage = docLanguage;
+    let translationStatus: "pending" | "in_review" | "approved" | "rejected" | undefined;
 
     if (requestedLanguage !== docLanguage && availableLanguages.includes(requestedLanguage)) {
       // Look for translation in translation_segments collection
+      // Note: We serve translations regardless of approval status so operators can preview.
+      // The translation_status field indicates whether the content has been reviewed.
       // First try with garden_id (worker now sets it), then fall back to document_id only
       let translation = await app.mongo.db.collection("translation_segments").findOne({
         document_id: doc._id,
         garden_id,
         target_lang: requestedLanguage,
-        status: "approved",
       });
 
       // Fallback for legacy segments without garden_id
@@ -257,13 +260,13 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         translation = await app.mongo.db.collection("translation_segments").findOne({
           document_id: doc._id,
           target_lang: requestedLanguage,
-          status: "approved",
         });
       }
 
       if (translation && translation.translated_text) {
         content = translation.translated_text as string;
         servedLanguage = requestedLanguage;
+        translationStatus = (translation.status as "pending" | "in_review" | "approved" | "rejected") ?? "pending";
       }
     }
 
@@ -284,6 +287,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       published_at: (thisPub.published_at as string) ?? null,
       available_languages: availableLanguages,
       translations,
+      translation_status: translationStatus,
     };
 
     return response;
@@ -417,10 +421,12 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
    * GET /v1/public/gardens/:garden_id/html/:doc_id
    * Render single document as themed HTML
    * Supports both UUID doc_id and path-based lookups (e.g., /getting-started)
+   * Supports ?language= query param to request translated content
    */
   app.get("/public/gardens/:garden_id/html/:doc_id", async (req, reply) => {
     const garden_id = String((req.params as { garden_id: string }).garden_id);
     const doc_id_or_path = String((req.params as { doc_id: string }).doc_id);
+    const query = (req.query ?? {}) as Record<string, string | undefined>;
 
     const { renderGardenPage } = await import("../../lib/garden-renderer.js");
 
@@ -437,19 +443,60 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const extra = (doc.extra ?? {}) as DocExtra;
+    const docLanguage = extra.language ?? "en";
+    const requestedLanguage = query.language ?? docLanguage;
+
+    let content = doc.text ?? extra.content ?? "";
+    let servedLanguage = docLanguage;
+    let translationStatus: "pending" | "in_review" | "approved" | "rejected" | undefined;
+
+    // Handle translation lookup if a different language is requested
+    if (requestedLanguage !== docLanguage) {
+      const gardenPubs = (extra.metadata?.garden_publications as Array<Record<string, unknown>>) ?? [];
+      const availableLanguages = getAvailableLanguages(
+        garden.target_languages ?? [],
+        docLanguage,
+        gardenPubs
+      );
+
+      if (availableLanguages.includes(requestedLanguage)) {
+        // Look for translation (no approval filter - allow previewing pending translations)
+        let translation = await app.mongo.db.collection("translation_segments").findOne({
+          document_id: doc._id,
+          garden_id,
+          target_lang: requestedLanguage,
+        });
+
+        if (!translation) {
+          translation = await app.mongo.db.collection("translation_segments").findOne({
+            document_id: doc._id,
+            target_lang: requestedLanguage,
+          });
+        }
+
+        if (translation && translation.translated_text) {
+          content = translation.translated_text as string;
+          servedLanguage = requestedLanguage;
+          translationStatus = (translation.status as "pending" | "in_review" | "approved" | "rejected") ?? "pending";
+        }
+      }
+    }
 
     const html = await renderGardenPage(
       garden,
       {
         title: extra.title ?? "Untitled",
-        content: doc.text ?? extra.content ?? "",
+        content,
         source_path: extra.source_path,
-        language: extra.language,
+        language: servedLanguage,
+        translationStatus,
       },
       {
         fullDocument: true,
         includeNav: true,
         baseUrl: `/api/openplanner/v1/public/gardens/${garden_id}/html`,
+        requestedLanguage,
+        targetLanguages: garden.target_languages,
       }
     );
 

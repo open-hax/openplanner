@@ -17,6 +17,18 @@ export interface GardenRenderOptions {
   includeNav?: boolean;
   /** Base URL for links */
   baseUrl?: string;
+  /** Requested language for translation */
+  requestedLanguage?: string;
+  /** Available target languages for this garden */
+  targetLanguages?: string[];
+}
+
+export interface GardenDocumentInput {
+  title: string;
+  content: string;
+  source_path?: string | null;
+  language?: string;
+  translationStatus?: "pending" | "in_review" | "approved" | "rejected";
 }
 
 // Shiki theme mapping
@@ -272,22 +284,98 @@ export async function renderMarkdown(
 }
 
 /**
+ * Render translation status banner
+ */
+function renderTranslationBanner(
+  translationStatus: "pending" | "in_review" | "approved" | "rejected" | undefined,
+  language: string
+): string {
+  if (!translationStatus || translationStatus === "approved") {
+    return "";
+  }
+
+  const statusConfig: Record<string, { label: string; class: string; icon: string }> = {
+    pending: { label: "Pending Review", class: "warning", icon: "⚠️" },
+    in_review: { label: "In Review", class: "info", icon: "📝" },
+    rejected: { label: "Rejected", class: "error", icon: "❌" },
+  };
+
+  const config = statusConfig[translationStatus] ?? statusConfig.pending;
+
+  return `
+  <div class="translation-banner translation-banner--${config.class}" role="status">
+    <span class="translation-banner__icon">${config.icon}</span>
+    <span class="translation-banner__text">
+      This is a <strong>${config.label}</strong> translation in <strong>${language}</strong>.
+      Content may be inaccurate until reviewed.
+    </span>
+  </div>`;
+}
+
+/**
+ * Render language selector
+ */
+function renderLanguageSelector(
+  currentLanguage: string,
+  defaultLanguage: string,
+  targetLanguages: string[] | undefined,
+  baseUrl: string
+): string {
+  if (!targetLanguages || targetLanguages.length === 0) {
+    return "";
+  }
+
+  const allLanguages = [defaultLanguage, ...targetLanguages];
+  const uniqueLanguages = [...new Set(allLanguages)];
+
+  const languageNames: Record<string, string> = {
+    en: "English",
+    es: "Español",
+    fr: "Français",
+    de: "Deutsch",
+    ja: "日本語",
+    zh: "中文",
+    ko: "한국어",
+    pt: "Português",
+    ru: "Русский",
+    it: "Italiano",
+  };
+
+  const options = uniqueLanguages.map(lang => {
+    const isSelected = lang === currentLanguage;
+    const selectedAttr = isSelected ? ' selected' : '';
+    const name = languageNames[lang] ?? lang;
+    return `<option value="${lang}"${selectedAttr}>${name}</option>`;
+  }).join("");
+
+  return `
+  <div class="language-selector">
+    <label for="language-select" class="language-selector__label">Language:</label>
+    <select id="language-select" class="language-selector__select" onchange="window.location.href='${baseUrl}' + (this.value !== '${defaultLanguage}' ? '?language=' + this.value : '')">
+      ${options}
+    </select>
+  </div>`;
+}
+
+/**
  * Render a full garden page with navigation and themed content
  */
 export async function renderGardenPage(
   garden: GardenDocument,
-  document: {
-    title: string;
-    content: string;
-    source_path?: string | null;
-    language?: string;
-  },
+  document: GardenDocumentInput,
   options: GardenRenderOptions = {}
 ): Promise<string> {
   const theme = getThemeName(garden);
   const themeCss = getThemeCss(theme);
   const navHtml = options.includeNav !== false ? renderNav(garden, options) : "";
   const contentHtml = await renderMarkdown(document.content, theme);
+  const translationBanner = renderTranslationBanner(document.translationStatus, document.language ?? "en");
+  const languageSelector = renderLanguageSelector(
+    document.language ?? "en",
+    garden.default_language ?? "en",
+    options.targetLanguages,
+    options.baseUrl ?? `/gardens/${garden.garden_id}`
+  );
 
   if (!options.fullDocument) {
     return `
@@ -296,6 +384,8 @@ export async function renderGardenPage(
       <style>:root { ${themeCss} }</style>
       ${navHtml}
       <main class="garden-main">
+        ${translationBanner}
+        ${languageSelector}
         <header class="garden-header">
           <h1>${escapeHtml(document.title)}</h1>
           ${document.source_path ? `<p class="garden-path">${escapeHtml(document.source_path)}</p>` : ""}
@@ -322,6 +412,8 @@ export async function renderGardenPage(
     </header>
     ${navHtml}
     <main class="garden-main">
+      ${translationBanner}
+      ${languageSelector}
       <article class="garden-article">
         <header class="garden-header">
           <h1>${escapeHtml(document.title)}</h1>
@@ -715,6 +807,88 @@ function getGardenStyles(): string {
     .garden-footer a {
       color: var(--uxx-colors-accent-cyan);
       text-decoration: none;
+    }
+
+    /* Translation status banner */
+    .translation-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-radius: var(--uxx-radius-md);
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .translation-banner--warning {
+      background: rgba(251, 191, 36, 0.15);
+      border: 1px solid rgba(251, 191, 36, 0.4);
+      color: #fbbf24;
+    }
+
+    .translation-banner--info {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      color: #60a5fa;
+    }
+
+    .translation-banner--error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #f87171;
+    }
+
+    .translation-banner__icon {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .translation-banner__text {
+      line-height: 1.5;
+    }
+
+    .translation-banner__text strong {
+      color: inherit;
+    }
+
+    /* Language selector */
+    .language-selector {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 24px;
+      padding: 12px 16px;
+      background: var(--uxx-colors-bg-subtle);
+      border: 1px solid var(--uxx-colors-border-default);
+      border-radius: var(--uxx-radius-md);
+    }
+
+    .language-selector__label {
+      font-size: 14px;
+      color: var(--uxx-colors-text-muted);
+      font-weight: 500;
+    }
+
+    .language-selector__select {
+      padding: 6px 12px;
+      background: var(--uxx-colors-bg-elevated);
+      border: 1px solid var(--uxx-colors-border-default);
+      border-radius: var(--uxx-radius-sm);
+      color: var(--uxx-colors-text-default);
+      font-family: var(--uxx-font-family-sans);
+      font-size: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .language-selector__select:hover {
+      border-color: var(--uxx-colors-accent-cyan);
+    }
+
+    .language-selector__select:focus {
+      outline: none;
+      border-color: var(--uxx-colors-accent-cyan);
+      box-shadow: 0 0 0 2px rgba(102, 217, 239, 0.2);
     }
   `;
 }
