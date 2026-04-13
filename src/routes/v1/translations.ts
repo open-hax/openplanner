@@ -864,4 +864,469 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       ),
     };
   });
+
+  // ======================================================================
+  // Document-level translation review routes
+  // ======================================================================
+
+  /**
+   * List translated documents with aggregated segment stats
+   * GET /v1/translations/documents
+   *
+   * Returns unique document+target_lang combinations with segment counts by status.
+   */
+  app.get("/translations/documents", async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>;
+
+    const matchStage: Record<string, unknown> = {};
+    if (query.project) matchStage.project = query.project;
+    if (query.target_lang) matchStage.target_lang = query.target_lang;
+    if (query.source_lang) matchStage.source_lang = query.source_lang;
+    if (query.garden_id) matchStage.garden_id = query.garden_id;
+
+    const docs = await segmentsCollection
+      .aggregate<{
+        _id: { document_id: string; target_lang: string };
+        source_lang: string;
+        garden_id: string | null;
+        project: string | null;
+        total_segments: number;
+        approved: number;
+        pending: number;
+        rejected: number;
+        in_review: number;
+      }>([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: { document_id: "$document_id", target_lang: "$target_lang" },
+            source_lang: { $first: "$source_lang" },
+            garden_id: { $first: "$garden_id" },
+            project: { $first: "$project" },
+            total_segments: { $sum: 1 },
+            approved: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
+            pending: { $sum: { $cond: [{ $eq: ["$status", "pending"] }, 1, 0] } },
+            rejected: { $sum: { $cond: [{ $eq: ["$status", "rejected"] }, 1, 0] } },
+            in_review: { $sum: { $cond: [{ $eq: ["$status", "in_review"] }, 1, 0] } },
+          },
+        },
+        { $sort: { "_id.document_id": 1, "_id.target_lang": 1 } },
+      ])
+      .toArray();
+
+    // Fetch document titles from the events collection
+    const documentIds = docs.map((d) => d._id.document_id);
+    const eventRows = await app.mongo.events
+      .find({ _id: { $in: documentIds } }, { projection: { _id: 1, "extra.title": 1, "extra.visibility": 1 } })
+      .toArray();
+
+    const titleMap = new Map<string, { title: string; visibility: string }>();
+    for (const row of eventRows) {
+      const extra = (row as Record<string, unknown>).extra as Record<string, unknown> | undefined;
+      titleMap.set(row._id as string, {
+        title: String(extra?.title ?? "Untitled"),
+        visibility: String(extra?.visibility ?? "internal"),
+      });
+    }
+
+    const documents = docs.map((d) => {
+      const meta = titleMap.get(d._id.document_id);
+      const approved = d.approved;
+      const total = d.total_segments;
+      let overallStatus: string;
+      if (approved === total && total > 0) overallStatus = "fully_approved";
+      else if (d.rejected === total) overallStatus = "fully_rejected";
+      else if (d.pending === total) overallStatus = "pending_review";
+      else if (d.pending > 0) overallStatus = "partial_review";
+      else overallStatus = "mixed";
+
+      return {
+        document_id: d._id.document_id,
+        target_lang: d._id.target_lang,
+        source_lang: d.source_lang,
+        garden_id: d.garden_id,
+        project: d.project,
+        title: meta?.title ?? "Untitled",
+        document_status: meta?.visibility ?? "internal",
+        total_segments: total,
+        approved,
+        pending: d.pending,
+        rejected: d.rejected,
+        in_review: d.in_review,
+        overall_status: overallStatus,
+      };
+    });
+
+    return { documents, total: documents.length };
+  });
+
+  /**
+   * Get document translation with all segments
+   * GET /v1/translations/documents/:documentId/:targetLang
+   *
+   * Returns source document content + all segments for the language pair.
+   */
+  app.get("/translations/documents/:documentId/:targetLang", async (req, reply) => {
+    const documentId = (req.params as { documentId: string }).documentId;
+    const targetLang = (req.params as { targetLang: string }).targetLang;
+
+    // Fetch source document
+    const eventRow = await app.mongo.events.findOne({ _id: documentId });
+    if (!eventRow) {
+      return reply.status(404).send({ error: "Document not found" });
+    }
+    const extra = (eventRow as Record<string, unknown>).extra as Record<string, unknown> | undefined;
+    const document = {
+      id: documentId,
+      title: String(extra?.title ?? "Untitled"),
+      content: String(extra?.content ?? extra?.text ?? ""),
+      source_lang: String(extra?.language ?? "en"),
+      visibility: String(extra?.visibility ?? "internal"),
+      source_path: extra?.sourcePath ?? extra?.source_path ?? null,
+    };
+
+    // Fetch all segments for this document+target_lang
+    const segments = await segmentsCollection
+      .find({ document_id: documentId, target_lang: targetLang })
+      .sort({ segment_index: 1 })
+      .toArray();
+
+    // Fetch labels for each segment
+    const segmentIds = segments.map((s) => s._id.toString());
+    const allLabels = await labelsCollection
+      .find({ segment_id: { $in: segmentIds } })
+      .sort({ created_at: -1 })
+      .toArray();
+
+    const labelsBySegment = new Map<string, typeof allLabels>();
+    for (const label of allLabels) {
+      const list = labelsBySegment.get(label.segment_id) ?? [];
+      list.push(label);
+      labelsBySegment.set(label.segment_id, list);
+    }
+
+    const formattedSegments = segments.map((s) => ({
+      id: s._id.toString(),
+      source_text: s.source_text,
+      translated_text: s.translated_text,
+      source_lang: s.source_lang,
+      target_lang: s.target_lang,
+      document_id: s.document_id,
+      segment_index: s.segment_index,
+      status: s.status,
+      confidence: s.confidence ?? null,
+      mt_model: s.mt_model ?? null,
+      garden_id: s.garden_id ?? null,
+      project: s.project ?? null,
+      labels: (labelsBySegment.get(s._id.toString()) ?? []).map((l) => ({
+        id: l._id.toString(),
+        segment_id: l.segment_id,
+        labeler_email: l.labeler_email,
+        adequacy: l.adequacy,
+        fluency: l.fluency,
+        terminology: l.terminology,
+        risk: l.risk,
+        overall: l.overall,
+        corrected_text: l.corrected_text ?? null,
+        editor_notes: l.editor_notes ?? null,
+        ts: l.created_at?.toISOString?.() ?? null,
+      })),
+      ts: s.created_at?.toISOString?.() ?? null,
+    }));
+
+    const total = formattedSegments.length;
+    const approved = formattedSegments.filter((s) => s.status === "approved").length;
+    const summary = {
+      total_segments: total,
+      approved,
+      pending: formattedSegments.filter((s) => s.status === "pending").length,
+      rejected: formattedSegments.filter((s) => s.status === "rejected").length,
+      in_review: formattedSegments.filter((s) => s.status === "in_review").length,
+      overall_status: approved === total && total > 0 ? "fully_approved" :
+        formattedSegments.every((s) => s.status === "pending") ? "pending_review" : "partial_review",
+    };
+
+    return { document, segments: formattedSegments, summary };
+  });
+
+  /**
+   * Document-level review action
+   * POST /v1/translations/documents/:documentId/:targetLang/review
+   *
+   * Applies a review verdict to all segments, with optional per-segment overrides.
+   */
+  app.post("/translations/documents/:documentId/:targetLang/review", async (req, reply) => {
+    const documentId = (req.params as { documentId: string }).documentId;
+    const targetLang = (req.params as { targetLang: string }).targetLang;
+    const body = req.body as {
+      overall: "approve" | "needs_edit" | "reject";
+      editor_notes?: string;
+      labeler_email?: string;
+      labeler_id?: string;
+      segment_overrides?: Record<string, {
+        overall: "approve" | "needs_edit" | "reject";
+        corrected_text?: string;
+        editor_notes?: string;
+      }>;
+    };
+
+    if (!body.overall || !["approve", "needs_edit", "reject"].includes(body.overall)) {
+      return reply.status(400).send({ error: "overall must be approve, needs_edit, or reject" });
+    }
+
+    const overrides = body.segment_overrides ?? {};
+    const segments = await segmentsCollection
+      .find({ document_id: documentId, target_lang: targetLang })
+      .sort({ segment_index: 1 })
+      .toArray();
+
+    if (segments.length === 0) {
+      return reply.status(404).send({ error: "No segments found for this document+language pair" });
+    }
+
+    const labelerEmail = body.labeler_email ?? "unknown";
+    const labelerId = body.labeler_id ?? "unknown";
+    let appliedCount = 0;
+
+    for (const segment of segments) {
+      const segId = segment._id.toString();
+      const segIndex = String(segment.segment_index);
+      const override = overrides[segIndex] ?? overrides[segId];
+      const effectiveOverall = override?.overall ?? body.overall;
+
+      // Determine new segment status
+      let newStatus: TranslationSegment["status"];
+      if (effectiveOverall === "approve") {
+        newStatus = "approved";
+      } else if (effectiveOverall === "needs_edit") {
+        newStatus = override?.corrected_text ? "approved" : "in_review";
+      } else {
+        newStatus = "rejected";
+      }
+
+      // Create label record
+      const label: TranslationLabel = {
+        segment_id: segId,
+        labeler_id: labelerId,
+        labeler_email: labelerEmail,
+        label_version: (await labelsCollection.countDocuments({ segment_id: segId })) + 1,
+        adequacy: effectiveOverall === "approve" ? "good" : "adequate",
+        fluency: effectiveOverall === "approve" ? "good" : "adequate",
+        terminology: effectiveOverall === "approve" ? "correct" : "minor_errors",
+        risk: "safe",
+        overall: effectiveOverall,
+        corrected_text: override?.corrected_text,
+        editor_notes: override?.editor_notes ?? body.editor_notes,
+        created_at: new Date(),
+      };
+
+      await labelsCollection.insertOne(label);
+
+      // Update segment status
+      await segmentsCollection.updateOne(
+        { _id: segment._id },
+        { $set: { status: newStatus, updated_at: new Date() } }
+      );
+
+      // Upsert to graph memory on approval
+      if (newStatus === "approved") {
+        await upsertTranslationToGraphMemory(
+          app,
+          segment as TranslationSegment,
+          override?.corrected_text
+        );
+      }
+
+      appliedCount++;
+    }
+
+    return {
+      ok: true,
+      document_id: documentId,
+      target_lang: targetLang,
+      segments_reviewed: appliedCount,
+      overall: body.overall,
+      overrides_applied: Object.keys(overrides).length,
+    };
+  });
+
+  // ======================================================================
+  // Translation batch routes
+  // ======================================================================
+
+  const batchesCollection = app.mongo.db.collection("translation_batches");
+  await batchesCollection.createIndex({ garden_id: 1, target_lang: 1, status: 1 });
+  await batchesCollection.createIndex({ status: 1, created_at: 1 });
+
+  /**
+   * Create a translation batch
+   * POST /v1/translations/batches
+   */
+  app.post("/translations/batches", async (req, reply) => {
+    const body = req.body as {
+      garden_id: string;
+      target_lang: string;
+      source_lang?: string;
+      project?: string;
+      document_ids: string[];
+    };
+
+    if (!body.garden_id || !body.target_lang || !body.document_ids?.length) {
+      return reply.status(400).send({ error: "garden_id, target_lang, and document_ids are required" });
+    }
+
+    const batch = {
+      batch_id: crypto.randomUUID(),
+      garden_id: body.garden_id,
+      target_lang: body.target_lang,
+      source_lang: body.source_lang ?? "en",
+      project: body.project ?? "devel",
+      status: "queued",
+      document_ids: body.document_ids,
+      completed_documents: [] as string[],
+      failed_documents: [] as { document_id: string; error: string }[],
+      created_at: new Date(),
+    };
+
+    const result = await batchesCollection.insertOne(batch);
+
+    return {
+      ok: true,
+      batch_id: batch.batch_id,
+      id: result.insertedId.toString(),
+      status: batch.status,
+      document_ids: batch.document_ids,
+    };
+  });
+
+  /**
+   * Get next queued translation batch
+   * GET /v1/translations/batches/next
+   */
+  app.get("/translations/batches/next", async (req, reply) => {
+    const batch = await batchesCollection.findOne(
+      { status: "queued" },
+      { sort: { created_at: 1 } }
+    );
+
+    if (!batch) {
+      return { batch: null };
+    }
+
+    return {
+      batch: {
+        ...batch,
+        id: batch._id.toString(),
+        _id: undefined,
+      },
+    };
+  });
+
+  /**
+   * List translation batches
+   * GET /v1/translations/batches
+   */
+  app.get("/translations/batches", async (req, reply) => {
+    const query = req.query as Record<string, string | undefined>;
+    const filter: Record<string, unknown> = {};
+    if (query.garden_id) filter.garden_id = query.garden_id;
+    if (query.target_lang) filter.target_lang = query.target_lang;
+    if (query.status) filter.status = query.status;
+
+    const batches = await batchesCollection.find(filter).sort({ created_at: -1 }).limit(50).toArray();
+
+    return {
+      batches: batches.map((b) => ({
+        ...b,
+        id: b._id.toString(),
+        _id: undefined,
+      })),
+    };
+  });
+
+  /**
+   * Get single translation batch
+   * GET /v1/translations/batches/:id
+   */
+  app.get("/translations/batches/:id", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    let batch;
+    try {
+      batch = await batchesCollection.findOne({ _id: new ObjectId(id) });
+    } catch {
+      batch = await batchesCollection.findOne({ batch_id: id });
+    }
+
+    if (!batch) {
+      return reply.status(404).send({ error: "Batch not found" });
+    }
+
+    return {
+      ...batch,
+      id: batch._id.toString(),
+      _id: undefined,
+    };
+  });
+
+  /**
+   * Update translation batch status
+   * POST /v1/translations/batches/:id/status
+   */
+  app.post("/translations/batches/:id/status", async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const body = req.body as {
+      status: "processing" | "complete" | "partial" | "failed";
+      completed_document?: string;
+      failed_document?: { document_id: string; error: string };
+      agent_session_id?: string;
+      agent_conversation_id?: string;
+      agent_run_id?: string;
+      error?: string;
+    };
+
+    if (!["processing", "complete", "partial", "failed"].includes(body.status)) {
+      return reply.status(400).send({ error: "Invalid status" });
+    }
+
+    const update: Record<string, unknown> = { status: body.status };
+
+    if (body.status === "processing") {
+      update.started_at = new Date();
+      if (body.agent_session_id) update.agent_session_id = body.agent_session_id;
+      if (body.agent_conversation_id) update.agent_conversation_id = body.agent_conversation_id;
+      if (body.agent_run_id) update.agent_run_id = body.agent_run_id;
+    } else if (body.status === "complete" || body.status === "partial" || body.status === "failed") {
+      update.completed_at = new Date();
+      if (body.error) update.error = body.error;
+    }
+
+    // Track completed/failed documents
+    const pushOps: Record<string, unknown> = {};
+    if (body.completed_document) {
+      pushOps.completed_documents = body.completed_document;
+    }
+    if (body.failed_document) {
+      pushOps.failed_documents = body.failed_document;
+    }
+
+    const updateDoc: Record<string, unknown> = { $set: update };
+    if (Object.keys(pushOps).length > 0) {
+      updateDoc.$push = pushOps;
+    }
+
+    let filter: Record<string, unknown>;
+    try {
+      filter = { _id: new ObjectId(id) };
+    } catch {
+      filter = { batch_id: id };
+    }
+
+    const result = await batchesCollection.updateOne(filter, updateDoc);
+
+    if (result.matchedCount === 0) {
+      return reply.status(404).send({ error: "Batch not found" });
+    }
+
+    return { ok: true, batch_id: id, status: body.status };
+  });
 };
