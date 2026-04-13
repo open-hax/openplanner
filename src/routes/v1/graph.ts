@@ -1258,8 +1258,8 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     if (chunkIds.length > 0) {
       chunkQuery._id = { $in: chunkIds };
     } else if (parentIds.length > 0) {
-      // Find chunks by parentId (document ID)
-      chunkQuery.parentId = { $in: parentIds };
+      // Find chunks by parent_id (document ID) - note: snake_case field
+      chunkQuery.parent_id = { $in: parentIds };
     }
 
     const chunks = await app.mongo.hotVectors
