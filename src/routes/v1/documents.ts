@@ -284,18 +284,38 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     if (!DOCUMENT_KINDS.has(doc.kind)) {
       return reply.status(400).send({ error: `invalid document kind: ${doc.kind}` });
     }
+
+    const existing = await getDocumentById(app, doc.id);
+    const existingPublications = Array.isArray(existing?.metadata?.garden_publications)
+      ? (existing?.metadata?.garden_publications as Array<Record<string, unknown>>)
+      : [];
+    const preservePublicationState = existingPublications.length > 0
+      || (existing?.visibility === "public" && Boolean(existing?.publishedAt));
+    const mergedMetadata = {
+      ...(existing?.metadata ?? {}),
+      ...(doc.metadata ?? {}),
+      ...(preservePublicationState && existingPublications.length > 0
+        ? { garden_publications: existingPublications }
+        : {}),
+    };
+
     const normalized: DocumentRecord = {
+      ...(existing ?? {}),
       ...doc,
-      visibility: doc.visibility ?? "internal",
-      source: doc.source ?? "manual",
-      domain: doc.domain ?? "general",
-      language: doc.language ?? "en",
-      createdBy: doc.createdBy ?? "unknown",
-      metadata: doc.metadata ?? {},
-      aiDrafted: doc.aiDrafted ?? false,
+      visibility: preservePublicationState ? (existing?.visibility ?? "public") : (doc.visibility ?? existing?.visibility ?? "internal"),
+      source: doc.source ?? existing?.source ?? "manual",
+      domain: doc.domain ?? existing?.domain ?? "general",
+      language: doc.language ?? existing?.language ?? "en",
+      createdBy: doc.createdBy ?? existing?.createdBy ?? "unknown",
+      publishedBy: preservePublicationState ? (existing?.publishedBy ?? undefined) : (doc.publishedBy ?? existing?.publishedBy ?? undefined),
+      publishedAt: preservePublicationState ? (existing?.publishedAt ?? null) : (doc.publishedAt ?? existing?.publishedAt ?? null),
+      metadata: mergedMetadata,
+      aiDrafted: doc.aiDrafted ?? existing?.aiDrafted ?? false,
+      aiModel: doc.aiModel ?? existing?.aiModel ?? null,
+      aiPromptHash: doc.aiPromptHash ?? existing?.aiPromptHash ?? null,
       ts: doc.ts ?? new Date().toISOString(),
     };
-    const ev = documentToEvent(normalized);
+    const ev = documentToEvent(normalized, existing ?? undefined);
     const result = await persistAndMaybeIndex(app, ev);
     if (result.warning) {
       return reply.status(503).send({
