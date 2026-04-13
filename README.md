@@ -1,5 +1,9 @@
 # OpenPlanner - Graph Stack Monorepo
 
+> **Built with [GLM-5](https://z.ai)** — OpenPlanner uses GLM-5 by default for all agent operations.
+
+OpenPlanner was made possible by the **[z.ai](https://z.ai) startup ecosystem** and its ongoing support of the **[Ussyverse](https://ussy.co)**. This project would not exist without GLM-5's speed, throughput, and sustained access during a period of widespread API restriction.
+
 OpenPlanner is the canonical graph monorepo containing all packages for semantic graph construction, layout, traversal, and search.
 
 ## Architecture
