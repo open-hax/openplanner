@@ -154,7 +154,10 @@ function renderNav(
     return "";
   }
 
-  const baseUrl = options.baseUrl ?? `/gardens/${garden.garden_id}`;
+  const pageUrl = options.baseUrl ?? `/gardens/${garden.garden_id}`;
+  const baseUrl = /\/html\/[^/?#]+(?:[?#].*)?$/.test(pageUrl)
+    ? getGardenIndexUrl(pageUrl)
+    : pageUrl;
 
   const renderNavItem = (item: { label: string; path: string; children?: { label: string; path: string }[] }): string => {
     const hasChildren = item.children && item.children.length > 0;
@@ -186,6 +189,18 @@ function renderNav(
       ${garden.nav.items.map(renderNavItem).join("")}
     </ul>
   </nav>`;
+}
+
+function getGardenIndexUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/[^/?#]+(?=([?#].*)?$)/, "");
+}
+
+function renderGlobalLinks(gardenHomeUrl: string, knoxxHomeUrl = "/"): string {
+  return `
+  <div class="garden-global-links" aria-label="Page links">
+    <a class="garden-global-link" href="${escapeHtml(gardenHomeUrl)}">← Published documents</a>
+    <a class="garden-global-link" href="${escapeHtml(knoxxHomeUrl)}">Knoxx home</a>
+  </div>`;
 }
 
 /**
@@ -391,6 +406,9 @@ export async function renderGardenPage(
 ): Promise<string> {
   const theme = getThemeName(garden);
   const themeCss = getThemeCss(theme);
+  const pageUrl = options.baseUrl ?? `/gardens/${garden.garden_id}`;
+  const gardenHomeUrl = getGardenIndexUrl(pageUrl);
+  const globalLinksHtml = renderGlobalLinks(gardenHomeUrl);
   const navHtml = options.includeNav !== false ? renderNav(garden, options) : "";
   const contentHtml = await renderMarkdown(document.content, theme);
   const translationBanner = renderTranslationBanner(document.translationStatus, document.language ?? "en");
@@ -398,7 +416,7 @@ export async function renderGardenPage(
     document.language ?? "en",
     garden.default_language ?? "en",
     options.targetLanguages,
-    options.baseUrl ?? `/gardens/${garden.garden_id}`,
+    pageUrl,
     document.availableLanguages,
     options.translations
   );
@@ -408,6 +426,7 @@ export async function renderGardenPage(
     <div class="garden-page" data-theme="${theme}">
       <style>${getGardenStyles()}</style>
       <style>:root { ${themeCss} }</style>
+      ${globalLinksHtml}
       ${navHtml}
       <main class="garden-main">
         ${translationBanner}
@@ -433,8 +452,13 @@ export async function renderGardenPage(
 <body class="garden-body" data-theme="${theme}">
   <div class="garden-page">
     <header class="garden-header-global">
-      <h1 class="garden-title">${escapeHtml(garden.title)}</h1>
-      ${garden.description ? `<p class="garden-description">${escapeHtml(garden.description)}</p>` : ""}
+      <div class="garden-header-topline">
+        <div>
+          <h1 class="garden-title">${escapeHtml(garden.title)}</h1>
+          ${garden.description ? `<p class="garden-description">${escapeHtml(garden.description)}</p>` : ""}
+        </div>
+        ${globalLinksHtml}
+      </div>
     </header>
     ${navHtml}
     <main class="garden-main">
@@ -473,6 +497,7 @@ export function renderGardenIndex(
   const themeCss = getThemeCss(theme);
   const navHtml = options.includeNav !== false ? renderNav(garden, options) : "";
   const baseUrl = options.baseUrl ?? `/gardens/${garden.garden_id}`;
+  const globalLinksHtml = renderGlobalLinks(baseUrl);
 
   const documentsHtml = documents.length > 0
     ? `
@@ -493,6 +518,7 @@ export function renderGardenIndex(
     <div class="garden-page" data-theme="${theme}">
       <style>${getGardenStyles()}</style>
       <style>:root { ${themeCss} }</style>
+      ${globalLinksHtml}
       ${navHtml}
       <main class="garden-main">
         <header class="garden-header">
@@ -516,8 +542,13 @@ export function renderGardenIndex(
 <body class="garden-body" data-theme="${theme}">
   <div class="garden-page">
     <header class="garden-header-global">
-      <h1 class="garden-title">${escapeHtml(garden.title)}</h1>
-      ${garden.description ? `<p class="garden-description">${escapeHtml(garden.description)}</p>` : ""}
+      <div class="garden-header-topline">
+        <div>
+          <h1 class="garden-title">${escapeHtml(garden.title)}</h1>
+          ${garden.description ? `<p class="garden-description">${escapeHtml(garden.description)}</p>` : ""}
+        </div>
+        ${globalLinksHtml}
+      </div>
     </header>
     ${navHtml}
     <main class="garden-main">
@@ -561,11 +592,37 @@ function getGardenStyles(): string {
       background: var(--uxx-colors-bg-subtle);
     }
 
+    .garden-header-topline {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
     .garden-title {
       margin: 0;
       font-size: 28px;
       font-weight: 700;
       color: var(--uxx-colors-text-default);
+    }
+
+    .garden-global-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .garden-global-link {
+      color: var(--uxx-colors-accent-cyan);
+      text-decoration: none;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .garden-global-link:hover {
+      text-decoration: underline;
     }
 
     .garden-description {
