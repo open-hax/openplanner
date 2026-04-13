@@ -2,6 +2,9 @@
 
 Open Hax UI kit with shared tokens plus framework bindings for React, Reagent, and Helix.
 
+
+> Built with [GLM-5](https://z.ai) — part of the [z.ai](https://z.ai) startup ecosystem and the [Ussyverse](https://ussy.cloud).
+
 ## Packages
 
 | Package | Audience | Status | Docs |

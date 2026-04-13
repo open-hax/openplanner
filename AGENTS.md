@@ -1,5 +1,8 @@
 # Agent Skills Context
 
+
+> Built with [GLM-5](https://z.ai) — part of the [z.ai](https://z.ai) startup ecosystem and the [Ussyverse](https://ussy.cloud).
+
 ## RELEVANT SKILLS
 These skills are configured for this directory's technology stack and workflow.
 

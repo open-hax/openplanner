@@ -2,6 +2,9 @@
 
 Event sourcing and handling utilities for the Promethean ecosystem.
 
+
+> Built with [GLM-5](https://z.ai) — part of the [z.ai](https://z.ai) startup ecosystem and the [Ussyverse](https://ussy.cloud).
+
 ## Installation
 
 ```bash

@@ -13,3 +13,7 @@ Current exports cover:
 
 The record fields stay snake_case so JavaScript and Python consumers can share the
 same serialized shapes.
+
+
+> Built with [GLM-5](https://z.ai) — part of the [z.ai](https://z.ai) startup ecosystem and the [Ussyverse](https://ussy.cloud).
+

@@ -2,6 +2,9 @@
 
 Perception layer for infrastructure signals intelligence.
 
+
+> Built with [GLM-5](https://z.ai) — part of the [z.ai](https://z.ai) startup ecosystem and the [Ussyverse](https://ussy.cloud).
+
 ## Overview
 
 Sintel is a governed infrastructure signals intelligence command center. It discovers, verifies, enriches, and connects public-facing infrastructure evidence in order to identify credible threats before they manifest.
