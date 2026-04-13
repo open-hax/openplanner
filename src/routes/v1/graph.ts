@@ -1021,6 +1021,205 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
   });
 
   // ============================================================
+  // Mongot-native semantic edge builder (replaces HNSW pipeline)
+  // Uses $vectorSearch on event_chunks (already indexed) to build
+  // kNN edges without a separate HNSW build step.
+  // ============================================================
+
+  app.post("/jobs/build-semantic-edges", async (req: any) => {
+    const body = (req.body as any) ?? {};
+    const k = Math.max(2, Math.min(64, Number(body.k ?? 8)));
+    const minSimilarity = Math.max(0, Math.min(1, Number(body.minSimilarity ?? 0.5)));
+    const maxDegree = Math.max(2, Number(body.maxDegree ?? k * 2));
+    const concurrency = Math.max(1, Math.min(16, Number(body.concurrency ?? 8)));
+
+    // 1. Read all event_chunks with embeddings
+    const chunks = await app.mongo.hotVectors.find(
+      { embedding: { $exists: true, $type: "array", $ne: [] } },
+      { projection: { _id: 1, chunk_id: 1, title: 1, kind: 1, project: 1, embedding: 1, embedding_model: 1, embedding_dimensions: 1 } },
+    ).toArray();
+
+    if (chunks.length === 0) {
+      return { ok: true, note: "No chunks with embeddings found", nodes: 0, edges: 0 };
+    }
+
+    // 2. Create graph.node events for each chunk so the export has visible nodes
+    const nodePrefix = "devel:chunk:";
+    const eventBatch: Array<any> = [];
+    const embeddingRows: Array<any> = [];
+    const chunkIdToNodeId = new Map<string, string>();
+
+    for (const chunk of chunks) {
+      const nodeId = `${nodePrefix}${chunk._id}`;
+      const eventId = `graph.node:chunk:${chunk._id}`;
+      chunkIdToNodeId.set(String(chunk._id), nodeId);
+
+      const title = chunk.title || "";
+      const label = title.split("/").pop() || title || String(chunk._id);
+
+      eventBatch.push({
+        updateOne: {
+          filter: { _id: eventId },
+          update: {
+            $set: {
+              kind: "graph.node",
+              project: chunk.project || "devel",
+              source: "chunk-graph-builder",
+              "extra.node_id": nodeId,
+              "extra.node_kind": "chunk",
+              "extra.label": label,
+              "extra.path": title,
+              "extra.node_type": chunk.kind || "code",
+              "extra.lake": chunk.project || "devel",
+              ts: new Date(),
+            },
+            $setOnInsert: { createdAt: new Date(), text: "" },
+          },
+          upsert: true,
+        },
+      });
+
+      embeddingRows.push({
+        node_id: nodeId,
+        source_event_id: eventId,
+        project: chunk.project || "devel",
+        embedding_model: chunk.embedding_model || "qwen3-embedding:0.6b",
+        embedding_dimensions: chunk.embedding_dimensions || 1024,
+        embedding: chunk.embedding,
+        chunk_index: chunk.chunk_index ?? 0,
+        chunk_count: chunk.chunk_count ?? 1,
+      });
+    }
+
+    // Batch upsert graph.node events
+    const eventBatchSize = 2000;
+    for (let i = 0; i < eventBatch.length; i += eventBatchSize) {
+      await app.mongo.events.bulkWrite(eventBatch.slice(i, i + eventBatchSize), { ordered: false });
+    }
+
+    // Upsert graph_node_embeddings (for the embedding backfill / future HNSW use)
+    await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, embeddingRows);
+
+    // 3. Build semantic edges using mongot $vectorSearch on event_chunks
+    const directedEdges: Array<{ source: string; target: string; similarity: number }> = [];
+
+    const processChunk = async (chunk: any): Promise<void> => {
+      const emb = chunk.embedding as number[];
+      if (!emb || emb.length < 2) return;
+
+      try {
+        const results = await app.mongo.hotVectors.aggregate<any>([
+          {
+            $vectorSearch: {
+              index: "chunk_vector",
+              path: "embedding",
+              queryVector: emb,
+              numCandidates: Math.max(k * 5, 50),
+              limit: k + 1,
+            },
+          },
+          { $project: { _id: 1, score: { $meta: "vectorSearchScore" } } },
+        ]).toArray();
+
+        for (const result of results) {
+          if (String(result._id) === String(chunk._id)) continue;
+          if ((result.score as number) < minSimilarity) continue;
+
+          const sourceNodeId = chunkIdToNodeId.get(String(chunk._id));
+          const targetNodeId = chunkIdToNodeId.get(String(result._id));
+          if (!sourceNodeId || !targetNodeId || sourceNodeId === targetNodeId) continue;
+
+          directedEdges.push({ source: sourceNodeId, target: targetNodeId, similarity: result.score as number });
+        }
+      } catch {
+        // Skip chunks that fail vector search (dimension mismatch, etc.)
+      }
+    };
+
+    for (let i = 0; i < chunks.length; i += concurrency) {
+      const batch = chunks.slice(i, Math.min(i + concurrency, chunks.length));
+      await Promise.all(batch.map(processChunk));
+    }
+
+    // 4. Symmetrize: keep the higher similarity for each undirected pair
+    const edgeMap = new Map<string, { source: string; target: string; similarity: number }>();
+    for (const edge of directedEdges) {
+      const a = edge.source < edge.target ? edge.source : edge.target;
+      const b = edge.source < edge.target ? edge.target : edge.source;
+      const key = `${a}||${b}`;
+      const existing = edgeMap.get(key);
+      if (!existing || edge.similarity > existing.similarity) {
+        edgeMap.set(key, { source: a, target: b, similarity: edge.similarity });
+      }
+    }
+
+    // 5. Cap at maxDegree per node (greedy: keep highest-similarity edges first)
+    const ranked = [...edgeMap.values()].sort((a, b) => b.similarity - a.similarity);
+    const degrees = new Map<string, number>();
+    const cappedEdges: Array<{ source_node_id: string; target_node_id: string; similarity: number }> = [];
+
+    for (const edge of ranked) {
+      const degA = degrees.get(edge.source) ?? 0;
+      const degB = degrees.get(edge.target) ?? 0;
+      if (degA >= maxDegree || degB >= maxDegree) continue;
+      cappedEdges.push({ source_node_id: edge.source, target_node_id: edge.target, similarity: edge.similarity });
+      degrees.set(edge.source, degA + 1);
+      degrees.set(edge.target, degB + 1);
+    }
+
+    // 6. Persist to graph_semantic_edges
+    const graphVersion = `mongot-knn-${Date.now()}`;
+    const persistBatchSize = 1000;
+    for (let i = 0; i < cappedEdges.length; i += persistBatchSize) {
+      const batch = cappedEdges.slice(i, i + persistBatchSize);
+      await upsertGraphSemanticEdges(
+        app.mongo.graphSemanticEdges,
+        batch.map((e) => ({
+          source_node_id: e.source_node_id,
+          target_node_id: e.target_node_id,
+          similarity: e.similarity,
+          edge_type: "semantic_knn",
+          embedding_model: "qwen3-embedding:0.6b",
+          graph_version: graphVersion,
+        })),
+      );
+    }
+
+    return {
+      ok: true,
+      graphVersion,
+      nodes: chunks.length,
+      directedEdges: directedEdges.length,
+      undirectedEdges: edgeMap.size,
+      cappedEdges: cappedEdges.length,
+      k,
+      minSimilarity,
+      maxDegree,
+    };
+  });
+
+  // Strip document content from event_chunks — keep embeddings, metadata, identifiers only.
+  // Content lives on disk; the DB stores graph topology + similarity index.
+  app.post("/jobs/strip-chunk-content", async (req: any) => {
+    const dryRun = req.body?.dryRun === true;
+    if (dryRun) {
+      const count = await app.mongo.hotVectors.countDocuments({ text: { $exists: true, $ne: "" } });
+      const avgSize = await app.mongo.hotVectors.aggregate([
+        { $match: { text: { $exists: true, $ne: "" } } },
+        { $project: { textSize: { $strLenCP: "$text" } } },
+        { $group: { _id: null, avg: { $avg: "$textSize" } } },
+      ]).toArray();
+      return { ok: true, dryRun: true, chunksWithContent: count, avgTextLength: avgSize[0]?.avg ?? 0 };
+    }
+
+    const result = await app.mongo.hotVectors.updateMany(
+      { text: { $exists: true } },
+      { $unset: { text: "" } },
+    );
+    return { ok: true, stripped: result.modifiedCount };
+  });
+
+  // ============================================================
   // Graph-version-aware semantic graph runs
   // ============================================================
 
