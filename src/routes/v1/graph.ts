@@ -359,11 +359,13 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const projectFilter = project ? { project } : {};
-    const [totalLayoutRows, totalNodes, totalEdges] = await Promise.all([
+    const [totalLayoutRows, totalNodes, totalEdges, totalSemanticEdges] = await Promise.all([
       app.mongo.graphLayoutOverrides.countDocuments(projectFilter),
       app.mongo.events.countDocuments({ kind: "graph.node", ...(project ? { project } : {}) }),
       app.mongo.graphEdges.countDocuments(project ? { project } : {}),
+      app.mongo.graphSemanticEdges.countDocuments({ similarity: { $gte: 0.5 }, ...(project ? { project } : {}) }),
     ]);
+    const totalAllEdges = totalEdges + totalSemanticEdges;
     const buildViewForPoolLimit = async (activePoolLimit: number, activeRotationCursor: number) => {
       const recentPoolLimit = Math.max(1, Math.floor(activePoolLimit / 2));
       const stalePoolLimit = Math.max(1, activePoolLimit - recentPoolLimit);
@@ -396,9 +398,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           edges: [],
           meta: {
             totalNodes,
-            totalEdges,
+            totalEdges: totalAllEdges,
             sampledNodes: totalNodes > 0,
-            sampledEdges: totalEdges > 0,
+            sampledEdges: totalAllEdges > 0,
             shardIndex,
             shardCount,
             rotationCursor,
@@ -427,12 +429,47 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         target_node_id: { $in: candidateNodeIds },
         ...(project ? { project } : {}),
       };
-      const candidateEdges = await app.mongo.graphEdges
-        .find(edgeFilter, {
-          projection: { source_node_id: 1, target_node_id: 1, edge_kind: 1, data: 1, updated_at: 1 },
-        })
-        .limit(Math.max(maxEdges * 8, 50000))
-        .toArray();
+      const semanticEdgeFilter: Record<string, unknown> = {
+        source_node_id: { $in: candidateNodeIds },
+        target_node_id: { $in: candidateNodeIds },
+        similarity: { $gte: 0.5 },
+        ...(project ? { project } : {}),
+      };
+
+      const [structuralEdges, semanticEdges] = await Promise.all([
+        app.mongo.graphEdges
+          .find(edgeFilter, {
+            projection: { source_node_id: 1, target_node_id: 1, edge_kind: 1, data: 1, updated_at: 1 },
+          })
+          .limit(Math.max(maxEdges * 4, 25000))
+          .toArray(),
+        app.mongo.graphSemanticEdges
+          .find(semanticEdgeFilter, {
+            projection: { source_node_id: 1, target_node_id: 1, edge_type: 1, similarity: 1, data: 1 },
+          })
+          .limit(Math.max(maxEdges * 4, 25000))
+          .toArray(),
+      ]);
+
+      // Normalize edge records with kind/layer
+      const candidateEdges: any[] = [
+        ...structuralEdges.map((e: any) => ({
+          source_node_id: e.source_node_id,
+          target_node_id: e.target_node_id,
+          edge_kind: e.edge_kind ?? "structural",
+          layer: "structural",
+          data: e.data,
+          updated_at: e.updated_at,
+        })),
+        ...semanticEdges.map((e: any) => ({
+          source_node_id: e.source_node_id,
+          target_node_id: e.target_node_id,
+          edge_kind: e.edge_type ?? "semantic_knn",
+          layer: "semantic",
+          similarity: e.similarity,
+          data: e.data,
+        })),
+      ];
 
       if (candidateEdges.length === 0) {
         const nodes = candidateNodeIds.slice(0, maxNodes).map((nodeId) => inferViewNodeFromId(nodeId, layoutById.get(nodeId) ?? { x: 0, y: 0 }));
@@ -442,9 +479,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           edges: [],
           meta: {
             totalNodes,
-            totalEdges,
+            totalEdges: totalAllEdges,
             sampledNodes: nodes.length < totalNodes,
-            sampledEdges: totalEdges > 0,
+            sampledEdges: totalAllEdges > 0,
             shardIndex,
             shardCount,
             rotationCursor,
@@ -573,9 +610,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         edges,
         meta: {
           totalNodes,
-          totalEdges,
+          totalEdges: totalAllEdges,
           sampledNodes: selectedNodes.length < totalNodes,
-          sampledEdges: edges.length < totalEdges,
+          sampledEdges: edges.length < totalAllEdges,
           shardIndex,
           shardCount,
           rotationCursor,
