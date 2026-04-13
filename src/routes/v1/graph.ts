@@ -2119,4 +2119,102 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       },
     };
   });
+
+  // Seed initial layout positions for all graph.node events that lack layout overrides.
+  // Generates random positions in a circle, bulk-writes to graph_layout_overrides so
+  // /graph/view and eros-eris-field simulation can start operating.
+  app.post("/jobs/seed-layout", async (req: any, reply) => {
+    const project = typeof req.body?.project === "string" ? req.body.project.trim() : "";
+    const targetRadius = Math.max(100, Math.min(50000, Number(req.body?.targetRadius ?? 3000)));
+    const batchSize = Math.max(100, Math.min(5000, Number(req.body?.batchSize ?? 2000)));
+    const source = req.body?.source ?? "seed-layout";
+    const layoutVersion = req.body?.layoutVersion ?? "v1";
+    const dryRun = req.body?.dryRun === true;
+
+    const projectFilter = project ? { project } : {};
+    const nodeProjection = { "extra.node_id": 1, project: 1 };
+
+    // Get all node_ids from graph.node events
+    const eventCursor = app.mongo.events.find({ kind: "graph.node", ...projectFilter }, { projection: nodeProjection });
+    const eventNodeIds = new Set<string>();
+    for await (const doc of eventCursor) {
+      const nodeId = (doc as any).extra?.node_id;
+      if (typeof nodeId === "string" && nodeId) {
+        eventNodeIds.add(nodeId);
+      }
+    }
+
+    if (eventNodeIds.size === 0) {
+      return { ok: true, seeded: 0, total: 0, note: "No graph.node events found" };
+    }
+
+    // Get node_ids that already have layout overrides
+    const existingLayouts = await app.mongo.graphLayoutOverrides
+      .find({ _id: { $in: [...eventNodeIds] } }, { projection: { _id: 1 } })
+      .toArray() as any[];
+    const existingIds = new Set(existingLayouts.map((r: any) => String(r._id)));
+
+    // Find nodes needing layout
+    const missingIds = [...eventNodeIds].filter((id) => !existingIds.has(id));
+
+    if (missingIds.length === 0) {
+      return { ok: true, seeded: 0, total: eventNodeIds.size, note: "All nodes already have layout overrides" };
+    }
+
+    if (dryRun) {
+      return { ok: true, seeded: 0, total: eventNodeIds.size, missing: missingIds.length, dryRun: true };
+    }
+
+    // Generate initial random positions in a disk
+    // Use golden-angle spiral for better initial distribution than pure random
+    const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // ~137.5 degrees
+    const seeded: Array<{ node_id: string; x: number; y: number }> = [];
+
+    for (let i = 0; i < missingIds.length; i += 1) {
+      // Golden-angle spiral: uniform area distribution
+      const theta = i * goldenAngle;
+      const r = targetRadius * Math.sqrt((i + 0.5) / missingIds.length);
+      const x = r * Math.cos(theta);
+      const y = r * Math.sin(theta);
+      seeded.push({ node_id: missingIds[i]!, x, y });
+    }
+
+    // Bulk write in batches
+    let totalStored = 0;
+    const now = new Date();
+    for (let i = 0; i < seeded.length; i += batchSize) {
+      const batch = seeded.slice(i, i + batchSize);
+      await app.mongo.graphLayoutOverrides.bulkWrite(
+        batch.map((row) => ({
+          updateOne: {
+            filter: { _id: row.node_id },
+            update: {
+              $set: {
+                node_id: row.node_id,
+                x: row.x,
+                y: row.y,
+                layout_source: source,
+                layout_version: layoutVersion,
+                updated_at: now,
+              },
+              $setOnInsert: {
+                created_at: now,
+              },
+            },
+            upsert: true,
+          },
+        })),
+        { ordered: false },
+      );
+      totalStored += batch.length;
+    }
+
+    return {
+      ok: true,
+      seeded: totalStored,
+      total: eventNodeIds.size,
+      targetRadius,
+      note: `Seeded ${totalStored} nodes with golden-angle spiral layout`,
+    };
+  });
 };
