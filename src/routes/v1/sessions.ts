@@ -42,11 +42,13 @@ function normalizeSessionRows(rows: Record<string, unknown>[]): Record<string, u
 export const sessionRoutes: FastifyPluginAsync = async (app) => {
   app.get("/sessions", async (req: any) => {
     const project = typeof req.query?.project === "string" ? req.query.project.trim() : "";
+    const limit = Math.min(parsePositiveInt(req.query?.limit, 50), 500);
+    const offset = Math.max(0, Number.parseInt(String(req.query?.offset ?? "0"), 10) || 0);
 
     const match: Record<string, unknown> = { session: { $type: "string", $ne: "" } };
     if (project) match.project = project;
-    
-    const rawRows = await app.mongo.events.aggregate([
+
+    const groupedStages = [
       { $match: match },
       {
         $group: {
@@ -65,8 +67,19 @@ export const sessionRoutes: FastifyPluginAsync = async (app) => {
         },
       },
       { $sort: { last_ts: -1 } },
-      { $limit: 500 },
-    ]).toArray();
+    ];
+
+    const [rawRows, totalRows] = await Promise.all([
+      app.mongo.events.aggregate([
+        ...groupedStages,
+        { $skip: offset },
+        { $limit: limit },
+      ]).toArray(),
+      app.mongo.events.aggregate([
+        ...groupedStages,
+        { $count: "total" },
+      ]).toArray(),
+    ]);
 
     const rows = (rawRows as SessionRow[]).map((row) => ({
       ...row,
@@ -74,7 +87,17 @@ export const sessionRoutes: FastifyPluginAsync = async (app) => {
       event_count: typeof row.event_count === "bigint" ? Number(row.event_count) : row.event_count,
     }));
 
-    return { ok: true, rows: jsonSafe(rows), storageBackend: "mongodb" };
+    const total = Number((totalRows[0] as { total?: number } | undefined)?.total ?? 0);
+
+    return {
+      ok: true,
+      rows: jsonSafe(rows),
+      total,
+      offset,
+      limit,
+      has_more: offset + rows.length < total,
+      storageBackend: "mongodb",
+    };
   });
 
   app.get("/sessions/:sessionId", async (req: any, reply) => {
