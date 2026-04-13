@@ -169,11 +169,16 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
   const labelsCollection = app.mongo.db.collection("translation_labels");
 
   // Create indexes
-  await segmentsCollection.createIndex({ document_id: 1, segment_index: 1 });
+  // Create indexes for segments collection
+  await segmentsCollection.createIndex(
+    { document_id: 1, segment_index: 1, target_lang: 1 },
+    { unique: true, name: "segment_unique_idx" }
+  );
   await segmentsCollection.createIndex({ status: 1 });
   await segmentsCollection.createIndex({ target_lang: 1 });
   await segmentsCollection.createIndex({ garden_id: 1 });
   await segmentsCollection.createIndex({ org_id: 1 });
+  await segmentsCollection.createIndex({ project: 1 });
   await labelsCollection.createIndex({ segment_id: 1, created_at: -1 });
 
   /**
@@ -489,12 +494,26 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ error: "Missing required fields: source_text, translated_text, target_lang, document_id" });
     }
 
-    const result = await segmentsCollection.insertOne(doc);
+    // Upsert: update if exists (same document_id + segment_index + target_lang), insert if not
+    const filter = {
+      document_id: doc.document_id,
+      segment_index: doc.segment_index,
+      target_lang: doc.target_lang,
+    };
+    const result = await segmentsCollection.updateOne(
+      filter,
+      { $set: doc },
+      { upsert: true }
+    );
+
+    const id = result.upsertedId?.toString() ?? result.upsertedCount > 0 ? "new" : "updated";
 
     return {
       ok: true,
-      id: result.insertedId.toString(),
+      id,
       status: doc.status,
+      upserted: result.upsertedCount > 0,
+      modified: result.modifiedCount > 0,
     };
   });
 
@@ -985,10 +1004,21 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       source_path: extra?.sourcePath ?? extra?.source_path ?? null,
     };
 
-    // Fetch all segments for this document+target_lang
+    // Fetch segments for this document+target_lang, deduplicating by segment_index
+    // If multiple translations exist for same segment_index, take the most recent
     const segments = await segmentsCollection
-      .find({ document_id: documentId, target_lang: targetLang })
-      .sort({ segment_index: 1 })
+      .aggregate([
+        { $match: { document_id: documentId, target_lang: targetLang } },
+        { $sort: { segment_index: 1, created_at: -1 } },
+        {
+          $group: {
+            _id: "$segment_index",
+            doc: { $first: "$$ROOT" },
+          },
+        },
+        { $replaceRoot: { newRoot: "$doc" } },
+        { $sort: { segment_index: 1 } },
+      ])
       .toArray();
 
     // Fetch labels for each segment
