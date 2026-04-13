@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import type { WithId, Collection } from "mongodb";
 import type { GardenDocument, EventDocument } from "../../lib/mongodb.js";
+import { renderTranslatedDocument, type TranslationLabelLike, type TranslationSegmentLike } from "../../lib/translation-rendering.js";
 
 interface PublicDocumentResponse {
   doc_id: string;
@@ -82,6 +83,36 @@ async function findDocumentByIdOrPath(
   }
 
   return doc;
+}
+
+async function latestLabelsBySegmentId(
+  app: FastifyInstance,
+  segmentIds: string[],
+): Promise<Map<string, TranslationLabelLike[]>> {
+  if (segmentIds.length === 0) return new Map();
+  const labels = await app.mongo.db.collection("translation_labels")
+    .find({
+      segment_id: { $in: segmentIds },
+      corrected_text: { $exists: true, $nin: [null, ""] },
+    })
+    .sort({ created_at: -1 })
+    .toArray();
+
+  const bySegment = new Map<string, TranslationLabelLike[]>();
+  for (const label of labels) {
+    const segmentId = String(label.segment_id ?? "");
+    if (!segmentId) continue;
+    const bucket = bySegment.get(segmentId) ?? [];
+    bucket.push({
+      segment_id: segmentId,
+      corrected_text: typeof label.corrected_text === "string" ? label.corrected_text : null,
+      created_at: label.created_at instanceof Date
+        ? label.created_at.toISOString()
+        : (label.created_at as string | number | null | undefined) ?? null,
+    });
+    bySegment.set(segmentId, bucket);
+  }
+  return bySegment;
 }
 
 export const publicRoutes: FastifyPluginAsync = async (app) => {
@@ -269,15 +300,17 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       }
 
       const allSegments = segments.length > 0 ? segments : fallbackSegments;
-      
+
       if (allSegments.length > 0 && allSegments[0].translated_text) {
-        // Concatenate all translated segments
-        content = allSegments
-          .map((s) => s.translated_text as string)
-          .filter(Boolean)
-          .join("\n\n");
+        const labelsBySegmentId = await latestLabelsBySegmentId(
+          app,
+          allSegments.map((segment) => String(segment._id)),
+        );
+        content = renderTranslatedDocument(
+          allSegments as TranslationSegmentLike[],
+          labelsBySegmentId,
+        );
         servedLanguage = requestedLanguage;
-        // Use the most restrictive status from all segments
         const statuses = allSegments.map((s) => s.status as string);
         if (statuses.includes("rejected")) {
           translationStatus = "rejected";
@@ -502,13 +535,15 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
       const allSegments = segments.length > 0 ? segments : fallbackSegments;
 
       if (allSegments.length > 0 && allSegments[0].translated_text) {
-        // Concatenate all translated segments
-        content = allSegments
-          .map((s) => s.translated_text as string)
-          .filter(Boolean)
-          .join("\n\n");
+        const labelsBySegmentId = await latestLabelsBySegmentId(
+          app,
+          allSegments.map((segment) => String(segment._id)),
+        );
+        content = renderTranslatedDocument(
+          allSegments as TranslationSegmentLike[],
+          labelsBySegmentId,
+        );
         servedLanguage = requestedLanguage;
-        // Use the most restrictive status from all segments
         const statuses = allSegments.map((s) => s.status as string);
         if (statuses.includes("rejected")) {
           translationStatus = "rejected";

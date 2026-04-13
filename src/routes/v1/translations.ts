@@ -366,6 +366,7 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       { _id: new ObjectId(segmentId) },
       {
         $set: {
+          ...(label.corrected_text ? { translated_text: label.corrected_text } : {}),
           status: newStatus,
           updated_at: new Date(),
         },
@@ -1155,7 +1156,13 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       // Update segment status
       await segmentsCollection.updateOne(
         { _id: segment._id },
-        { $set: { status: newStatus, updated_at: new Date() } }
+        {
+          $set: {
+            ...(override?.corrected_text ? { translated_text: override.corrected_text } : {}),
+            status: newStatus,
+            updated_at: new Date(),
+          },
+        }
       );
 
       // Upsert to graph memory on approval
