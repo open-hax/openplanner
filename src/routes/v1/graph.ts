@@ -1235,6 +1235,160 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  // ============================================================
+  // Incremental semantic edge builder for ingestion
+  // Only builds edges for newly added/updated documents
+  // ============================================================
+
+  app.post("/jobs/build-semantic-edges/incremental", async (req: any) => {
+    const body = (req.body as any) ?? {};
+    const parentIds = Array.isArray(body.parentIds) ? body.parentIds : [];
+    const chunkIds = Array.isArray(body.chunkIds) ? body.chunkIds : [];
+    const k = Math.max(2, Math.min(64, Number(body.k ?? 8)));
+    const minSimilarity = Math.max(0, Math.min(1, Number(body.minSimilarity ?? 0.5)));
+    const maxDegree = Math.max(2, Number(body.maxDegree ?? k * 2));
+
+    if (parentIds.length === 0 && chunkIds.length === 0) {
+      return { ok: true, note: "No parent IDs or chunk IDs provided", edges: 0 };
+    }
+
+    // 1. Find chunks for the given parent IDs or direct chunk IDs
+    const chunkQuery: any = { embedding: { $exists: true, $type: "array", $ne: [] } };
+
+    if (chunkIds.length > 0) {
+      chunkQuery._id = { $in: chunkIds };
+    } else if (parentIds.length > 0) {
+      // Find chunks by parentId (document ID)
+      chunkQuery.parentId = { $in: parentIds };
+    }
+
+    const chunks = await app.mongo.hotVectors
+      .find(chunkQuery, { projection: { _id: 1, parentId: 1, title: 1, kind: 1, project: 1, embedding: 1, embedding_model: 1 } })
+      .toArray();
+
+    if (chunks.length === 0) {
+      return { ok: true, note: "No chunks with embeddings found", edges: 0 };
+    }
+
+    const nodePrefix = "devel:chunk:";
+    const chunkIdToNodeId = new Map<string, string>();
+    for (const chunk of chunks) {
+      chunkIdToNodeId.set(String(chunk._id), `${nodePrefix}${chunk._id}`);
+    }
+
+    // 2. Build edges for each new chunk against ALL existing chunks
+    const directedEdges: Array<{ source: string; target: string; similarity: number }> = [];
+
+    for (const chunk of chunks) {
+      const emb = chunk.embedding as number[];
+      if (!emb || emb.length < 2) continue;
+
+      try {
+        const results = await app.mongo.hotVectors.aggregate<any>([
+          {
+            $vectorSearch: {
+              index: "chunk_vector",
+              path: "embedding",
+              queryVector: emb,
+              numCandidates: Math.max(k * 5, 50),
+              limit: k + 1,
+            },
+          },
+          { $project: { _id: 1, score: { $meta: "vectorSearchScore" } } },
+        ]).toArray();
+
+        for (const result of results) {
+          if (String(result._id) === String(chunk._id)) continue;
+          if ((result.score as number) < minSimilarity) continue;
+
+          const sourceNodeId = chunkIdToNodeId.get(String(chunk._id));
+          const targetNodeId = `${nodePrefix}${result._id}`;
+          if (!sourceNodeId || sourceNodeId === targetNodeId) continue;
+
+          directedEdges.push({ source: sourceNodeId, target: targetNodeId, similarity: result.score as number });
+        }
+      } catch {
+        // Skip chunks that fail vector search
+      }
+    }
+
+    if (directedEdges.length === 0) {
+      return { ok: true, note: "No edges above similarity threshold", edges: 0 };
+    }
+
+    // 3. Symmetrize edges
+    const edgeMap = new Map<string, { source: string; target: string; similarity: number }>();
+    for (const edge of directedEdges) {
+      const a = edge.source < edge.target ? edge.source : edge.target;
+      const b = edge.source < edge.target ? edge.target : edge.source;
+      const key = `${a}||${b}`;
+      const existing = edgeMap.get(key);
+      if (!existing || edge.similarity > existing.similarity) {
+        edgeMap.set(key, { source: a, target: b, similarity: edge.similarity });
+      }
+    }
+
+    // 4. Check existing degrees and cap
+    const nodeIds = new Set<string>();
+    for (const edge of edgeMap.values()) {
+      nodeIds.add(edge.source);
+      nodeIds.add(edge.target);
+    }
+
+    // Count existing edges per node (only for nodes we're updating)
+    const existingDegrees = new Map<string, number>();
+    const nodeIdArray = Array.from(nodeIds);
+    for (let i = 0; i < nodeIdArray.length; i += 100) {
+      const batch = nodeIdArray.slice(i, i + 100);
+      const existingEdges = await app.mongo.graphSemanticEdges
+        .find({
+          $or: [{ source_node_id: { $in: batch } }, { target_node_id: { $in: batch } }],
+        })
+        .toArray();
+      for (const e of existingEdges) {
+        existingDegrees.set(e.source_node_id, (existingDegrees.get(e.source_node_id) ?? 0) + 1);
+        existingDegrees.set(e.target_node_id, (existingDegrees.get(e.target_node_id) ?? 0) + 1);
+      }
+    }
+
+    // 5. Cap edges respecting existing degrees
+    const ranked = [...edgeMap.values()].sort((a, b) => b.similarity - a.similarity);
+    const cappedEdges: Array<{ source_node_id: string; target_node_id: string; similarity: number }> = [];
+
+    for (const edge of ranked) {
+      const degA = (existingDegrees.get(edge.source) ?? 0);
+      const degB = (existingDegrees.get(edge.target) ?? 0);
+      if (degA >= maxDegree || degB >= maxDegree) continue;
+      cappedEdges.push({ source_node_id: edge.source, target_node_id: edge.target, similarity: edge.similarity });
+      existingDegrees.set(edge.source, degA + 1);
+      existingDegrees.set(edge.target, degB + 1);
+    }
+
+    // 6. Persist
+    const graphVersion = `mongot-knn-incremental-${Date.now()}`;
+    if (cappedEdges.length > 0) {
+      await upsertGraphSemanticEdges(
+        app.mongo.graphSemanticEdges,
+        cappedEdges.map((e) => ({
+          source_node_id: e.source_node_id,
+          target_node_id: e.target_node_id,
+          similarity: e.similarity,
+          edge_type: "semantic_knn",
+          embedding_model: "qwen3-embedding:0.6b",
+          graph_version: graphVersion,
+        })),
+      );
+    }
+
+    return {
+      ok: true,
+      graphVersion,
+      chunks: chunks.length,
+      candidateEdges: directedEdges.length,
+      edges: cappedEdges.length,
+    };
+  });
+
   // Strip document content from event_chunks — keep embeddings, metadata, identifiers only.
   // Content lives on disk; the DB stores graph topology + similarity index.
   app.post("/jobs/strip-chunk-content", async (req: any) => {
