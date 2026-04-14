@@ -80,6 +80,22 @@ function inferViewNodeFromId(nodeId: string, position: { x: number; y: number })
   };
 }
 
+function hashPositionForNodeId(nodeId: string): { x: number; y: number } {
+  let hash = 2166136261;
+  for (let i = 0; i < nodeId.length; i += 1) {
+    hash ^= nodeId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const a = (hash >>> 0) / 0xffffffff;
+  const b = ((Math.imul(hash ^ 0x9e3779b9, 2246822519) >>> 0) / 0xffffffff);
+  const angle = a * Math.PI * 2;
+  const radius = 300 + (b * 4200);
+  return {
+    x: Math.cos(angle) * radius,
+    y: Math.sin(angle) * radius,
+  };
+}
+
 function positiveMod(value: number, mod: number): number {
   if (mod <= 0) return 0;
   return ((value % mod) + mod) % mod;
@@ -392,14 +408,33 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
 
       const layoutRows = [...staleLayoutRows, ...recentLayoutRows];
       if (layoutRows.length === 0) {
+        const fallbackNodeProjection = { "extra.node_id": 1 };
+        const fallbackOffset = selectWindowOffset({
+          totalRows: totalNodes,
+          windowSize: Math.min(maxNodes, Math.max(1, activePoolLimit)),
+          shardIndex,
+          shardCount,
+          rotationCursor: activeRotationCursor,
+        });
+        const fallbackNodeDocs = await app.mongo.events
+          .find({ kind: "graph.node", ...(project ? { project } : {}) }, { projection: fallbackNodeProjection })
+          .sort({ ts: -1 as any, _id: -1 as any })
+          .skip(fallbackOffset)
+          .limit(Math.min(maxNodes, Math.max(1, activePoolLimit)))
+          .toArray();
+        const fallbackNodeIds = [...new Set([
+          ...requestedSeedNodeIds,
+          ...fallbackNodeDocs.map((doc: any) => String(doc.extra?.node_id ?? "")).filter(Boolean),
+        ])].slice(0, maxNodes);
+        const nodes = fallbackNodeIds.map((nodeId) => inferViewNodeFromId(nodeId, hashPositionForNodeId(nodeId)));
         return {
           ok: true,
-          nodes: [],
+          nodes,
           edges: [],
           meta: {
             totalNodes,
             totalEdges: totalAllEdges,
-            sampledNodes: totalNodes > 0,
+            sampledNodes: nodes.length < totalNodes,
             sampledEdges: totalAllEdges > 0,
             shardIndex,
             shardCount,
@@ -576,6 +611,21 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
             selectedEdgeIndexes.add(neighbor.edgeIndex);
             if (!selectedNodeIds.has(neighbor.neighbor)) queue.push(neighbor.neighbor);
           }
+        }
+      }
+
+      if (selectedNodeIds.size < maxNodes) {
+        const rankedFillNodeIds = [...new Set([
+          ...requestedSeedNodeIds,
+          ...fallbackRankedSeeds,
+          ...recentCandidateIds,
+          ...staleCandidateIds,
+          ...candidateNodeIds,
+        ])];
+        for (const nodeId of rankedFillNodeIds) {
+          if (selectedNodeIds.size >= maxNodes) break;
+          if (!nodeId || selectedNodeIds.has(nodeId)) continue;
+          selectedNodeIds.add(nodeId);
         }
       }
 
