@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { upsertEvent, upsertGraphEdges } from "../../lib/mongodb.js";
+import { upsertEvent, upsertGraphEdges, upsertGraphNodeEmbeddings } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
 import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import { counterInc } from "../../lib/metrics.js";
@@ -47,6 +47,12 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       source?: string | null;
       data?: Record<string, unknown> | null;
       updated_at?: Date;
+    }> = [];
+    const graphNodeEmbeddingInputs: Array<{
+      node_id: string;
+      source_event_id: string;
+      project?: string | null;
+      text: string;
     }> = [];
 
     for (const ev of body.events) {
@@ -99,6 +105,21 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      if (ev.kind === "graph.node") {
+        const nodeId = norm(extra.node_id)?.trim() ?? norm((sr as any).message)?.trim() ?? "";
+        const preview = norm(extra.preview)?.trim() ?? "";
+        const directText = norm(ev.text)?.trim() ?? "";
+        const body = directText || preview;
+        if (nodeId && body) {
+          graphNodeEmbeddingInputs.push({
+            node_id: nodeId,
+            source_event_id: ev.id,
+            project,
+            text: body,
+          });
+        }
+      }
+
       if (ev.text) {
         try {
           const embeddingScope = {
@@ -140,6 +161,55 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
 
     if (projectedGraphEdges.length > 0) {
       await upsertGraphEdges(app.mongo.graphEdges, projectedGraphEdges);
+    }
+
+    if (graphNodeEmbeddingInputs.length > 0) {
+      try {
+        const embeddingRuntime = (app as any).embeddingRuntime;
+        const groupedByModel = new Map<string, Array<(typeof graphNodeEmbeddingInputs)[number]>>();
+
+        for (const input of graphNodeEmbeddingInputs) {
+          const model = embeddingRuntime.hot.getModel({
+            source: "graph-event",
+            kind: "graph.node",
+            project: input.project ?? undefined,
+          });
+          const rows = groupedByModel.get(model) ?? [];
+          rows.push(input);
+          groupedByModel.set(model, rows);
+        }
+
+        for (const [model, rows] of groupedByModel) {
+          const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunctionForModel(model);
+          const embeddings = await withTimeout(
+            embeddingFunction.generate(rows.map((row) => row.text)) as Promise<number[][]>,
+            10_000,
+            `graph node embedding batch ${model}`,
+          );
+
+          const storedRows = rows.flatMap((row, idx) => {
+            const embedding = embeddings[idx];
+            if (!Array.isArray(embedding) || embedding.length === 0) return [];
+            return [{
+              node_id: row.node_id,
+              source_event_id: row.source_event_id,
+              project: row.project ?? null,
+              embedding_model: model,
+              embedding_dimensions: embedding.length,
+              embedding,
+              chunk_count: 1,
+              text: row.text,
+              updated_at: new Date(),
+            }];
+          });
+
+          if (storedRows.length > 0) {
+            await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, storedRows);
+          }
+        }
+      } catch (err) {
+        app.log.warn({ err, count: graphNodeEmbeddingInputs.length }, "Failed to materialize graph node embeddings during event ingest");
+      }
     }
     
     // Track metrics

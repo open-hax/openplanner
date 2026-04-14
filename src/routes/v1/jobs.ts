@@ -188,7 +188,7 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
             continue;
           }
 
-          const text = event.text ?? (event.extra as any)?.preview ?? "";
+          const text = String(event.text || (event.extra as any)?.preview || "");
           if (!text.trim()) {
             completed++;
             continue;
