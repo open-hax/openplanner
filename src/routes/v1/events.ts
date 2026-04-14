@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { upsertEvent } from "../../lib/mongodb.js";
+import { upsertEvent, upsertGraphEdges } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
 import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import { counterInc } from "../../lib/metrics.js";
@@ -38,16 +38,28 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     if (!body || !Array.isArray(body.events)) return reply.status(400).send({ error: "expected { events: [...] }" });
 
     const ids: string[] = [];
+    const projectedGraphEdges: Array<{
+      source_node_id: string;
+      target_node_id: string;
+      edge_kind: string;
+      layer?: string | null;
+      project?: string | null;
+      source?: string | null;
+      data?: Record<string, unknown> | null;
+      updated_at?: Date;
+    }> = [];
 
     for (const ev of body.events) {
       validateEvent(ev);
 
       const sr = ev.source_ref ?? {};
       const meta = ev.meta ?? {};
+      const extra = (ev.extra as Record<string, unknown> | undefined) ?? {};
       const role = norm((meta as any).role);
       const author = norm((meta as any).author);
       const model = norm((meta as any).model);
       const tags = (meta as any).tags;
+      const project = norm((sr as any).project);
 
       // MongoDB storage
       await upsertEvent(app.mongo.events, {
@@ -55,7 +67,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
         ts: new Date(ev.ts),
         source: ev.source,
         kind: ev.kind,
-        project: norm((sr as any).project),
+        project,
         session: norm((sr as any).session),
         message: norm((sr as any).message),
         role,
@@ -69,12 +81,30 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
 
       ids.push(ev.id);
 
+      if (ev.kind === "graph.edge") {
+        const sourceNodeId = norm(extra.source_node_id)?.trim() ?? "";
+        const targetNodeId = norm(extra.target_node_id)?.trim() ?? "";
+        const edgeKind = (norm(extra.edge_type) ?? norm(extra.edge_kind) ?? "").trim();
+        if (sourceNodeId && targetNodeId && edgeKind && sourceNodeId !== targetNodeId) {
+          projectedGraphEdges.push({
+            source_node_id: sourceNodeId,
+            target_node_id: targetNodeId,
+            edge_kind: edgeKind,
+            layer: norm(extra.layer),
+            project,
+            source: ev.source,
+            data: extra,
+            updated_at: new Date(ev.ts),
+          });
+        }
+      }
+
       if (ev.text) {
         try {
           const embeddingScope = {
             source: ev.source,
             kind: ev.kind,
-            project: norm((sr as any).project) ?? undefined
+            project: project ?? undefined
           };
 
           const embeddingRuntime = (app as any).embeddingRuntime;
@@ -85,7 +115,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
             tier: "hot",
             parentId: ev.id,
             text: ev.text,
-            extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+            extra,
             metadata: {
               ts: ev.ts,
               source: ev.source,
@@ -97,8 +127,8 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
               model: model ?? "",
               embedding_model: embeddingModel ?? "",
               search_tier: "hot",
-              visibility: (ev.extra as Record<string, unknown> | undefined)?.visibility ?? "internal",
-              title: (ev.extra as Record<string, unknown> | undefined)?.title ?? (sr as any).message ?? ev.id,
+              visibility: extra.visibility ?? "internal",
+              title: extra.title ?? (sr as any).message ?? ev.id,
             },
             embeddingFunction,
           }), 2000, `event vector index ${ev.id}`);
@@ -106,6 +136,10 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
           app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
         }
       }
+    }
+
+    if (projectedGraphEdges.length > 0) {
+      await upsertGraphEdges(app.mongo.graphEdges, projectedGraphEdges);
     }
     
     // Track metrics
@@ -119,6 +153,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       ok: true,
       count: ids.length,
       ids,
+      projectedGraphEdges: projectedGraphEdges.length,
       ftsEnabled: true,
       storageBackend: "mongodb",
       indexed: true,
