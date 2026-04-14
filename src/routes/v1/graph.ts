@@ -445,10 +445,32 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         };
       }
 
-      const candidateNodeIds = [...new Set([
+      let candidateNodeIds = [...new Set([
         ...requestedSeedNodeIds,
         ...layoutRows.map((row) => String(row.node_id)).filter(Boolean),
       ])];
+
+      if (candidateNodeIds.length < activePoolLimit) {
+        const missingCount = activePoolLimit - candidateNodeIds.length;
+        const fallbackNodeProjection = { "extra.node_id": 1 };
+        const fallbackOffset = selectWindowOffset({
+          totalRows: totalNodes,
+          windowSize: Math.min(totalNodes, Math.max(1, missingCount)),
+          shardIndex,
+          shardCount,
+          rotationCursor: activeRotationCursor + 31,
+        });
+        const fallbackNodeDocs = await app.mongo.events
+          .find({ kind: "graph.node", ...(project ? { project } : {}) }, { projection: fallbackNodeProjection })
+          .sort({ ts: -1 as any, _id: -1 as any })
+          .skip(fallbackOffset)
+          .limit(Math.min(totalNodes, Math.max(1, missingCount)))
+          .toArray();
+        candidateNodeIds = [...new Set([
+          ...candidateNodeIds,
+          ...fallbackNodeDocs.map((doc: any) => String(doc.extra?.node_id ?? "")).filter(Boolean),
+        ])];
+      }
       const layoutById = new Map<string, { x: number; y: number }>();
       for (const row of layoutRows) {
         if (typeof row.node_id === "string" && typeof row.x === "number" && typeof row.y === "number") {
