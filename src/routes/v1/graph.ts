@@ -96,6 +96,16 @@ function hashPositionForNodeId(nodeId: string): { x: number; y: number } {
   };
 }
 
+function hashShardSlot(nodeId: string, shardCount: number): number {
+  if (shardCount <= 1) return 0;
+  let hash = 2166136261;
+  for (let i = 0; i < nodeId.length; i += 1) {
+    hash ^= nodeId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return positiveMod(hash >>> 0, shardCount);
+}
+
 function positiveMod(value: number, mod: number): number {
   if (mod <= 0) return 0;
   return ((value % mod) + mod) % mod;
@@ -406,7 +416,16 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         app.mongo.graphLayoutOverrides.find(projectFilter).sort({ updated_at: 1 as any }).skip(staleOffset).limit(stalePoolLimit).toArray(),
       ]);
 
-      const layoutRows = [...staleLayoutRows, ...recentLayoutRows];
+      let layoutRows = [...staleLayoutRows, ...recentLayoutRows];
+      if (shardCount > 1) {
+        const shardFiltered = layoutRows.filter((row: any) => {
+          const nodeId = String(row?.node_id ?? "");
+          return nodeId && hashShardSlot(nodeId, shardCount) === shardIndex;
+        });
+        if (shardFiltered.length > 0) {
+          layoutRows = shardFiltered;
+        }
+      }
       if (layoutRows.length === 0) {
         const fallbackNodeProjection = { "extra.node_id": 1 };
         const fallbackOffset = selectWindowOffset({
@@ -425,7 +444,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         const fallbackNodeIds = [...new Set([
           ...requestedSeedNodeIds,
           ...fallbackNodeDocs.map((doc: any) => String(doc.extra?.node_id ?? "")).filter(Boolean),
-        ])].slice(0, maxNodes);
+        ])]
+          .filter((nodeId) => shardCount <= 1 || hashShardSlot(nodeId, shardCount) === shardIndex || requestedSeedNodeIds.includes(nodeId))
+          .slice(0, maxNodes);
         const nodes = fallbackNodeIds.map((nodeId) => inferViewNodeFromId(nodeId, hashPositionForNodeId(nodeId)));
         return {
           ok: true,
@@ -464,12 +485,12 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           .find({ kind: "graph.node", ...(project ? { project } : {}) }, { projection: fallbackNodeProjection })
           .sort({ ts: -1 as any, _id: -1 as any })
           .skip(fallbackOffset)
-          .limit(Math.min(totalNodes, Math.max(1, missingCount)))
+          .limit(Math.min(totalNodes, Math.max(1, missingCount * Math.max(1, shardCount))))
           .toArray();
         candidateNodeIds = [...new Set([
           ...candidateNodeIds,
           ...fallbackNodeDocs.map((doc: any) => String(doc.extra?.node_id ?? "")).filter(Boolean),
-        ])];
+        ])].filter((nodeId) => shardCount <= 1 || hashShardSlot(nodeId, shardCount) === shardIndex || requestedSeedNodeIds.includes(nodeId));
       }
       const layoutById = new Map<string, { x: number; y: number }>();
       for (const row of layoutRows) {
