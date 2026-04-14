@@ -14,7 +14,7 @@ export const LINE_VS = `
     vec2 posPx = aPos * uScale + uPan + 0.5 * uResolution;
     vec2 clip = vec2(
       (posPx.x / max(1.0, uResolution.x)) * 2.0 - 1.0,
-.0 - (posPx.y / max(1.0, uResolution.y)) * 2.0
+1.0 - (posPx.y / max(1.0, uResolution.y)) * 2.0
     );
 
     gl_Position = vec4(clip, 0.0, 1.0);
@@ -58,7 +58,7 @@ export const POINT_VS = `
     vec2 posPx = aPos * uScale + uPan + 0.5 * uResolution;
     vec2 clip = vec2(
       (posPx.x / max(1.0, uResolution.x)) * 2.0 - 1.0,
-.0 - (posPx.y / max(1.0, uResolution.y)) * 2.0
+1.0 - (posPx.y / max(1.0, uResolution.y)) * 2.0
     );
 
     gl_Position = vec4(clip, 0.0, 1.0);
