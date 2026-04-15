@@ -21,6 +21,7 @@ describe("Translation Routes", () => {
   let segmentsCollection: any;
   let labelsCollection: any;
   let jobsCollection: any;
+  let configCollection: any;
 
   const testProject = "test-translations";
   const testOrgId = "test-org";
@@ -42,6 +43,7 @@ describe("Translation Routes", () => {
     segmentsCollection = app.mongo.db.collection("translation_segments");
     labelsCollection = app.mongo.db.collection("translation_labels");
     jobsCollection = app.mongo.db.collection("translation_jobs");
+    configCollection = app.mongo.db.collection("translation_config");
   });
 
   afterAll(async () => {
@@ -54,6 +56,84 @@ describe("Translation Routes", () => {
     await segmentsCollection.deleteMany({ project: testProject });
     await labelsCollection.deleteMany({});
     await jobsCollection.deleteMany({ project: testProject });
+    await configCollection.deleteMany({});
+  });
+
+  describe("GET/PATCH /v1/translations/config", () => {
+    it("should return default config when unset", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/translations/config",
+        headers: {
+          authorization: `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = JSON.parse(response.body);
+      expect(body.ok).toBe(true);
+      expect(body.config).toEqual({
+        model: "glm-5",
+        updated_at: null,
+      });
+    });
+
+    it("should require authorization", async () => {
+      const response = await app.inject({
+        method: "GET",
+        url: "/v1/translations/config",
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("should reject PATCH with missing model", async () => {
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/v1/translations/config",
+        headers: {
+          authorization: `Bearer ${testApiKey}`,
+          "content-type": "application/json",
+        },
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("should persist model via PATCH and return it on GET", async () => {
+      const patchResponse = await app.inject({
+        method: "PATCH",
+        url: "/v1/translations/config",
+        headers: {
+          authorization: `Bearer ${testApiKey}`,
+          "content-type": "application/json",
+        },
+        payload: {
+          model: "gemma4:latest",
+        },
+      });
+
+      expect(patchResponse.statusCode).toBe(200);
+      const patchBody = JSON.parse(patchResponse.body);
+      expect(patchBody.ok).toBe(true);
+      expect(patchBody.config.model).toBe("gemma4:latest");
+      expect(typeof patchBody.config.updated_at).toBe("string");
+
+      const getResponse = await app.inject({
+        method: "GET",
+        url: "/v1/translations/config",
+        headers: {
+          authorization: `Bearer ${testApiKey}`,
+        },
+      });
+
+      expect(getResponse.statusCode).toBe(200);
+      const getBody = JSON.parse(getResponse.body);
+      expect(getBody.ok).toBe(true);
+      expect(getBody.config.model).toBe("gemma4:latest");
+      expect(typeof getBody.config.updated_at).toBe("string");
+    });
   });
 
   describe("POST /v1/translations/segments/batch", () => {

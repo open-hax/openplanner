@@ -167,6 +167,12 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
   // Get MongoDB collections
   const segmentsCollection = app.mongo.db.collection("translation_segments");
   const labelsCollection = app.mongo.db.collection("translation_labels");
+  const configCollection = app.mongo.db.collection<{
+    _id: string;
+    model?: string;
+    updated_at?: Date;
+    created_at?: Date;
+  }>("translation_config");
 
   // Create indexes
   // Create indexes for segments collection
@@ -180,6 +186,58 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
   await segmentsCollection.createIndex({ org_id: 1 });
   await segmentsCollection.createIndex({ project: 1 });
   await labelsCollection.createIndex({ segment_id: 1, created_at: -1 });
+
+  /**
+   * Translation pipeline configuration
+   * GET /v1/translations/config
+   * PATCH /v1/translations/config
+   */
+  app.get("/translations/config", async () => {
+    const doc = await configCollection.findOne({ _id: "default" });
+    const model = typeof doc?.model === "string" && doc.model.trim().length > 0
+      ? doc.model
+      : "glm-5";
+
+    return {
+      ok: true,
+      config: {
+        model,
+        updated_at: doc?.updated_at instanceof Date
+          ? doc.updated_at.toISOString()
+          : null,
+      },
+    };
+  });
+
+  app.patch<{ Body: { model?: string } }>("/translations/config", async (req, reply) => {
+    const rawModel = typeof req.body?.model === "string" ? req.body.model.trim() : "";
+    if (!rawModel) {
+      return reply.status(400).send({ error: "model is required" });
+    }
+
+    const now = new Date();
+    await configCollection.updateOne(
+      { _id: "default" },
+      {
+        $set: {
+          model: rawModel,
+          updated_at: now,
+        },
+        $setOnInsert: {
+          created_at: now,
+        },
+      },
+      { upsert: true },
+    );
+
+    return {
+      ok: true,
+      config: {
+        model: rawModel,
+        updated_at: now.toISOString(),
+      },
+    };
+  });
 
   /**
    * List translation segments with filtering
