@@ -231,7 +231,10 @@ export function prepareIndexDocument(params: {
 
 export function isContextOverflowError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /context window|ollama_context_overflow|exceeds model context window/i.test(message);
+  // We treat "input too large" (embed provider / OpenAI-style errors) the same as
+  // context overflow, because the fix is the same: split the batch into smaller
+  // pieces.
+  return /context window|ollama_context_overflow|exceeds model context window|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
 }
 
 export function batchPreparedChunks(

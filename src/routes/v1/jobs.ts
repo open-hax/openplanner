@@ -20,58 +20,154 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
     void (async () => {
       try {
         await jobs().update(job.id, { status: "running" });
-        const { batchIndexTextsInMongoVectors } = await import("../../lib/mongo-vectors.js");
-        const cfg = (app as any).openplannerConfig;
+        const { indexTextInMongoVectors } = await import("../../lib/mongo-vectors.js");
         const embeddingRuntime = (app as any).embeddingRuntime;
 
-        const events = await app.mongo.events.find({ text: { $type: "string", $ne: "" } }).toArray();
+        const concurrency = Math.max(1, Math.min(32, Number(body.concurrency ?? 4)));
+        const mongoBatchSize = Math.max(10, Math.min(2000, Number(body.mongoBatchSize ?? 200)));
+        const limit = Number.isFinite(Number(body.limit)) ? Math.max(1, Number(body.limit)) : null;
 
-        const items = events.map((row) => ({
-          id: row.id,
-          text: row.text ?? "",
-          extra: row.extra as Record<string, unknown> | undefined,
-          metadata: {
-            ts: row.ts.toISOString(),
-            source: row.source,
-            kind: row.kind,
-            project: row.project ?? "",
-            session: row.session ?? "",
-            author: row.author ?? "",
-            role: row.role ?? "",
-            model: row.model ?? "",
-            embedding_model: embeddingRuntime.hot.getModel({ source: row.source, kind: row.kind, project: row.project ?? undefined }),
-            search_tier: "hot",
-            visibility: (row.extra as Record<string, unknown> | undefined)?.visibility ?? "internal",
-            title: (row.extra as Record<string, unknown> | undefined)?.title ?? row.message ?? row.id,
-          },
-        }));
+        const filter = { text: { $type: "string", $ne: "" } } as const;
+        const total = await app.mongo.events.countDocuments(filter);
 
-        const result = await batchIndexTextsInMongoVectors({
-          mongo: app.mongo,
-          tier: "hot",
-          items,
-          embeddingFunction: embeddingRuntime.hot.getEmbeddingFunction({}),
-          config: {
-            concurrency: 16,
-            embeddingBatchSize: 256,
-            mongoBatchSize: 100,
-            onProgress: async (phase, completed, total) => {
-              if (completed % 100 === 0 || completed === total) {
-                await jobs().update(job.id, {
-                  output: { phase, completed, total },
-                });
-              }
-            },
-          },
+        await jobs().update(job.id, {
+          output: { phase: "streaming", completed: 0, total, indexed: 0, skipped: 0, failed: 0 },
         });
+
+        const cursor = app.mongo.events
+          .find(filter, {
+            projection: {
+              _id: 1,
+              id: 1,
+              ts: 1,
+              source: 1,
+              kind: 1,
+              project: 1,
+              session: 1,
+              author: 1,
+              role: 1,
+              model: 1,
+              message: 1,
+              text: 1,
+              extra: 1,
+            },
+            batchSize: mongoBatchSize,
+          })
+          .sort({ _id: 1 });
+
+        let scanned = 0;
+        let indexed = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        const processBatch = async (batch: any[]): Promise<void> => {
+          if (batch.length === 0) return;
+
+          const ids = batch
+            .map((row) => String(row.id ?? "").trim())
+            .filter((id) => id.length > 0);
+          if (ids.length === 0) {
+            scanned += batch.length;
+            return;
+          }
+
+          // Skip items that already have hot vector chunks.
+          const existingParents = await app.mongo.hotVectors
+            .find({ parent_id: { $in: ids } }, { projection: { parent_id: 1 } })
+            .toArray();
+          const existingSet = new Set(existingParents.map((row: any) => String(row.parent_id)));
+          const toIndex = batch.filter((row) => {
+            const id = String(row.id ?? "").trim();
+            return id.length > 0 && !existingSet.has(id);
+          });
+
+          const alreadyIndexed = batch.length - toIndex.length;
+          skipped += alreadyIndexed;
+          scanned += alreadyIndexed;
+
+          const pending = new Set<Promise<void>>();
+          const enqueue = async (fn: () => Promise<void>): Promise<void> => {
+            while (pending.size >= concurrency) {
+              await Promise.race(pending);
+            }
+            const p = fn();
+            pending.add(p);
+            void p.finally(() => pending.delete(p));
+          };
+
+          for (const row of toIndex) {
+            await enqueue(async () => {
+              const id = String(row.id ?? "").trim();
+              const text = String(row.text ?? "");
+              const extra = row.extra as Record<string, unknown> | undefined;
+
+              const embeddingScope = {
+                source: row.source,
+                kind: row.kind,
+                project: row.project ?? undefined,
+              };
+
+              try {
+                const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+                const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+                await indexTextInMongoVectors({
+                  mongo: app.mongo,
+                  tier: "hot",
+                  parentId: id,
+                  text,
+                  extra,
+                  metadata: {
+                    ts: (row.ts instanceof Date ? row.ts : new Date(row.ts)).toISOString(),
+                    source: row.source,
+                    kind: row.kind,
+                    project: row.project ?? "",
+                    session: row.session ?? "",
+                    author: row.author ?? "",
+                    role: row.role ?? "",
+                    model: row.model ?? "",
+                    embedding_model: embeddingModel ?? "",
+                    search_tier: "hot",
+                    visibility: (extra as any)?.visibility ?? "internal",
+                    title: (extra as any)?.title ?? row.message ?? id,
+                  },
+                  embeddingFunction,
+                });
+                indexed += 1;
+              } catch (_err) {
+                failed += 1;
+              } finally {
+                scanned += 1;
+              }
+            });
+          }
+
+          await Promise.all(pending);
+        };
+
+        let buffer: any[] = [];
+        for await (const row of cursor) {
+          buffer.push(row);
+          if (buffer.length >= mongoBatchSize) {
+            await processBatch(buffer);
+            buffer = [];
+
+            if (scanned % 200 === 0 || scanned === total) {
+              await jobs().update(job.id, {
+                output: { phase: "streaming", completed: scanned, total, indexed, skipped, failed },
+              });
+            }
+
+            if (limit !== null && scanned >= limit) break;
+          }
+        }
+
+        if (buffer.length > 0 && (limit === null || scanned < limit)) {
+          await processBatch(buffer);
+        }
 
         await jobs().update(job.id, {
           status: "done",
-          output: {
-            indexed: result.indexed,
-            failed: result.failed.length,
-            failedIds: result.failed.slice(0, 10).map((failed) => failed.id),
-          },
+          output: { completed: scanned, total, indexed, skipped, failed },
         });
       } catch (err: any) {
         await jobs().update(job.id, { status: "error", error: err?.message ?? String(err) });
