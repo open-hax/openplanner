@@ -152,7 +152,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
               title: extra.title ?? (sr as any).message ?? ev.id,
             },
             embeddingFunction,
-          }), 2000, `event vector index ${ev.id}`);
+          }), 10000, `event vector index ${ev.id}`);
         } catch (err) {
           app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
         }
