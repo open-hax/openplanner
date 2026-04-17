@@ -658,6 +658,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
 
       if (selectedNodeIds.size < maxNodes) {
+        // IMPORTANT: Avoid filling the view with degree-0 nodes.
+        // Nodes with no adjacency in the sampled edge set will only feel repulsion/boundary
+        // and tend to form stable-looking rings that are "not part of the graph".
         const rankedFillNodeIds = [...new Set([
           ...requestedSeedNodeIds,
           ...fallbackRankedSeeds,
@@ -665,10 +668,23 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           ...staleCandidateIds,
           ...candidateNodeIds,
         ])];
+
         for (const nodeId of rankedFillNodeIds) {
           if (selectedNodeIds.size >= maxNodes) break;
           if (!nodeId || selectedNodeIds.has(nodeId)) continue;
+          if (!adjacency.has(nodeId) && !requestedSeedNodeIds.includes(nodeId)) continue;
           selectedNodeIds.add(nodeId);
+        }
+
+        if (selectedNodeIds.size < maxNodes) {
+          const connectedRanked = [...adjacency.keys()]
+            .sort((left, right) => (degree.get(right) ?? 0) - (degree.get(left) ?? 0));
+
+          for (const nodeId of connectedRanked) {
+            if (selectedNodeIds.size >= maxNodes) break;
+            if (selectedNodeIds.has(nodeId)) continue;
+            selectedNodeIds.add(nodeId);
+          }
         }
       }
 
@@ -689,7 +705,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
 
       const selectedEdges = [...treeEdges, ...extraEdges].slice(0, maxEdges);
       const selectedNodes = [...selectedNodeIds]
-        .map((nodeId) => inferViewNodeFromId(nodeId, layoutById.get(nodeId) ?? { x: 0, y: 0 }));
+        .map((nodeId) => inferViewNodeFromId(nodeId, layoutById.get(nodeId) ?? hashPositionForNodeId(nodeId)));
       const edges: ViewEdge[] = selectedEdges.map((edge) => ({
         source: String(edge.source_node_id),
         target: String(edge.target_node_id),

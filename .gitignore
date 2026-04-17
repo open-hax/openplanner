@@ -1,6 +1,7 @@
 # Build artifacts
 dist/
 *.tsbuildinfo
+*.tsbuildinfo.*
 
 # Dependencies
 node_modules/
@@ -12,6 +13,26 @@ openplanner-lake/
 .clj-kondo/
 .cpcache/
 .shadow-cljs/
+.lsp/
+
+# CLJS build output
+.target/
+target/
+
+# Vite cache
+.vite/
+.vite-vitest/
+
+# LevelDB / local DB artifacts (regenerable)
+.reconstitute/
+
+# Package lock files in nested repos (root lock is canonical)
+package-lock.json
+
+# Backup / scratch files
+*.bak
+*.backup
+.projectile
 
 # OS
 .DS_Store
