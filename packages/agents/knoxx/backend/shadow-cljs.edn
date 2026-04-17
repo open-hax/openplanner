@@ -1,0 +1,31 @@
+{:source-paths ["src/cljs"]
+
+ :dependencies [[cider/cider-nrepl "0.50.2"]
+                [refactor-nrepl "3.9.1"]
+                [com.github.seancorfield/honeysql "2.7.1368"]]
+
+ :nrepl {:port 4500}
+
+ :js-options {:js-provider :import}
+
+ :builds
+ {:app
+  {:target :esm
+   :output-dir "dist"
+   :modules {:app {:exports {:config knoxx.backend.core/config-js
+                             :registerAppRoutes knoxx.backend.core/register-app-routes!
+                             :registerWsRoutes knoxx.backend.core/register-ws-routes!
+                             :start knoxx.backend.core/start!
+                             :createDiscordGatewayManager knoxx.backend.discord-gateway/createDiscordGatewayManager
+                             :createPolicyDb knoxx.backend.policy-db/create-policy-db
+                             :registerAuthRoutes knoxx.backend.auth-session/register-auth-routes
+                             :createSessionHook knoxx.backend.auth-session/create-session-hook
+                             :getPiIngestStatus knoxx.backend.pi-session-ingester/get-pi-ingest-status
+                             :listPiSessions knoxx.backend.pi-session-ingester/list-pi-sessions}}}
+   :js-options {:js-provider :import
+                 :keep-as-import #{"pg" "discord.js" "redis" "node:fs/promises" "node:path" "node:crypto" "node:url"}}
+   :compiler-options {:output-feature-set :es-next
+                      :optimizations :simple
+                      :source-map true
+                      :infer-externs :auto
+                      :warnings {:infer-warning false}}}}}

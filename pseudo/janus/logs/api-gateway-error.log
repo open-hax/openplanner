@@ -1,0 +1,705 @@
+2026-02-07T14:27:57: 
+2026-02-07T14:27:57: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:27:57:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:27:57:           ^
+2026-02-07T14:27:57: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:27:57:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:27:57:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:27:57:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:27:57:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:27:57:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:27:57:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:27:57:   statusCode: 500
+2026-02-07T14:27:57: }
+2026-02-07T14:27:57: 
+2026-02-07T14:27:57: Node.js v22.20.0
+2026-02-07T14:28:02: 
+2026-02-07T14:28:02: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:02:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:02:           ^
+2026-02-07T14:28:02: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:02:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:02:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:02:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:02:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:02:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:02:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:02:   statusCode: 500
+2026-02-07T14:28:02: }
+2026-02-07T14:28:02: 
+2026-02-07T14:28:02: Node.js v22.20.0
+2026-02-07T14:28:07: 
+2026-02-07T14:28:07: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:07:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:07:           ^
+2026-02-07T14:28:07: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:07:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:07:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:07:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:07:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:07:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:07:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:07:   statusCode: 500
+2026-02-07T14:28:07: }
+2026-02-07T14:28:07: 
+2026-02-07T14:28:07: Node.js v22.20.0
+2026-02-07T14:28:12: 
+2026-02-07T14:28:12: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:12:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:12:           ^
+2026-02-07T14:28:12: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:12:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:12:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:12:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:12:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:12:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:12:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:12:   statusCode: 500
+2026-02-07T14:28:12: }
+2026-02-07T14:28:12: 
+2026-02-07T14:28:12: Node.js v22.20.0
+2026-02-07T14:28:18: 
+2026-02-07T14:28:18: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:18:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:18:           ^
+2026-02-07T14:28:18: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:18:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:18:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:18:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:18:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:18:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:18:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:18:   statusCode: 500
+2026-02-07T14:28:18: }
+2026-02-07T14:28:18: 
+2026-02-07T14:28:18: Node.js v22.20.0
+2026-02-07T14:28:23: 
+2026-02-07T14:28:23: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:23:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:23:           ^
+2026-02-07T14:28:23: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:23:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:23:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:23:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:23:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:23:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:23:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:23:   statusCode: 500
+2026-02-07T14:28:23: }
+2026-02-07T14:28:23: 
+2026-02-07T14:28:23: Node.js v22.20.0
+2026-02-07T14:28:28: 
+2026-02-07T14:28:28: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:28:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:28:           ^
+2026-02-07T14:28:28: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:28:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:28:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:28:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:28:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:28:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:28:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:28:   statusCode: 500
+2026-02-07T14:28:28: }
+2026-02-07T14:28:28: 
+2026-02-07T14:28:28: Node.js v22.20.0
+2026-02-07T14:28:33: 
+2026-02-07T14:28:33: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:33:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:33:           ^
+2026-02-07T14:28:33: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:33:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:33:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:33:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:33:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:33:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:33:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:33:   statusCode: 500
+2026-02-07T14:28:33: }
+2026-02-07T14:28:33: 
+2026-02-07T14:28:33: Node.js v22.20.0
+2026-02-07T14:28:38: 
+2026-02-07T14:28:38: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:38:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:38:           ^
+2026-02-07T14:28:38: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:38:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:38:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:38:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:38:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:38:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:38:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:38:   statusCode: 500
+2026-02-07T14:28:38: }
+2026-02-07T14:28:38: 
+2026-02-07T14:28:38: Node.js v22.20.0
+2026-02-07T14:28:43: 
+2026-02-07T14:28:43: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:28:43:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:28:43:           ^
+2026-02-07T14:28:43: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:28:43:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:28:43:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:28:43:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:28:43:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:28:43:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:28:43:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:28:43:   statusCode: 500
+2026-02-07T14:28:43: }
+2026-02-07T14:28:43: 
+2026-02-07T14:28:43: Node.js v22.20.0
+2026-02-07T14:30:18: 
+2026-02-07T14:30:18: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:18:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:18:           ^
+2026-02-07T14:30:18: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:18:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:18:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:18:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:18:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:18:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:18:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:18:   statusCode: 500
+2026-02-07T14:30:18: }
+2026-02-07T14:30:18: 
+2026-02-07T14:30:18: Node.js v22.20.0
+2026-02-07T14:30:24: 
+2026-02-07T14:30:24: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:24:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:24:           ^
+2026-02-07T14:30:24: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:24:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:24:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:24:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:24:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:24:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:24:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:24:   statusCode: 500
+2026-02-07T14:30:24: }
+2026-02-07T14:30:24: 
+2026-02-07T14:30:24: Node.js v22.20.0
+2026-02-07T14:30:29: 
+2026-02-07T14:30:29: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:29:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:29:           ^
+2026-02-07T14:30:29: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:29:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:29:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:29:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:29:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:29:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:29:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:29:   statusCode: 500
+2026-02-07T14:30:29: }
+2026-02-07T14:30:29: 
+2026-02-07T14:30:29: Node.js v22.20.0
+2026-02-07T14:30:34: 
+2026-02-07T14:30:34: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:34:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:34:           ^
+2026-02-07T14:30:34: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:34:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:34:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:34:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:34:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:34:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:34:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:34:   statusCode: 500
+2026-02-07T14:30:34: }
+2026-02-07T14:30:34: 
+2026-02-07T14:30:34: Node.js v22.20.0
+2026-02-07T14:30:39: 
+2026-02-07T14:30:39: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:39:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:39:           ^
+2026-02-07T14:30:39: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:39:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:39:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:39:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:39:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:39:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:39:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:39:   statusCode: 500
+2026-02-07T14:30:39: }
+2026-02-07T14:30:39: 
+2026-02-07T14:30:39: Node.js v22.20.0
+2026-02-07T14:30:44: 
+2026-02-07T14:30:44: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:44:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:44:           ^
+2026-02-07T14:30:44: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:44:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:44:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:44:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:44:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:44:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:44:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:44:   statusCode: 500
+2026-02-07T14:30:44: }
+2026-02-07T14:30:44: 
+2026-02-07T14:30:44: Node.js v22.20.0
+2026-02-07T14:30:49: 
+2026-02-07T14:30:49: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:49:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:49:           ^
+2026-02-07T14:30:49: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:49:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:49:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:49:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:49:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:49:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:49:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:49:   statusCode: 500
+2026-02-07T14:30:49: }
+2026-02-07T14:30:49: 
+2026-02-07T14:30:49: Node.js v22.20.0
+2026-02-07T14:30:54: 
+2026-02-07T14:30:54: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:30:54:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:30:54:           ^
+2026-02-07T14:30:54: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:30:54:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:30:54:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:30:54:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:30:54:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:30:54:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:30:54:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:30:54:   statusCode: 500
+2026-02-07T14:30:54: }
+2026-02-07T14:30:54: 
+2026-02-07T14:30:54: Node.js v22.20.0
+2026-02-07T14:31:00: 
+2026-02-07T14:31:00: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:31:00:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:31:00:           ^
+2026-02-07T14:31:00: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:31:00:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:31:00:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:31:00:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:31:00:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:31:00:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:31:00:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:31:00:   statusCode: 500
+2026-02-07T14:31:00: }
+2026-02-07T14:31:00: 
+2026-02-07T14:31:00: Node.js v22.20.0
+2026-02-07T14:31:05: 
+2026-02-07T14:31:05: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T14:31:05:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T14:31:05:           ^
+2026-02-07T14:31:05: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T14:31:05:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T14:31:05:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T14:31:05:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T14:31:05:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T14:31:05:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T14:31:05:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T14:31:05:   statusCode: 500
+2026-02-07T14:31:05: }
+2026-02-07T14:31:05: 
+2026-02-07T14:31:05: Node.js v22.20.0
+2026-02-07T19:00:13: 
+2026-02-07T19:00:13: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:13:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:13:           ^
+2026-02-07T19:00:13: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:13:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:13:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:13:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:13:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:13:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:13:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:13:   statusCode: 500
+2026-02-07T19:00:13: }
+2026-02-07T19:00:13: 
+2026-02-07T19:00:13: Node.js v22.20.0
+2026-02-07T19:00:18: 
+2026-02-07T19:00:18: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:18:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:18:           ^
+2026-02-07T19:00:18: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:18:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:18:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:18:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:18:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:18:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:18:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:18:   statusCode: 500
+2026-02-07T19:00:18: }
+2026-02-07T19:00:18: 
+2026-02-07T19:00:18: Node.js v22.20.0
+2026-02-07T19:00:23: 
+2026-02-07T19:00:23: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:23:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:23:           ^
+2026-02-07T19:00:23: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:23:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:23:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:23:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:23:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:23:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:23:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:23:   statusCode: 500
+2026-02-07T19:00:23: }
+2026-02-07T19:00:23: 
+2026-02-07T19:00:23: Node.js v22.20.0
+2026-02-07T19:00:28: 
+2026-02-07T19:00:28: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:28:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:28:           ^
+2026-02-07T19:00:28: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:28:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:28:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:28:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:28:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:28:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:28:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:28:   statusCode: 500
+2026-02-07T19:00:28: }
+2026-02-07T19:00:28: 
+2026-02-07T19:00:28: Node.js v22.20.0
+2026-02-07T19:00:33: 
+2026-02-07T19:00:33: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:33:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:33:           ^
+2026-02-07T19:00:33: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:33:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:33:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:33:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:33:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:33:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:33:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:33:   statusCode: 500
+2026-02-07T19:00:33: }
+2026-02-07T19:00:33: 
+2026-02-07T19:00:33: Node.js v22.20.0
+2026-02-07T19:00:38: 
+2026-02-07T19:00:38: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:38:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:38:           ^
+2026-02-07T19:00:38: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:38:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:38:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:38:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:38:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:38:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:38:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:38:   statusCode: 500
+2026-02-07T19:00:38: }
+2026-02-07T19:00:38: 
+2026-02-07T19:00:38: Node.js v22.20.0
+2026-02-07T19:00:43: 
+2026-02-07T19:00:43: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:43:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:43:           ^
+2026-02-07T19:00:43: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:43:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:43:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:43:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:43:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:43:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:43:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:43:   statusCode: 500
+2026-02-07T19:00:43: }
+2026-02-07T19:00:43: 
+2026-02-07T19:00:43: Node.js v22.20.0
+2026-02-07T19:00:49: 
+2026-02-07T19:00:49: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:49:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:49:           ^
+2026-02-07T19:00:49: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:49:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:49:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:49:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:49:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:49:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:49:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:49:   statusCode: 500
+2026-02-07T19:00:49: }
+2026-02-07T19:00:49: 
+2026-02-07T19:00:49: Node.js v22.20.0
+2026-02-07T19:00:54: 
+2026-02-07T19:00:54: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:54:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:54:           ^
+2026-02-07T19:00:54: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:54:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:54:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:54:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:54:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:54:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:54:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:54:   statusCode: 500
+2026-02-07T19:00:54: }
+2026-02-07T19:00:54: 
+2026-02-07T19:00:54: Node.js v22.20.0
+2026-02-07T19:00:59: 
+2026-02-07T19:00:59: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:00:59:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:00:59:           ^
+2026-02-07T19:00:59: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:00:59:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:00:59:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:00:59:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:00:59:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:00:59:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:00:59:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:00:59:   statusCode: 500
+2026-02-07T19:00:59: }
+2026-02-07T19:00:59: 
+2026-02-07T19:00:59: Node.js v22.20.0
+2026-02-07T19:11:44: 
+2026-02-07T19:11:44: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:11:44:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:11:44:           ^
+2026-02-07T19:11:44: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:11:44:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:11:44:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:11:44:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:11:44:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:11:44:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:11:44:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:11:44:   statusCode: 500
+2026-02-07T19:11:44: }
+2026-02-07T19:11:44: 
+2026-02-07T19:11:44: Node.js v22.20.0
+2026-02-07T19:11:49: 
+2026-02-07T19:11:49: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:11:49:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:11:49:           ^
+2026-02-07T19:11:49: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:11:49:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:11:49:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:11:49:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:11:49:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:11:49:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:11:49:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:11:49:   statusCode: 500
+2026-02-07T19:11:49: }
+2026-02-07T19:11:49: 
+2026-02-07T19:11:49: Node.js v22.20.0
+2026-02-07T19:11:54: 
+2026-02-07T19:11:54: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:11:54:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:11:54:           ^
+2026-02-07T19:11:54: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:11:54:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:11:54:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:11:54:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:11:54:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:11:54:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:11:54:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:11:54:   statusCode: 500
+2026-02-07T19:11:54: }
+2026-02-07T19:11:54: 
+2026-02-07T19:11:54: Node.js v22.20.0
+2026-02-07T19:11:59: 
+2026-02-07T19:11:59: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:11:59:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:11:59:           ^
+2026-02-07T19:11:59: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:11:59:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:11:59:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:11:59:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:11:59:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:11:59:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:11:59:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:11:59:   statusCode: 500
+2026-02-07T19:11:59: }
+2026-02-07T19:11:59: 
+2026-02-07T19:11:59: Node.js v22.20.0
+2026-02-07T19:12:04: 
+2026-02-07T19:12:04: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:12:04:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:12:04:           ^
+2026-02-07T19:12:04: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:12:04:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:12:04:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:12:04:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:12:04:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:12:04:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:12:04:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:12:04:   statusCode: 500
+2026-02-07T19:12:04: }
+2026-02-07T19:12:04: 
+2026-02-07T19:12:04: Node.js v22.20.0
+2026-02-07T19:12:09: 
+2026-02-07T19:12:09: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:12:09:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:12:09:           ^
+2026-02-07T19:12:09: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:12:09:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:12:09:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:12:09:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:12:09:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:12:09:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:12:09:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:12:09:   statusCode: 500
+2026-02-07T19:12:09: }
+2026-02-07T19:12:09: 
+2026-02-07T19:12:09: Node.js v22.20.0
+2026-02-07T19:12:15: 
+2026-02-07T19:12:15: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:12:15:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:12:15:           ^
+2026-02-07T19:12:15: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:12:15:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:12:15:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:12:15:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:12:15:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:12:15:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:12:15:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:12:15:   statusCode: 500
+2026-02-07T19:12:15: }
+2026-02-07T19:12:15: 
+2026-02-07T19:12:15: Node.js v22.20.0
+2026-02-07T19:12:20: 
+2026-02-07T19:12:20: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:12:20:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:12:20:           ^
+2026-02-07T19:12:20: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:12:20:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:12:20:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:12:20:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:12:20:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:12:20:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:12:20:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:12:20:   statusCode: 500
+2026-02-07T19:12:20: }
+2026-02-07T19:12:20: 
+2026-02-07T19:12:20: Node.js v22.20.0
+2026-02-07T19:12:25: 
+2026-02-07T19:12:25: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:12:25:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:12:25:           ^
+2026-02-07T19:12:25: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:12:25:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:12:25:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:12:25:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:12:25:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:12:25:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:12:25:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:12:25:   statusCode: 500
+2026-02-07T19:12:25: }
+2026-02-07T19:12:25: 
+2026-02-07T19:12:25: Node.js v22.20.0
+2026-02-07T19:12:30: 
+2026-02-07T19:12:30: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:12:30:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:12:30:           ^
+2026-02-07T19:12:30: FastifyError [Error]: fastify-plugin: fastify-formbody - expected '^3.0.0' fastify version, '4.29.1' is installed
+2026-02-07T19:12:30:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:12:30:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:12:30:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:12:30:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:12:30:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:12:30:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:12:30:   statusCode: 500
+2026-02-07T19:12:30: }
+2026-02-07T19:12:30: 
+2026-02-07T19:12:30: Node.js v22.20.0
+2026-02-07T19:18:10: 
+2026-02-07T19:18:10: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:18:10:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:18:10:           ^
+2026-02-07T19:18:10: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T19:18:10:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:18:10:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:18:10:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:18:10:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:18:10:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:18:10:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:18:10:   statusCode: 500
+2026-02-07T19:18:10: }
+2026-02-07T19:18:10: 
+2026-02-07T19:18:10: Node.js v22.20.0
+2026-02-07T19:18:15: 
+2026-02-07T19:18:15: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:18:15:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:18:15:           ^
+2026-02-07T19:18:15: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T19:18:15:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:18:15:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:18:15:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:18:15:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:18:15:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:18:15:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:18:15:   statusCode: 500
+2026-02-07T19:18:15: }
+2026-02-07T19:18:15: 
+2026-02-07T19:18:15: Node.js v22.20.0
+2026-02-07T19:18:20: 
+2026-02-07T19:18:20: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:18:20:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:18:20:           ^
+2026-02-07T19:18:20: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T19:18:20:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:18:20:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:18:20:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:18:20:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:18:20:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:18:20:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:18:20:   statusCode: 500
+2026-02-07T19:18:20: }
+2026-02-07T19:18:20: 
+2026-02-07T19:18:20: Node.js v22.20.0
+2026-02-07T19:18:25: 
+2026-02-07T19:18:25: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:18:25:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:18:25:           ^
+2026-02-07T19:18:25: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T19:18:25:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:18:25:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:18:25:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:18:25:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:18:25:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:18:25:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:18:25:   statusCode: 500
+2026-02-07T19:18:25: }
+2026-02-07T19:18:25: 
+2026-02-07T19:18:25: Node.js v22.20.0
+2026-02-07T19:18:30: 
+2026-02-07T19:18:30: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:18:30:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:18:30:           ^
+2026-02-07T19:18:30: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T19:18:30:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:18:30:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:18:30:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:18:30:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:18:30:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:18:30:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:18:30:   statusCode: 500
+2026-02-07T19:18:30: }
+2026-02-07T19:18:30: 
+2026-02-07T19:18:30: Node.js v22.20.0
+2026-02-07T19:18:36: 
+2026-02-07T19:18:36: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:18:36:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:18:36:           ^
+2026-02-07T19:18:36: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T19:18:36:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:18:36:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:18:36:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:18:36:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:18:36:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:18:36:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:18:36:   statusCode: 500
+2026-02-07T19:18:36: }
+2026-02-07T19:18:36: 
+2026-02-07T19:18:36: Node.js v22.20.0
+2026-02-07T19:18:41: 
+2026-02-07T19:18:41: /home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125
+2026-02-07T19:18:41:     throw new FST_ERR_PLUGIN_VERSION_MISMATCH(meta.name, requiredVersion, this.version)
+2026-02-07T19:18:41:           ^
+2026-02-07T19:18:41: FastifyError [Error]: fastify-plugin: @fastify/formbody - expected '5.x' fastify version, '4.29.1' is installed
+2026-02-07T19:18:41:     at Object.checkVersion (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:125:11)
+2026-02-07T19:18:41:     at Object.registerPlugin (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginUtils.js:148:16)
+2026-02-07T19:18:41:     at Boot.override (/home/err/devel/node_modules/.pnpm/fastify@4.29.1/node_modules/fastify/lib/pluginOverride.js:28:57)
+2026-02-07T19:18:41:     at Boot._loadPlugin (/home/err/devel/node_modules/.pnpm/avvio@8.4.0/node_modules/avvio/boot.js:425:25)
+2026-02-07T19:18:41:     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+2026-02-07T19:18:41:   code: 'FST_ERR_PLUGIN_VERSION_MISMATCH',
+2026-02-07T19:18:41:   statusCode: 500
+2026-02-07T19:18:41: }
+2026-02-07T19:18:41: 
+2026-02-07T19:18:41: Node.js v22.20.0

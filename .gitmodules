@@ -1,0 +1,3 @@
+[submodule "packages/vexx"]
+	path = packages/vexx
+	url = git@github.com:open-hax/vexx.git

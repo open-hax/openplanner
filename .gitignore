@@ -1,7 +1,14 @@
 # Build artifacts
 dist/
+dist.root-owned.*/
 *.tsbuildinfo
 *.tsbuildinfo.*
+
+# Coverage reports (regenerable)
+coverage/
+
+# Public renderer (CLJS build output)
+public/renderer/
 
 # Dependencies
 node_modules/
@@ -18,6 +25,7 @@ openplanner-lake/
 # CLJS build output
 .target/
 target/
+.shadow-cljs/
 
 # Vite cache
 .vite/
