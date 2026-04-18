@@ -3,9 +3,7 @@
 Notes, scratch code, and reference material.
 
 Packages here are **excluded from `pnpm -r build` and `pnpm -r test`** by default.
-Only the packages listed explicitly in `pnpm-workspace.yaml` participate in
-workspace builds — those are real library dependencies used by `packages/` or
-`archive/` packages.
+They are not part of `pnpm-workspace.yaml`.
 
 ## What belongs here
 
@@ -29,14 +27,8 @@ workspace builds — those are real library dependencies used by `packages/` or
 | `clients/` | scratch | CLI client, pre-existing zod4 type errors |
 | `graph-runtime/` | reference | Specs and docs only |
 | `janus/` | scratch | Standalone tool |
-| `logger/` | **workspace dep** | Used by `archive/persistence` |
 | `mcp-oauth/` | scratch | MCP OAuth service |
 | `ollama-queue/` | scratch | Queue processor |
-| `opencode-cljs-client/` | **workspace dep** | Used by `archive/reconstituter` |
 | `opencode-interface-plugin/` | reference | JS-only plugin |
 | `opencode-openplanner-plugin-cljs/` | scratch | OpenCode plugin CLJS build |
-| `openplanner-cljs-client/` | **workspace dep** | Used by cephalon, reconstituter |
-| `test-utils/` | **workspace dep** | Used by `archive/event` |
 | `workbench/` | scratch | Dev workbench UI |
-
-**Workspace dep** = listed in `pnpm-workspace.yaml`, participates in builds.

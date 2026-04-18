@@ -3,13 +3,5 @@ packages:
   - './app/*'
   - 'packages/**'
 
-  # Pseudo packages that are real workspace dependencies
-  # (the rest of pseudo/ is scratch/notes/reference — excluded from builds)
-  - 'pseudo/opencode-cljs-client'
-  - 'pseudo/openplanner-cljs-client'
-  - 'pseudo/test-utils'
-  - 'pseudo/logger'
-
-  # Archive packages that are real workspace dependencies
-  # (the rest of archive/ is frozen/legacy — excluded from builds)
+  # Archive: frozen/legacy code (only event is still a workspace dep)
   - 'archive/event'
