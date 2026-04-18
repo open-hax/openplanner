@@ -6,7 +6,7 @@
     "composite": true,
     "declaration": true,
     "exactOptionalPropertyTypes": false,
-    "types": ["node", "ava"]
+    "types": ["node"]
   },
   "include": ["src/**/*"],
   "references": []

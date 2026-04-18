@@ -13,9 +13,9 @@
     "README.md"
   ],
   "scripts": {
-    "predev": "pnpm -C ../../../../../packages/webgl-graph-view build && pnpm -C ../graph-weaver-aco build",
+    "predev": "pnpm -C ../webgl-graph-view build && pnpm -C ../graph-weaver-aco build",
     "dev": "tsx src/server.ts",
-    "prebuild": "pnpm -C ../../../../../packages/webgl-graph-view build && pnpm -C ../graph-weaver-aco build",
+    "prebuild": "pnpm -C ../webgl-graph-view build && pnpm -C ../graph-weaver-aco build",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js"
   },

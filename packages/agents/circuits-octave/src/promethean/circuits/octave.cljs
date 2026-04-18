@@ -14,6 +14,7 @@
    7. NEUROGENETIC - Evolution, species-mind
    8. NEUROATOMIC - Cosmic consciousness, unity"
   (:require
+    [clojure.string :as str]
     [promethean.personality.system :as ps]))
 
 ;; ============================================================================
@@ -209,7 +210,7 @@
   [circuits]
   (let [intervals (resolve-intervals-from-env)
         enabled (if-let [v (env "CEPHALON_CIRCUITS_ENABLED")]
-                  (set (map keyword (clojure.string/split v #",")))
+                  (set (map keyword (str/split v #",")))
                   nil)]
     (filter
       (fn [c]

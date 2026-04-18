@@ -24,13 +24,13 @@
     "README.md"
   ],
   "scripts": {
-    "predev": "pnpm -C ../openplanner-cljs-client build && pnpm -C ../opencode-cljs-client build",
+    "predev": "pnpm -C ../../pseudo/openplanner-cljs-client build && pnpm -C ../../pseudo/opencode-cljs-client build",
     "dev": "tsx src/reconstitute.ts",
-    "prebuild": "pnpm -C ../openplanner-cljs-client build && pnpm -C ../opencode-cljs-client build",
+    "prebuild": "pnpm -C ../../pseudo/openplanner-cljs-client build && pnpm -C ../../pseudo/opencode-cljs-client build",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/reconstitute.js",
     "reconstitute": "tsx src/reconstitute.ts",
-    "preopencode-sessions": "pnpm -C ../openplanner-cljs-client build && pnpm -C ../opencode-cljs-client build",
+    "preopencode-sessions": "pnpm -C ../../pseudo/openplanner-cljs-client build && pnpm -C ../../pseudo/opencode-cljs-client build",
     "opencode-sessions": "tsx src/opencode-sessions.ts",
     "test": "pnpm run build && ava dist/*.test.js"
   },
