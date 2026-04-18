@@ -16,6 +16,7 @@ import {
   THINKING_OPTIONS,
   TRIGGER_KIND_OPTIONS,
   validateContract,
+  seedContractsFromEventAgents,
   type AgentContract,
   type ContractCompileResult,
   type ContractListItem,
@@ -35,6 +36,7 @@ const CHAT_SCRATCHPAD_KEY = "knoxx_contracts_scratchpad_state";
 const CHAT_PINNED_KEY = "knoxx_contracts_pinned_context";
 const CHAT_SESSION_STATE_KEY = "knoxx_contracts_chat_session_state";
 const CHAT_SIDEBAR_WIDTH_KEY = "knoxx_contracts_sidebar_width_px";
+const AUTO_FOCUS_CONTRACT_KEY = "knoxx_contracts_auto_focus_contract";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -285,11 +287,27 @@ export default function ContractsPage() {
 
   const [showChat, setShowChat] = useState(true);
 
-  // ── Chat workspace controller ──────────────────────────────────────────
+  // ── Auto-focus toggle: when ON, contract agent interactions switch the editor focus ──
+  const [autoFocusContract, setAutoFocusContract] = useState(() => {
+    const stored = localStorage.getItem(AUTO_FOCUS_CONTRACT_KEY);
+    return stored !== null ? stored === "true" : true; // default ON
+  });
+  const toggleAutoFocus = useCallback(() => {
+    setAutoFocusContract((prev) => {
+      const next = !prev;
+      localStorage.setItem(AUTO_FOCUS_CONTRACT_KEY, String(next));
+      return next;
+    });
+  }, []);
+
+  // ── Seeding state ──────────────────────────────────────────────────────
+  const [seeding, setSeeding] = useState(false);
+
+  // ── Chat workspace controller (contract librarian persona) ───────────
   const chat = useChatWorkspaceController({
     initialShowCanvas: false,
     initialSidebarWidthPx: 420,
-    defaultRole: "system_admin",
+    defaultRole: "contract_librarian",
     sessionIdKey: CHAT_SESSION_ID_KEY,
     scratchpadStorageKey: CHAT_SCRATCHPAD_KEY,
     pinnedContextStorageKey: CHAT_PINNED_KEY,
@@ -649,6 +667,10 @@ export default function ContractsPage() {
               style={{ padding: "5px 12px", borderRadius: tokens.radius.sm, border: `1px solid ${showChat ? palette.accent.cyan : palette.fg.subtle}`, background: showChat ? "rgba(102, 217, 239, 0.08)" : palette.bg.default, color: showChat ? palette.accent.cyan : palette.fg.soft, fontSize: tokens.fontSize.xs, cursor: "pointer" }}>
               {showChat ? "✕ Chat" : "💬 Chat"}
             </button>
+            <button type="button" onClick={() => { setSeeding(true); seedContractsFromEventAgents().then((result) => { setNotice({ tone: result.seeded.length > 0 ? "success" : "error", text: result.message }); loadAgentLibrary(); }).catch((err) => { setNotice({ tone: "error", text: err instanceof Error ? err.message : String(err) }); }).finally(() => setSeeding(false)); }} disabled={seeding}
+              style={{ padding: "5px 12px", borderRadius: tokens.radius.sm, border: `1px solid ${palette.fg.subtle}`, background: palette.bg.default, color: palette.fg.soft, fontSize: tokens.fontSize.xs, cursor: "pointer" }}>
+              {seeding ? "Seeding…" : "🌱 Seed"}
+            </button>
           </div>
         </div>
 
@@ -793,7 +815,7 @@ export default function ContractsPage() {
         </div>
       </div>
 
-      {/* ── Right sidebar: Chat workspace ─────────────────────────────── */}
+      {/* ── Right sidebar: Contract Librarian Chat workspace ──────── */}
       {showChat ? (
         <aside
           style={{
@@ -801,24 +823,52 @@ export default function ContractsPage() {
             minWidth: 380,
             borderLeft: `1px solid ${palette.fg.subtle}`,
             display: "flex",
+            flexDirection: "column",
             minHeight: 0,
             overflow: "hidden",
             background: palette.bg.darker,
           }}
         >
+          {/* Auto-focus toggle bar */}
+          <div style={{
+            padding: "6px 12px",
+            borderBottom: `1px solid ${palette.fg.subtle}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            fontSize: tokens.fontSize.xs,
+          }}>
+            <span style={{ color: palette.fg.muted, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              📋 Contract Librarian
+            </span>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", color: autoFocusContract ? palette.accent.cyan : palette.fg.muted }}>
+              <input
+                type="checkbox"
+                checked={autoFocusContract}
+                onChange={toggleAutoFocus}
+                style={{ cursor: "pointer" }}
+              />
+              Auto-focus
+            </label>
+          </div>
           <ChatWorkspacePane
             controller={chat}
             showFiles={false}
             showCanvasToggle={false}
             onShowFiles={() => {}}
             onOpenHydrationSource={(source) => {
-              // Hydration sources from chat — could open a contract
-              const contractId = source.path.split("/").pop() ?? source.path;
-              if (contractId) setSelectedId(contractId);
+              // When contract agent references a contract, switch editor focus
+              if (autoFocusContract) {
+                const contractId = source.path.split("/").pop() ?? source.path;
+                if (contractId) setSelectedId(contractId);
+              }
             }}
             onOpenSourceInPreview={(source: AgentSource) => {
-              const contractId = source.url.split("/").pop() ?? source.url;
-              if (contractId) setSelectedId(contractId);
+              // When contract agent references a contract URL, switch editor focus
+              if (autoFocusContract) {
+                const contractId = source.url.split("/").pop() ?? source.url;
+                if (contractId) setSelectedId(contractId);
+              }
             }}
           />
         </aside>

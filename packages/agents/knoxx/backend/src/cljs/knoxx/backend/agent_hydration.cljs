@@ -1530,6 +1530,163 @@
      (or (mcp/mcp-tools-for-agent) #js [])
      #js [])))
 
+(defn create-contract-custom-tools
+  "Create tools for the contract librarian agent.
+   This agent can read everything (memory, graph, semantic, web) but can only
+   WRITE to contracts. It speaks EDN for contract interactions."
+  ([runtime config] (create-contract-custom-tools runtime config nil))
+  ([runtime config auth-context]
+   (let [Type (aget runtime "Type")
+         allowed? (fn [tool-id]
+                    (or (nil? auth-context)
+                        (ctx-tool-allowed? auth-context tool-id)))
+
+         ;; Contract read tool — returns EDN text for a contract
+         contract-read-params (.Object Type
+                                       #js {:contract_id (.String Type #js {:description "Contract ID to read."})})
+
+         ;; Contract list tool — returns vector of contract IDs
+         contract-list-params (.Object Type #js {})
+
+         ;; Contract write tool — accepts EDN text, validates, stores
+         contract-write-params (.Object Type
+                                        #js {:contract_id (.String Type #js {:description "Contract ID to create or update."})
+                                             :edn_text (.String Type #js {:description "Complete EDN contract text to save. Must be valid EDN with ::contract/id matching contract_id."})})
+
+         ;; Contract validate tool — validates EDN without saving
+         contract-validate-params (.Object Type
+                                           #js {:edn_text (.String Type #js {:description "EDN contract text to validate without saving."})})
+
+         base-url (or (:knoxx-base-url config) "")
+
+         contract-read-execute (fn [_tool-call-id params a b c]
+                                 (let [on-update (or (when (fn? a) a) (when (fn? b) b) (when (fn? c) c))
+                                       contract-id (or (aget params "contract_id") (aget params "contractId") ""
+                                                       )]
+                                   (when (str/blank? contract-id)
+                                     (throw (js/Error. "contract_id is required")))
+                                   (maybe-tool-update! on-update (str "Reading contract " contract-id "…"))
+                                   (-> (js/fetch (str base-url "/api/agent/contracts/" (js/encodeURIComponent contract-id))
+                                                 #js {:method "GET"
+                                                      :headers #js {"Accept" "text/plain"}})
+                                       (.then (fn [resp]
+                                                (.text resp)))
+                                       (.then (fn [edn-text]
+                                                (tool-text-result (str "Contract " contract-id ":\n" edn-text)
+                                                                  {:contract_id contract-id :edn_text edn-text}))))))
+
+         contract-list-execute (fn [_tool-call-id _params a b c]
+                                 (let [on-update (or (when (fn? a) a) (when (fn? b) b) (when (fn? c) c))]
+                                   (maybe-tool-update! on-update "Listing contracts…")
+                                   (-> (js/fetch (str base-url "/api/agent/contracts")
+                                                 #js {:method "GET"
+                                                      :headers #js {"Accept" "text/plain"}})
+                                       (.then (fn [resp]
+                                                (.text resp)))
+                                       (.then (fn [text]
+                                                (tool-text-result (str "Contracts:\n" text)
+                                                                  {:ids_text text}))))))
+
+         contract-write-execute (fn [_tool-call-id params a b c]
+                                  (let [on-update (or (when (fn? a) a) (when (fn? b) b) (when (fn? c) c))
+                                        contract-id (or (aget params "contract_id") (aget params "contractId") "")
+                                        edn-text (or (aget params "edn_text") (aget params "ednText") "")]
+                                    (when (str/blank? contract-id)
+                                      (throw (js/Error. "contract_id is required")))
+                                    (when (str/blank? edn-text)
+                                      (throw (js/Error. "edn_text is required")))
+                                    (maybe-tool-update! on-update (str "Saving contract " contract-id "…"))
+                                    (-> (js/fetch (str base-url "/api/agent/contracts/" (js/encodeURIComponent contract-id))
+                                                  #js {:method "PUT"
+                                                       :headers #js {"Content-Type" "text/plain; charset=utf-8"}
+                                                       :body edn-text})
+                                        (.then (fn [resp]
+                                                 (.text resp)))
+                                        (.then (fn [result-text]
+                                                 (tool-text-result (str "Contract save result for " contract-id ":\n" result-text)
+                                                                   {:contract_id contract-id :result result-text}))))))
+
+         contract-validate-execute (fn [_tool-call-id params a b c]
+                                     (let [on-update (or (when (fn? a) a) (when (fn? b) b) (when (fn? c) c))
+                                           edn-text (or (aget params "edn_text") (aget params "ednText") "")]
+                                       (when (str/blank? edn-text)
+                                         (throw (js/Error. "edn_text is required")))
+                                       (maybe-tool-update! on-update "Validating contract EDN…")
+                                       (-> (js/fetch (str base-url "/api/admin/contracts/validate")
+                                                     #js {:method "POST"
+                                                          :headers #js {"Content-Type" "application/json"}
+                                                          :body (.stringify js/JSON #js {:ednText edn-text})})
+                                           (.then (fn [resp]
+                                                    (.json resp)))
+                                           (.then (fn [result]
+                                                    (let [ok (aget result "ok")
+                                                          errors (or (aget result "errors") #js [])]
+                                                      (tool-text-result
+                                                       (if ok
+                                                         (str "Contract EDN is valid.\n" (pr-str (js->clj result :keywordize-keys true)))
+                                                         (str "Contract EDN validation failed:\n" (pr-str (js->clj errors :keywordize-keys true))))
+                                                       (js->clj result :keywordize-keys true))))))))]
+
+     (clj->js
+      (vec
+       (remove nil?
+               [(when (allowed? "contract.list")
+                  (doto (js-obj)
+                    (aset "name" "contract.list")
+                    (aset "label" "Contract List")
+                    (aset "description" "List all contract IDs in the Knoxx contract registry. Returns a vector of IDs.")
+                    (aset "promptSnippet" "List all available contracts in the registry.")
+                    (aset "promptGuidelines" (clj->js ["Use contract.list to discover available contracts before reading or editing."
+                                                       "Returns EDN vector of contract IDs."]))
+                    (aset "parameters" contract-list-params)
+                    (aset "execute" contract-list-execute)))
+                (when (allowed? "contract.read")
+                  (doto (js-obj)
+                    (aset "name" "contract.read")
+                    (aset "label" "Contract Read")
+                    (aset "description" "Read the EDN text of a contract by ID. Returns raw EDN.")
+                    (aset "promptSnippet" "Read a specific contract's EDN text by its ID.")
+                    (aset "promptGuidelines" (clj->js ["Use contract.read to inspect the current state of a contract."
+                                                       "Returns EDN text that you can reason about and modify."
+                                                       "Use contract.validate before contract.write to catch errors."]))
+                    (aset "parameters" contract-read-params)
+                    (aset "execute" contract-read-execute)))
+                (when (allowed? "contract.write")
+                  (doto (js-obj)
+                    (aset "name" "contract.write")
+                    (aset "label" "Contract Write")
+                    (aset "description" "Create or update a contract by writing EDN text. Validates before saving.")
+                    (aset "promptSnippet" "Write or update a contract's EDN text after validating.")
+                    (aset "promptGuidelines" (clj->js ["Use contract.write to save contract EDN."
+                                                       "Always validate with contract.validate first if you made changes."
+                                                       "The EDN must have ::contract/id matching the contract_id parameter."
+                                                       "This is the ONLY write tool available to the contract agent."]))
+                    (aset "parameters" contract-write-params)
+                    (aset "execute" contract-write-execute)))
+                (when (allowed? "contract.validate")
+                  (doto (js-obj)
+                    (aset "name" "contract.validate")
+                    (aset "label" "Contract Validate")
+                    (aset "description" "Validate EDN contract text without saving. Checks syntax and required fields.")
+                    (aset "promptSnippet" "Validate contract EDN before saving to catch errors.")
+                    (aset "promptGuidelines" (clj->js ["Use contract.validate to check EDN before contract.write."
+                                                       "Returns validation result with any errors."]))
+                    (aset "parameters" contract-validate-params)
+                    (aset "execute" contract-validate-execute)))]))))))
+
+(defn create-contract-librarian-tools
+  "Create the full tool suite for the contract librarian agent.
+   Has all READ tools (memory, graph, semantic, websearch) plus contract-only WRITE.
+   This is the toolset used in the contract editor chat panel."
+  ([runtime config] (create-contract-librarian-tools runtime config nil))
+  ([runtime config auth-context]
+   (let [contract-tools (create-contract-custom-tools runtime config auth-context)
+         read-tools (create-semantic-custom-tools runtime config auth-context)
+         memory-tools (create-openplanner-custom-tools runtime config auth-context)]
+     ;; Concatenate: contract tools + read/semantic tools + memory tools
+     ;; No discord, no music, no MCP — contract agent doesn't need them
+     (.concat (.concat contract-tools read-tools) memory-tools))))
+
 (defn create-knoxx-custom-tools
   ([runtime config] (create-knoxx-custom-tools runtime config nil))
   ([runtime config auth-context]
