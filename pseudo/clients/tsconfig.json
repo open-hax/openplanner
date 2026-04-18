@@ -3,16 +3,12 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true
+    "composite": true,
+    "skipLibCheck": true
   },
   "include": ["src/**/*.ts"],
   "exclude": ["dist", "node_modules", "src/tests-disabled", "src/tests", "pseudo"],
   "references": [
-    {
-      "path": "../persistence"
-    },
-    {
-      "path": "../opencode-interface-plugin"
-    }
+    { "path": "../../archive/persistence" }
   ]
 }
