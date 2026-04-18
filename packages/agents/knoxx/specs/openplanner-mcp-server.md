@@ -33,11 +33,13 @@ An MCP server between Knoxx and OpenPlanner solves all four.
 
 ## Placement
 
-- Container: `openplanner-mcp-server` service in the openplanner Docker Compose
-- Image: Node 22 slim, workspace-mounted so it can run code from `packages/openplanner-mcp-server`
-- Networks: `default`, `ai-infra`
+- Package: `@workspace/openplanner-mcp` in `orgs/open-hax/tooloxx/services/openplanner-mcp/`
+- Tooloxx is the canonical MCP consolidation home — all MCP services live there
+- Uses `@workspace/mcp-foundation` (shared from root workspace at `packages/mcp-foundation/`)
+- Pattern follows `threat-radar-mcp`: Express + `createMcpHttpRouter` + Zod
+- Docker Compose: `openplanner-mcp-server` service in the openplanner compose file
 - Depends on:
-  - `openplanner` (graph + events API)
+  - `openplanner` (graph + events API on port 7777)
   - `openplanner-proxx` (semantic search, embeddings)
 
 ## Interfaces
@@ -150,23 +152,16 @@ Input (matches `promptdb.core/Judgment`):
 ## Package structure
 
 ```
-packages/openplanner-mcp-server/
+services/openplanner-mcp/          # lives in tooloxx, not openplanner
 ├── package.json
 ├── tsconfig.json
-├── src/
-│   ├── index.ts          # HTTP server entrypoint
-│   ├── mcp-handler.ts    # JSON-RPC 2.0 dispatch
-│   ├── tools/
-│   │   ├── query-graph.ts
-│   │   ├── search-events.ts
-│   │   ├── append-fact.ts
-│   │   ├── append-obs.ts
-│   │   ├── append-inference.ts
-│   │   ├── append-attestation.ts
-│   │   └── append-judgment.ts
-│   ├── validation.ts     # promptdb-core schema validation (TS port)
-│   └── scoping.ts        # API-key → project/source mapping
 ├── Dockerfile
+├── .env.example
+├── src/
+│   ├── main.ts          # Express + MCP server entrypoint
+│   ├── client.ts        # OpenPlanner HTTP API client
+│   ├── schemas.ts       # Zod port of promptdb-core Malli schemas
+│   └── tools.ts         # MCP tool registration (7 tools)
 └── README.md
 ```
 
