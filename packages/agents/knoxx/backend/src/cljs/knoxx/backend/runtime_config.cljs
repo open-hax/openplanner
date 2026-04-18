@@ -110,10 +110,7 @@
                           ["memory_session" "Memory Session" "Load a specific Knoxx session from OpenPlanner"]
                           ["graph_query" "Graph Query" "Query the canonical knowledge graph"]
                           ["semantic_query" "Semantic Query" "Search the active Knoxx corpus"]
-                          ["contract.list" "Contract List" "List all contract IDs in the registry"]
-                          ["contract.read" "Contract Read" "Read the EDN text of a contract by ID"]
-                          ["contract.write" "Contract Write" "Create or update a contract by writing EDN text"]
-                          ["contract.validate" "Contract Validate" "Validate EDN contract text without saving"]]})
+                          ["contract.write" "Contract Write" "Create or update a contract by writing EDN text"]]})
 
 (def role-aliases
   {"executive" "knowledge_worker"

@@ -2,6 +2,7 @@
   (:require [knoxx.backend.agent-hydration :refer [ensure-settings!]]
             [knoxx.backend.agent-turns :as agent-turns :refer [recover-active-agent-sessions! lounge-messages*]]
             [knoxx.backend.app-routes :as app-routes]
+            [knoxx.backend.contracts-routes :as contracts-routes]
             [knoxx.backend.event-agents :as event-agents]
             [knoxx.backend.mcp-bridge :as mcp]
             [knoxx.backend.discord-gateway :as discord-gateway]
@@ -88,6 +89,15 @@
                      (app-routes/register-routes! runtime app config lounge-messages*)
                      ;; Start generic event-agent runtime
                      (event-agents/start! config)
+                     ;; Migrate event-agent jobs → EDN contracts (one-time, idempotent)
+                     (-> (contracts-routes/migrate-event-agents->contracts!)
+                         (.then (fn [result]
+                                  (when (seq (:seeded result))
+                                    (.log.info app (str "Migrated " (count (:seeded result)) " event-agent jobs → EDN contracts: " (pr-str (:seeded result)))))))
+                         (.catch (fn [err]
+                                  (.log.warn app (str "Event-agent → contract migration skipped: " (.-message err))))))
+                     ;; Ensure the contract_librarian agent's own contract exists
+                     (contracts-routes/ensure-contract-librarian-contract!)
                      (.listen app #js {:host (:host config)
                                        :port (:port config)})))
             (.then (fn [_]

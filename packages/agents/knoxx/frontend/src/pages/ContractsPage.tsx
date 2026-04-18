@@ -16,7 +16,6 @@ import {
   THINKING_OPTIONS,
   TRIGGER_KIND_OPTIONS,
   validateContract,
-  seedContractsFromEventAgents,
   type AgentContract,
   type ContractCompileResult,
   type ContractListItem,
@@ -299,9 +298,6 @@ export default function ContractsPage() {
       return next;
     });
   }, []);
-
-  // ── Seeding state ──────────────────────────────────────────────────────
-  const [seeding, setSeeding] = useState(false);
 
   // ── Chat workspace controller (contract librarian persona) ───────────
   const chat = useChatWorkspaceController({
@@ -666,10 +662,6 @@ export default function ContractsPage() {
             <button type="button" onClick={() => setShowChat((v) => !v)}
               style={{ padding: "5px 12px", borderRadius: tokens.radius.sm, border: `1px solid ${showChat ? palette.accent.cyan : palette.fg.subtle}`, background: showChat ? "rgba(102, 217, 239, 0.08)" : palette.bg.default, color: showChat ? palette.accent.cyan : palette.fg.soft, fontSize: tokens.fontSize.xs, cursor: "pointer" }}>
               {showChat ? "✕ Chat" : "💬 Chat"}
-            </button>
-            <button type="button" onClick={() => { setSeeding(true); seedContractsFromEventAgents().then((result) => { setNotice({ tone: result.seeded.length > 0 ? "success" : "error", text: result.message }); loadAgentLibrary(); }).catch((err) => { setNotice({ tone: "error", text: err instanceof Error ? err.message : String(err) }); }).finally(() => setSeeding(false)); }} disabled={seeding}
-              style={{ padding: "5px 12px", borderRadius: tokens.radius.sm, border: `1px solid ${palette.fg.subtle}`, background: palette.bg.default, color: palette.fg.soft, fontSize: tokens.fontSize.xs, cursor: "pointer" }}>
-              {seeding ? "Seeding…" : "🌱 Seed"}
             </button>
           </div>
         </div>

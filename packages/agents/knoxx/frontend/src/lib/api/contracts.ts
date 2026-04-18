@@ -139,47 +139,6 @@ export async function copyContract(
   );
 }
 
-// ── Seed from event-agents ──────────────────────────────────────────────────
-
-export interface SeedResult {
-  seeded: string[];
-  skipped: number;
-  message: string;
-}
-
-/**
- * Bootstrap EDN contracts from event-agent jobs that don't already have contracts.
- * Returns the list of newly seeded contract IDs.
- */
-export async function seedContractsFromEventAgents(): Promise<SeedResult> {
-  const resp = await fetch("/api/admin/contracts/seed-from-event-agents", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
-  const text = await resp.text();
-  // Parse EDN response — it's a simple map, try JSON-like parsing
-  // The backend returns pr-str output which is EDN
-  try {
-    // Try to extract the seeded vector and message from the EDN text
-    const seededMatch = text.match(/:seeded\s+\[([^\]]*)\]/);
-    const skippedMatch = text.match(/:skipped\s+(\d+)/);
-    const messageMatch = text.match(/:message\s+"([^"]*)"/);
-    const seeded = seededMatch?.[1]
-      ? seededMatch[1]
-          .split(/\s+/)
-          .filter(Boolean)
-          .map((s) => s.replace(/"/g, ""))
-      : [];
-    return {
-      seeded,
-      skipped: Number(skippedMatch?.[1] ?? 0),
-      message: messageMatch?.[1] ?? text,
-    };
-  } catch {
-    return { seeded: [], skipped: 0, message: text };
-  }
-}
-
 // ── Contract Agent API (EDN-native) ──────────────────────────────────────────
 
 /**
