@@ -2,6 +2,3 @@ packages:
   # Production packages — always built and tested
   - './app/*'
   - 'packages/**'
-
-  # Archive: frozen/legacy code (only event is still a workspace dep)
-  - 'archive/event'
