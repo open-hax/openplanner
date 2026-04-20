@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 
 const VEXX_BASE_URL = String(process.env.VEXX_BASE_URL ?? "").trim();
 const VEXX_API_KEY = String(process.env.VEXX_API_KEY ?? "").trim();
+const VEXX_ENFORCE = /^(1|true|yes|on)$/i.test(String(process.env.VEXX_ENFORCE ?? ""));
 
 async function checkVectorHealth(app: any): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -90,13 +91,20 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/health", async (_req, reply) => {
     const embeddingRuntime = (app as any).embeddingRuntime;
     const dependencyHealth = await getDependencyHealth(app);
-    const ok = dependencyHealth.vectorStore.ok && dependencyHealth.embeddings.ok && dependencyHealth.vexx.ok && dependencyHealth.graphLayout.ok;
+    const ok =
+      dependencyHealth.vectorStore.ok &&
+      dependencyHealth.embeddings.ok &&
+      dependencyHealth.graphLayout.ok &&
+      (VEXX_ENFORCE ? dependencyHealth.vexx.ok : true);
     reply.code(ok ? 200 : 503);
     return {
       ok,
       time: new Date().toISOString(),
       storageBackend: "mongodb",
       ftsEnabled: true,
+      vexx: {
+        enforce: VEXX_ENFORCE,
+      },
       vectorCollections: {
         hot: app.mongo.hotVectors.collectionName,
         compact: app.mongo.compactVectors.collectionName,
