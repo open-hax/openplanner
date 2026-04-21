@@ -1,4 +1,5 @@
 import { Myrmex } from "./Myrmex.js";
+import http from "node:http";
 
 function env(key: string, fallback?: string): string {
   const val = process.env[key];
@@ -7,6 +8,44 @@ function env(key: string, fallback?: string): string {
     process.exit(1);
   }
   return val ?? fallback ?? "";
+}
+
+function startHealthServer(getStatus: () => any) {
+  const host = (process.env.MYRMEX_HTTP_HOST || "0.0.0.0").trim();
+  const port = Number.parseInt(process.env.MYRMEX_HTTP_PORT || "8799", 10);
+  if (!Number.isFinite(port) || port <= 0) {
+    console.warn(`[myrmex] invalid MYRMEX_HTTP_PORT=${process.env.MYRMEX_HTTP_PORT}; skipping health server`);
+    return;
+  }
+
+  const server = http.createServer((req, res) => {
+    const url = req.url || "/";
+    if (req.method === "GET" && (url === "/health" || url.startsWith("/health?"))) {
+      const body = JSON.stringify({ ok: true, service: "myrmex", status: getStatus() });
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      });
+      res.end(body);
+      return;
+    }
+    if (req.method === "GET" && (url === "/status" || url.startsWith("/status?"))) {
+      const body = JSON.stringify({ ok: true, service: "myrmex", status: getStatus() });
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      });
+      res.end(body);
+      return;
+    }
+
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "not found" }));
+  });
+
+  server.listen(port, host, () => {
+    console.log(`[myrmex] health server listening on http://${host}:${port}`);
+  });
 }
 
 async function main() {
@@ -84,6 +123,8 @@ async function main() {
       console.log(`[myrmex] checkpoint: ${ev.nodeCount} nodes, ${ev.frontierSize} frontier`);
     }
   });
+
+  startHealthServer(() => myrmex.stats());
 
   if (seedUrls.length > 0) {
     console.log(`[myrmex] seeding ${seedUrls.length} URLs`);
