@@ -600,7 +600,14 @@ async function main(): Promise<void> {
   };
 
   // boot
-  await rebuildLocal();
+  // IMPORTANT: don't block the server from starting if the initial local rebuild fails.
+  // In openplanner-backed modes, transient API/auth issues would otherwise make the UI
+  // "load forever" because the HTTP server never begins listening.
+  try {
+    await rebuildLocal();
+  } catch (error) {
+    console.error("[devel-graph-weaver] boot rebuild failed; starting with empty graph", error);
+  }
   startWeaver();
 
   // scan timer
