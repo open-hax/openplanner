@@ -1,4 +1,8 @@
 import { Myrmex } from "./Myrmex.js";
+import http from "node:http";
+
+type RecentPage = { ts: string; url: string; title: string | null; outgoing: number };
+type RecentError = { ts: string; url: string; message: string };
 
 function env(key: string, fallback?: string): string {
   const val = process.env[key];
@@ -7,6 +11,44 @@ function env(key: string, fallback?: string): string {
     process.exit(1);
   }
   return val ?? fallback ?? "";
+}
+
+function startHealthServer(getStatus: () => any) {
+  const host = (process.env.MYRMEX_HTTP_HOST || "0.0.0.0").trim();
+  const port = Number.parseInt(process.env.MYRMEX_HTTP_PORT || "8799", 10);
+  if (!Number.isFinite(port) || port <= 0) {
+    console.warn(`[myrmex] invalid MYRMEX_HTTP_PORT=${process.env.MYRMEX_HTTP_PORT}; skipping health server`);
+    return;
+  }
+
+  const server = http.createServer((req, res) => {
+    const url = req.url || "/";
+    if (req.method === "GET" && (url === "/health" || url.startsWith("/health?"))) {
+      const body = JSON.stringify({ ok: true, service: "myrmex", detail: getStatus() });
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      });
+      res.end(body);
+      return;
+    }
+    if (req.method === "GET" && (url === "/status" || url.startsWith("/status?"))) {
+      const body = JSON.stringify({ ok: true, service: "myrmex", detail: getStatus() });
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      });
+      res.end(body);
+      return;
+    }
+
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "not found" }));
+  });
+
+  server.listen(port, host, () => {
+    console.log(`[myrmex] health server listening on http://${host}:${port}`);
+  });
 }
 
 async function main() {
@@ -75,15 +117,53 @@ async function main() {
     openPlannerBackoffMaxMs: parseInt(env("MYRMEX_OPENPLANNER_BACKOFF_MAX_MS", "60000"), 10),
   });
 
+  const recentPages: RecentPage[] = [];
+  const recentErrors: RecentError[] = [];
+  let lastCheckpointAt: string | null = null;
+  let lastCheckpoint: any = null;
+  const startedAt = new Date().toISOString();
+
   myrmex.onEvent((ev) => {
     if (ev.type === "page") {
+      recentPages.unshift({
+        ts: new Date().toISOString(),
+        url: ev.url,
+        title: ev.title || null,
+        outgoing: ev.outgoing.length,
+      });
+      if (recentPages.length > 25) recentPages.length = 25;
       console.log(`[myrmex] page: ${ev.url} (${ev.title || "no title"}) [${ev.outgoing.length} links]`);
     } else if (ev.type === "error") {
+      recentErrors.unshift({ ts: new Date().toISOString(), url: ev.url, message: ev.message });
+      if (recentErrors.length > 25) recentErrors.length = 25;
       console.error(`[myrmex] error: ${ev.url} - ${ev.message}`);
     } else if (ev.type === "checkpoint") {
+      lastCheckpointAt = new Date().toISOString();
+      lastCheckpoint = ev;
       console.log(`[myrmex] checkpoint: ${ev.nodeCount} nodes, ${ev.frontierSize} frontier`);
     }
   });
+
+  startHealthServer(() => ({
+    ok: true,
+    startedAt,
+    config: {
+      project: env("MYRMEX_PROJECT", "web"),
+      source: env("MYRMEX_SOURCE", "myrmex"),
+      seedUrls: seedUrls.slice(0, 200),
+      seedUrlCount: seedUrls.length,
+      shuvCrawlBaseUrl: env("SHUVCRAWL_BASE_URL", "http://localhost:3777"),
+      openPlannerBaseUrl: env("OPENPLANNER_BASE_URL", ""),
+      proxxBaseUrl: env("PROXX_BASE_URL", ""),
+    },
+    stats: myrmex.stats(),
+    recent: {
+      pages: recentPages,
+      errors: recentErrors,
+      lastCheckpointAt,
+      lastCheckpoint,
+    },
+  }));
 
   if (seedUrls.length > 0) {
     console.log(`[myrmex] seeding ${seedUrls.length} URLs`);
