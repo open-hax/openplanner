@@ -48,6 +48,42 @@ export type GraphQLState = {
     };
   };
 
+  /**
+   * Build a focused, layouted subgraph view around a root node.
+   * Semantics: undirected hops across edges in the combined store.
+   */
+  getFocusedGraphView: (opts: {
+    rootId: string;
+    distance: number;
+    maxNodes?: number;
+    maxEdges?: number;
+  }) => {
+    nodes: Array<{
+      id: string;
+      kind: string;
+      label: string;
+      x: number;
+      y: number;
+      external: boolean;
+      loadedByDefault: boolean;
+      layer?: string;
+      data?: unknown;
+    }>;
+    edges: Array<{
+      source: string;
+      target: string;
+      kind: string;
+      layer?: string;
+      data?: unknown;
+    }>;
+    meta: {
+      totalNodes: number;
+      totalEdges: number;
+      sampledNodes: boolean;
+      sampledEdges: boolean;
+    };
+  };
+
   getNode: (id: string) => {
     id: string;
     kind: string;
@@ -202,6 +238,9 @@ const schema = buildSchema(`
 
     """A sampled, layouted view for rendering."""
     graphView(maxNodes: Int, maxEdges: Int): GraphView!
+
+    """A focused, layouted view for rendering centered on a root node."""
+    focusedGraphView(rootId: ID!, distance: Int = 1, maxNodes: Int, maxEdges: Int): GraphView!
 
     node(id: ID!): Node
     edge(id: ID!): Edge
@@ -455,6 +494,42 @@ export function createGraphQLHandler(state: GraphQLState) {
       _ctx: GraphQLContext,
     ) => {
       const view = state.getGraphView({
+        maxNodes: args.maxNodes ?? undefined,
+        maxEdges: args.maxEdges ?? undefined,
+      });
+
+      return {
+        nodes: view.nodes.map((n) => ({
+          id: n.id,
+          kind: n.kind,
+          label: n.label,
+          x: n.x,
+          y: n.y,
+          external: n.external,
+          loadedByDefault: n.loadedByDefault,
+          layer: n.layer || "unknown",
+          dataJson: toDataJson(n.data),
+        })),
+        edges: view.edges.map((e) => ({
+          source: e.source,
+          target: e.target,
+          kind: e.kind,
+          layer: e.layer || "unknown",
+          dataJson: toDataJson(e.data),
+        })),
+        meta: view.meta,
+      };
+    },
+
+    focusedGraphView: (
+      args: { rootId: string; distance?: number | null; maxNodes?: number | null; maxEdges?: number | null },
+      _ctx: GraphQLContext,
+    ) => {
+      const rootId = String(args.rootId || "").trim();
+      const distance = Math.max(0, Math.min(12, Math.floor(Number(args.distance ?? 1))));
+      const view = state.getFocusedGraphView({
+        rootId,
+        distance,
         maxNodes: args.maxNodes ?? undefined,
         maxEdges: args.maxEdges ?? undefined,
       });

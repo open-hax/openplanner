@@ -624,18 +624,16 @@ async function main(): Promise<void> {
   resetRescanTimer();
 
   // --- graph view
-  const buildGraphView = (opts?: { maxNodes?: number; maxEdges?: number }) => {
-    const maxNodes = Math.max(200, Math.floor(opts?.maxNodes ?? config.render.maxRenderNodes));
-    const maxEdges = Math.max(200, Math.floor(opts?.maxEdges ?? config.render.maxRenderEdges));
-    const cacheKey = `${revision}:${maxNodes}:${maxEdges}`;
-    const cached = graphViewCache.get(cacheKey);
-    if (cached) return cached;
+  const focusedGraphViewCache = new Map<string, ReturnType<typeof buildGraphView>>();
 
-    const combined = getCombinedStore().snapshot();
-
-    const sampled = downsampleSnapshot(combined, { maxNodes, maxEdges });
+  const buildGraphViewFromSnapshot = (
+    snapshot: { nodes: GraphNode[]; edges: GraphEdge[] },
+    opts: { maxNodes: number; maxEdges: number },
+  ) => {
+    const sampled = downsampleSnapshot(snapshot, opts);
     const sampledNodes = sampled.nodes as unknown as GraphNode[];
     const sampledEdges = sampled.edges as unknown as GraphEdge[];
+
     const needsDerivedLayout = sampledNodes.some((node) => !posFromData(node.data));
     const positions = needsDerivedLayout
       ? layoutGraph({
@@ -644,7 +642,7 @@ async function main(): Promise<void> {
         })
       : null;
 
-    const view = {
+    return {
       nodes: sampledNodes.map((n) => {
         const override = posFromData(n.data);
         const p = override ?? positions?.get(n.id) ?? { x: 0, y: 0 };
@@ -674,8 +672,83 @@ async function main(): Promise<void> {
         sampledEdges: sampled.sampledEdges,
       },
     };
+  };
+
+  const buildGraphView = (opts?: { maxNodes?: number; maxEdges?: number }) => {
+    const maxNodes = Math.max(200, Math.floor(opts?.maxNodes ?? config.render.maxRenderNodes));
+    const maxEdges = Math.max(200, Math.floor(opts?.maxEdges ?? config.render.maxRenderEdges));
+    const cacheKey = `${revision}:${maxNodes}:${maxEdges}`;
+    const cached = graphViewCache.get(cacheKey);
+    if (cached) return cached;
+
+    const combined = getCombinedStore().snapshot();
+
+    const view = buildGraphViewFromSnapshot(combined as { nodes: GraphNode[]; edges: GraphEdge[] }, { maxNodes, maxEdges });
 
     graphViewCache.set(cacheKey, view);
+    return view;
+  };
+
+  const buildFocusedGraphView = (opts: { rootId: string; distance: number; maxNodes?: number; maxEdges?: number }) => {
+    const rootId = String(opts.rootId || "").trim();
+    const distance = Math.max(0, Math.min(12, Math.floor(Number(opts.distance ?? 1))));
+    const maxNodes = Math.max(20, Math.floor(opts.maxNodes ?? config.render.maxRenderNodes));
+    const maxEdges = Math.max(20, Math.floor(opts.maxEdges ?? config.render.maxRenderEdges));
+
+    const cacheKey = `${revision}:${rootId}:${distance}:${maxNodes}:${maxEdges}`;
+    const cached = focusedGraphViewCache.get(cacheKey);
+    if (cached) return cached;
+
+    const combined = getCombinedStore().snapshot() as unknown as { nodes: GraphNode[]; edges: GraphEdge[] };
+    const nodesById = new Map(combined.nodes.map((node) => [node.id, node] as const));
+
+    if (!rootId || !nodesById.has(rootId)) {
+      const empty = buildGraphViewFromSnapshot({ nodes: [], edges: [] } as unknown as { nodes: GraphNode[]; edges: GraphEdge[] }, {
+        maxNodes,
+        maxEdges,
+      });
+      focusedGraphViewCache.set(cacheKey, empty);
+      return empty;
+    }
+
+    const adjacency = new Map<string, Set<string>>();
+    const ensureAdj = (id: string) => {
+      const existing = adjacency.get(id);
+      if (existing) return existing;
+      const created = new Set<string>();
+      adjacency.set(id, created);
+      return created;
+    };
+
+    for (const edge of combined.edges) {
+      ensureAdj(edge.source).add(edge.target);
+      ensureAdj(edge.target).add(edge.source);
+    }
+
+    const visited = new Set<string>([rootId]);
+    let frontier = new Set<string>([rootId]);
+
+    for (let step = 0; step < distance; step += 1) {
+      const next = new Set<string>();
+      for (const id of frontier) {
+        for (const neighbor of adjacency.get(id) ?? []) {
+          if (visited.has(neighbor)) continue;
+          visited.add(neighbor);
+          next.add(neighbor);
+          if (visited.size >= maxNodes) break;
+        }
+        if (visited.size >= maxNodes) break;
+      }
+      if (next.size === 0) break;
+      frontier = next;
+      if (visited.size >= maxNodes) break;
+    }
+
+    const sliceNodes = combined.nodes.filter((node) => visited.has(node.id));
+    const sliceEdges = combined.edges.filter((edge) => visited.has(edge.source) && visited.has(edge.target));
+    const view = buildGraphViewFromSnapshot({ nodes: sliceNodes, edges: sliceEdges }, { maxNodes, maxEdges });
+
+    focusedGraphViewCache.set(cacheKey, view);
     return view;
   };
 
@@ -990,6 +1063,7 @@ async function main(): Promise<void> {
     updateConfig,
     getStatus,
     getGraphView: (opts) => buildGraphView(opts),
+    getFocusedGraphView: (opts) => buildFocusedGraphView(opts),
     getNode: (id) => getNode(id),
     getEdge: (id) => getEdge(id),
     listEdges,
