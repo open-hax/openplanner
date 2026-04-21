@@ -77,6 +77,10 @@ type ErosErisHealthSnapshot = {
   viewEdges: number;
   springs: number;
   semanticPairs: number;
+  particles: number;
+  embeddingsCached: number;
+  refreshCount: number;
+  viewMeta: Record<string, unknown> | null;
   inFlight: { refresh: boolean; write: boolean; hydrate: boolean; embed: number };
   heartbeat: string | null;
   lastError: string | null;
@@ -97,6 +101,10 @@ let healthSnapshot: ErosErisHealthSnapshot = {
   viewEdges: 0,
   springs: 0,
   semanticPairs: 0,
+  particles: 0,
+  embeddingsCached: 0,
+  refreshCount: 0,
+  viewMeta: null,
   inFlight: { refresh: false, write: false, hydrate: false, embed: 0 },
   heartbeat: null,
   lastError: null,
@@ -1102,6 +1110,8 @@ async function main(): Promise<void> {
   let springs: SpringEdge[] = [];
   let antTrailEdges: SpringEdge[] = [];
   let currentViewNodes: GraphViewNode[] = [];
+  let currentViewEdgeCount = 0;
+  let lastViewMeta: Record<string, unknown> | null = null;
   let currentDegrees = new Map<string, number>();
   let refreshInFlight: Promise<void> | null = null;
   let writeInFlight: Promise<void> | null = null;
@@ -1231,9 +1241,13 @@ async function main(): Promise<void> {
       lastRefreshAt: lastRefresh ? new Date(lastRefresh).toISOString() : null,
       lastWriteAt: lastWrite ? new Date(lastWrite).toISOString() : null,
       viewNodes: currentViewNodes.length,
-      viewEdges: currentViewNodes.length > 0 ? springs.length : 0,
+      viewEdges: currentViewEdgeCount,
       springs: springs.length,
       semanticPairs: semanticPairs.size,
+      particles: particlesById.size,
+      embeddingsCached: embeddings.size,
+      refreshCount: graphViewRefreshCount,
+      viewMeta: lastViewMeta,
       inFlight: {
         refresh: Boolean(refreshInFlight),
         write: Boolean(writeInFlight),
@@ -1333,6 +1347,8 @@ async function main(): Promise<void> {
         if (antSystem) antSystem.updateGraph(springs);
 
         currentViewNodes = view.nodes;
+        currentViewEdgeCount = view.edges.length;
+        lastViewMeta = view.meta as unknown as Record<string, unknown>;
         currentDegrees = degrees;
 
         if (enableVisibleEmbeddingHydration && openPlannerBaseUrl && !hydrateInFlight) {
