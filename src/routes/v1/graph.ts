@@ -137,6 +137,192 @@ function matchesNodeType(nodeId: string, nodeTypes: string[] | null): boolean {
   return nodeTypes.some((nodeType) => nodeId.includes(`:${nodeType}:`) || nodeId.endsWith(`:${nodeType}`));
 }
 
+type GraphMemorySeedScore = {
+  nodeId: string;
+  score: number;
+  project: string;
+};
+
+type GraphNodeEmbeddingCandidate = {
+  node_id?: string;
+  _id?: string;
+  project?: string;
+  score?: number;
+  embedding?: number[];
+};
+
+function sortGraphMemorySeedScores(rows: GraphMemorySeedScore[]): GraphMemorySeedScore[] {
+  return rows.sort((a, b) => b.score - a.score);
+}
+
+function filterGraphMemorySeedScores(params: {
+  rows: GraphNodeEmbeddingCandidate[];
+  lakeRegexes: RegExp[];
+  nodeTypes: string[] | null;
+  minVectorSimilarity: number;
+}): GraphMemorySeedScore[] {
+  const { rows, lakeRegexes, nodeTypes, minVectorSimilarity } = params;
+  return sortGraphMemorySeedScores(
+    rows
+      .map((doc) => ({
+        nodeId: String(doc.node_id ?? doc._id ?? ""),
+        score: typeof doc.score === "number" ? doc.score : Number.NEGATIVE_INFINITY,
+        project: String(doc.project ?? ""),
+      }))
+      .filter((doc) => doc.nodeId.length > 0)
+      .filter((doc) => doc.score >= minVectorSimilarity)
+      .filter((doc) => lakeRegexes.length === 0 || lakeRegexes.some((pattern: RegExp) => pattern.test(doc.nodeId)))
+      .filter((doc) => matchesNodeType(doc.nodeId, nodeTypes)),
+  );
+}
+
+async function fallbackGraphMemorySeedSearch(params: {
+  graphNodeEmbeddings: any;
+  queryEmbedding: number[];
+  lakeRegexes: RegExp[];
+  nodeTypes: string[] | null;
+  minVectorSimilarity: number;
+  maxCandidates: number;
+  k: number;
+}): Promise<GraphMemorySeedScore[]> {
+  const { graphNodeEmbeddings, queryEmbedding, lakeRegexes, nodeTypes, minVectorSimilarity, maxCandidates, k } = params;
+
+  const embedFilter: Record<string, unknown> = { embedding: { $exists: true } };
+  if (lakeRegexes.length > 0) {
+    embedFilter.node_id = { $in: lakeRegexes };
+  }
+
+  const totalCandidates = await graphNodeEmbeddings.countDocuments(embedFilter);
+  const fetchLimit = Math.min(50000, Math.max(k, maxCandidates), totalCandidates);
+  const scored: GraphMemorySeedScore[] = [];
+
+  const vexxBaseUrl = process.env.VEXX_BASE_URL || "http://host.docker.internal:8787";
+  const vexxTimeoutMs = 30000;
+  const fetchBatchSize = 500;
+
+  const cursor = graphNodeEmbeddings.find(
+    embedFilter,
+    { projection: { node_id: 1, embedding: 1, project: 1 } },
+  ).limit(fetchLimit).batchSize(fetchBatchSize);
+
+  let done = false;
+  while (!done) {
+    const batchDocs: GraphNodeEmbeddingCandidate[] = [];
+    for (let i = 0; i < fetchBatchSize; i += 1) {
+      const doc = await cursor.next();
+      if (doc === null) {
+        done = true;
+        break;
+      }
+      batchDocs.push(doc as GraphNodeEmbeddingCandidate);
+    }
+
+    const validDocs = batchDocs.filter((doc) => {
+      const embedding = doc.embedding as number[] | undefined;
+      return Array.isArray(embedding) && embedding.length === queryEmbedding.length;
+    });
+    if (validDocs.length === 0) continue;
+
+    const batchEmbeddings = validDocs.map((doc) => doc.embedding as number[]);
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), vexxTimeoutMs);
+      const res = await fetch(`${vexxBaseUrl}/v1/cosine/matrix`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          left: [queryEmbedding],
+          right: batchEmbeddings,
+          device: "AUTO",
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const payload = await res.json() as { matrix?: number[] };
+        const matrix = payload.matrix;
+        if (Array.isArray(matrix) && matrix.length === validDocs.length) {
+          for (let i = 0; i < validDocs.length; i += 1) {
+            const similarity = matrix[i]!;
+            const doc = validDocs[i]!;
+            const nodeId = String(doc.node_id ?? doc._id ?? "");
+            if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
+            scored.push({ nodeId, score: similarity, project: String(doc.project ?? "") });
+          }
+          continue;
+        }
+      }
+    } catch {
+      // Fall through to local cosine.
+    }
+
+    for (const doc of validDocs) {
+      const embedding = doc.embedding as number[];
+      let dot = 0;
+      let normA = 0;
+      let normB = 0;
+      for (let index = 0; index < queryEmbedding.length; index += 1) {
+        dot += queryEmbedding[index]! * embedding[index]!;
+        normA += queryEmbedding[index]! * queryEmbedding[index]!;
+        normB += embedding[index]! * embedding[index]!;
+      }
+      const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+      if (denominator === 0) continue;
+      const similarity = dot / denominator;
+      const nodeId = String(doc.node_id ?? doc._id ?? "");
+      if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
+      scored.push({ nodeId, score: similarity, project: String(doc.project ?? "") });
+    }
+  }
+
+  return sortGraphMemorySeedScores(scored);
+}
+
+export async function resolveGraphMemorySeedNodes(params: {
+  nativeVectorSearch: () => Promise<GraphNodeEmbeddingCandidate[]>;
+  fallbackVectorSearch: () => Promise<GraphMemorySeedScore[]>;
+  lakeRegexes: RegExp[];
+  nodeTypes: string[] | null;
+  minVectorSimilarity: number;
+  k: number;
+  logger?: { warn?: (...args: any[]) => void; info?: (...args: any[]) => void };
+}): Promise<{ seedNodeIds: string[]; seedScoresMap: Map<string, number>; vectorHitCount: number }> {
+  const { nativeVectorSearch, fallbackVectorSearch, lakeRegexes, nodeTypes, minVectorSimilarity, k, logger } = params;
+
+  let scored: GraphMemorySeedScore[] = [];
+  let useFallback = false;
+
+  try {
+    scored = filterGraphMemorySeedScores({
+      rows: await nativeVectorSearch(),
+      lakeRegexes,
+      nodeTypes,
+      minVectorSimilarity,
+    });
+
+    if (scored.length === 0) {
+      useFallback = true;
+      logger?.info?.({ lakes: lakeRegexes.length, nodeTypes }, "memory: native graph vector search returned no seeds, using fallback");
+    }
+  } catch (error) {
+    useFallback = true;
+    logger?.warn?.({ err: error }, "memory: native vector search unavailable, using fallback");
+  }
+
+  if (useFallback) {
+    scored = await fallbackVectorSearch();
+  }
+
+  const topK = scored.slice(0, k);
+  return {
+    seedNodeIds: topK.map((entry) => entry.nodeId),
+    seedScoresMap: new Map(topK.map((entry) => [entry.nodeId, entry.score] as const)),
+    vectorHitCount: scored.length,
+  };
+}
+
 export const graphRoutes: FastifyPluginAsync = async (app) => {
   const graphViewCache = new Map<string, { expiresAt: number; value: unknown }>();
   const graphViewCacheTtlMs = 15_000;
@@ -2119,8 +2305,13 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           Math.min(maxCandidates, Math.max(vectorSearchLimit * 10, 200)),
         );
 
-        try {
-          const rawVectorMatches = await app.mongo.graphNodeEmbeddings.aggregate([
+        const resolvedSeeds = await resolveGraphMemorySeedNodes({
+          k,
+          lakeRegexes,
+          nodeTypes,
+          minVectorSimilarity,
+          logger: req.log,
+          nativeVectorSearch: async () => app.mongo.graphNodeEmbeddings.aggregate([
             {
               $vectorSearch: {
                 index: "embedding_vector",
@@ -2138,123 +2329,21 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
                 score: { $meta: "vectorSearchScore" },
               },
             },
-          ]).toArray() as Array<{ node_id?: string; project?: string; score?: number }>;
+          ]).toArray() as Promise<Array<{ node_id?: string; project?: string; score?: number }>>,
+          fallbackVectorSearch: () => fallbackGraphMemorySeedSearch({
+            graphNodeEmbeddings: app.mongo.graphNodeEmbeddings,
+            queryEmbedding,
+            lakeRegexes,
+            nodeTypes,
+            minVectorSimilarity,
+            maxCandidates,
+            k,
+          }),
+        });
 
-          const scored = rawVectorMatches
-            .map((doc) => ({
-              nodeId: String(doc.node_id ?? ""),
-              score: typeof doc.score === "number" ? doc.score : Number.NEGATIVE_INFINITY,
-              project: String(doc.project ?? ""),
-            }))
-            .filter((doc) => doc.nodeId.length > 0)
-            .filter((doc) => doc.score >= minVectorSimilarity)
-            .filter((doc) => lakeRegexes.length === 0 || lakeRegexes.some((pattern: RegExp) => pattern.test(doc.nodeId)))
-            .filter((doc) => matchesNodeType(doc.nodeId, nodeTypes))
-            .sort((a, b) => b.score - a.score);
-
-          const topK = scored.slice(0, k);
-          vectorHitCount = scored.length;
-          seedNodeIds = topK.map((entry) => entry.nodeId);
-          for (const entry of topK) seedScoresMap.set(entry.nodeId, entry.score);
-        } catch (error) {
-          req.log.warn({ err: error }, "memory: native vector search unavailable, using fallback");
-
-          const embedFilter: Record<string, unknown> = { embedding: { $exists: true } };
-          if (lakeRegexes.length > 0) {
-            embedFilter.node_id = { $in: lakeRegexes };
-          }
-
-          const totalCandidates = await app.mongo.graphNodeEmbeddings.countDocuments(embedFilter);
-          const fetchLimit = Math.min(50000, Math.max(k, maxCandidates), totalCandidates);
-          const scored: Array<{ nodeId: string; score: number; project: string }> = [];
-
-          const vexxBaseUrl = process.env.VEXX_BASE_URL || "http://host.docker.internal:8787";
-          const vexxTimeoutMs = 30000;
-          const fetchBatchSize = 500;
-
-          const cursor = app.mongo.graphNodeEmbeddings.find(
-            embedFilter,
-            { projection: { node_id: 1, embedding: 1, project: 1 } },
-          ).limit(fetchLimit).batchSize(fetchBatchSize);
-
-          let done = false;
-          while (!done) {
-            const batchDocs: any[] = [];
-            for (let i = 0; i < fetchBatchSize; i += 1) {
-              const doc = await cursor.next();
-              if (doc === null) {
-                done = true;
-                break;
-              }
-              batchDocs.push(doc);
-            }
-
-            const validDocs = batchDocs.filter((doc: any) => {
-              const embedding = doc.embedding as number[];
-              return embedding && embedding.length === queryEmbedding.length;
-            });
-            if (validDocs.length === 0) continue;
-
-            const batchEmbeddings = validDocs.map((doc: any) => doc.embedding as number[]);
-
-            try {
-              const controller = new AbortController();
-              const timeout = setTimeout(() => controller.abort(), vexxTimeoutMs);
-              const res = await fetch(`${vexxBaseUrl}/v1/cosine/matrix`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  left: [queryEmbedding],
-                  right: batchEmbeddings,
-                  device: "AUTO",
-                }),
-                signal: controller.signal,
-              });
-              clearTimeout(timeout);
-
-              if (res.ok) {
-                const payload = await res.json() as { matrix?: number[] };
-                const matrix = payload.matrix;
-                if (Array.isArray(matrix) && matrix.length === validDocs.length) {
-                  for (let i = 0; i < validDocs.length; i += 1) {
-                    const similarity = matrix[i]!;
-                    const doc = validDocs[i]!;
-                    const nodeId = String(doc.node_id ?? doc._id ?? "");
-                    if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
-                    scored.push({ nodeId, score: similarity, project: doc.project ?? "" });
-                  }
-                  continue;
-                }
-              }
-            } catch {
-              // Fall through to local cosine.
-            }
-
-            for (const doc of validDocs) {
-              const embedding = doc.embedding as number[];
-              let dot = 0;
-              let normA = 0;
-              let normB = 0;
-              for (let index = 0; index < queryEmbedding.length; index += 1) {
-                dot += queryEmbedding[index]! * embedding[index]!;
-                normA += queryEmbedding[index]! * queryEmbedding[index]!;
-                normB += embedding[index]! * embedding[index]!;
-              }
-              const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-              if (denominator === 0) continue;
-              const similarity = dot / denominator;
-              const nodeId = String(doc.node_id ?? doc._id ?? "");
-              if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
-              scored.push({ nodeId, score: similarity, project: doc.project ?? "" });
-            }
-          }
-
-          scored.sort((a, b) => b.score - a.score);
-          const topK = scored.slice(0, k);
-          vectorHitCount = scored.length;
-          seedNodeIds = topK.map((entry) => entry.nodeId);
-          for (const entry of topK) seedScoresMap.set(entry.nodeId, entry.score);
-        }
+        seedNodeIds = resolvedSeeds.seedNodeIds;
+        seedScoresMap = resolvedSeeds.seedScoresMap;
+        vectorHitCount = resolvedSeeds.vectorHitCount;
       }
     } catch (err) {
       return reply.status(500).send({ error: "embedding generation failed", details: String(err) });
@@ -2280,21 +2369,17 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       },
     ];
 
-    if (lakeRegexes.length > 0) {
-      semanticEdgeFilters.push({
-        $or: [
-          ...lakeRegexes.map((pattern: RegExp) => ({ source_node_id: pattern })),
-          ...lakeRegexes.map((pattern: RegExp) => ({ target_node_id: pattern })),
-        ],
-      });
-    }
-
     const semanticEdges = await app.mongo.graphSemanticEdges.find({ $and: semanticEdgeFilters }).toArray();
 
     const adjacency = new Map<string, Array<{ neighbor: string; similarity: number; cost: number }>>();
     for (const edge of semanticEdges) {
       const sourceId = edge.source_node_id;
       const targetId = edge.target_node_id;
+      if (lakeRegexes.length > 0) {
+        const sourceAllowed = lakeRegexes.some((pattern: RegExp) => pattern.test(sourceId));
+        const targetAllowed = lakeRegexes.some((pattern: RegExp) => pattern.test(targetId));
+        if (!sourceAllowed || !targetAllowed) continue;
+      }
       const sim = edge.similarity;
       const cost = 1 - sim;
 
