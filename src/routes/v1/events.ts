@@ -18,6 +18,22 @@ function validateEvent(ev: EventEnvelopeV1) {
   if (!ev.kind) throw new Error("event.kind required");
 }
 
+function hasIndexableEventText(ev: EventEnvelopeV1): boolean {
+  return typeof ev.text === "string" && ev.text.trim().length > 0;
+}
+
+export function shouldIndexEventHotVectors(ev: EventEnvelopeV1): boolean {
+  if (!hasIndexableEventText(ev)) return false;
+
+  // graph.node receives dedicated node-embedding materialization below, and
+  // graph.edge text is mostly structural glue (e.g. mentions_web URLs). Running
+  // both through the generic hot vector path just burns response time and can
+  // hold /v1/events open long enough for upstream header timeouts.
+  if (ev.kind === "graph.node" || ev.kind === "graph.edge") return false;
+
+  return true;
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout | null = null;
   try {
@@ -38,6 +54,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     if (!body || !Array.isArray(body.events)) return reply.status(400).send({ error: "expected { events: [...] }" });
 
     const ids: string[] = [];
+    const eventVectorTasks: Array<Promise<void>> = [];
     const projectedGraphEdges: Array<{
       source_node_id: string;
       target_node_id: string;
@@ -120,42 +137,44 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      if (ev.text) {
-        try {
-          const embeddingScope = {
-            source: ev.source,
-            kind: ev.kind,
-            project: project ?? undefined
-          };
-
-          const embeddingRuntime = (app as any).embeddingRuntime;
-          const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
-          const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
-          await withTimeout(indexTextInMongoVectors({
-            mongo: app.mongo,
-            tier: "hot",
-            parentId: ev.id,
-            text: ev.text,
-            extra,
-            metadata: {
-              ts: ev.ts,
+      if (shouldIndexEventHotVectors(ev)) {
+        eventVectorTasks.push((async () => {
+          try {
+            const embeddingScope = {
               source: ev.source,
               kind: ev.kind,
-              project: (sr as any).project,
-              session: (sr as any).session,
-              author: author ?? "",
-              role: role ?? "",
-              model: model ?? "",
-              embedding_model: embeddingModel ?? "",
-              search_tier: "hot",
-              visibility: extra.visibility ?? "internal",
-              title: extra.title ?? (sr as any).message ?? ev.id,
-            },
-            embeddingFunction,
-          }), 10000, `event vector index ${ev.id}`);
-        } catch (err) {
-          app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
-        }
+              project: project ?? undefined,
+            };
+
+            const embeddingRuntime = (app as any).embeddingRuntime;
+            const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+            const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+            await withTimeout(indexTextInMongoVectors({
+              mongo: app.mongo,
+              tier: "hot",
+              parentId: ev.id,
+              text: ev.text!,
+              extra,
+              metadata: {
+                ts: ev.ts,
+                source: ev.source,
+                kind: ev.kind,
+                project: (sr as any).project,
+                session: (sr as any).session,
+                author: author ?? "",
+                role: role ?? "",
+                model: model ?? "",
+                embedding_model: embeddingModel ?? "",
+                search_tier: "hot",
+                visibility: extra.visibility ?? "internal",
+                title: extra.title ?? (sr as any).message ?? ev.id,
+              },
+              embeddingFunction,
+            }), 10000, `event vector index ${ev.id}`);
+          } catch (err) {
+            app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
+          }
+        })());
       }
     }
 
@@ -164,52 +183,63 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     }
 
     if (graphNodeEmbeddingInputs.length > 0) {
-      try {
-        const embeddingRuntime = (app as any).embeddingRuntime;
-        const groupedByModel = new Map<string, Array<(typeof graphNodeEmbeddingInputs)[number]>>();
+      void (async () => {
+        try {
+          const embeddingRuntime = (app as any).embeddingRuntime;
+          const groupedByModel = new Map<string, Array<(typeof graphNodeEmbeddingInputs)[number]>>();
 
-        for (const input of graphNodeEmbeddingInputs) {
-          const model = embeddingRuntime.hot.getModel({
-            source: "graph-event",
-            kind: "graph.node",
-            project: input.project ?? undefined,
-          });
-          const rows = groupedByModel.get(model) ?? [];
-          rows.push(input);
-          groupedByModel.set(model, rows);
-        }
-
-        for (const [model, rows] of groupedByModel) {
-          const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunctionForModel(model);
-          const embeddings = await withTimeout(
-            embeddingFunction.generate(rows.map((row) => row.text)) as Promise<number[][]>,
-            10_000,
-            `graph node embedding batch ${model}`,
-          );
-
-          const storedRows = rows.flatMap((row, idx) => {
-            const embedding = embeddings[idx];
-            if (!Array.isArray(embedding) || embedding.length === 0) return [];
-            return [{
-              node_id: row.node_id,
-              source_event_id: row.source_event_id,
-              project: row.project ?? null,
-              embedding_model: model,
-              embedding_dimensions: embedding.length,
-              embedding,
-              chunk_count: 1,
-              text: row.text,
-              updated_at: new Date(),
-            }];
-          });
-
-          if (storedRows.length > 0) {
-            await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, storedRows);
+          for (const input of graphNodeEmbeddingInputs) {
+            const model = embeddingRuntime.hot.getModel({
+              source: "graph-event",
+              kind: "graph.node",
+              project: input.project ?? undefined,
+            });
+            const rows = groupedByModel.get(model) ?? [];
+            rows.push(input);
+            groupedByModel.set(model, rows);
           }
+
+          for (const [model, rows] of groupedByModel) {
+            const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunctionForModel(model);
+            const embeddings = await withTimeout(
+              embeddingFunction.generate(rows.map((row) => row.text)) as Promise<number[][]>,
+              10_000,
+              `graph node embedding batch ${model}`,
+            );
+
+            const storedRows = rows.flatMap((row, idx) => {
+              const embedding = embeddings[idx];
+              if (!Array.isArray(embedding) || embedding.length === 0) return [];
+              return [{
+                node_id: row.node_id,
+                source_event_id: row.source_event_id,
+                project: row.project ?? null,
+                embedding_model: model,
+                embedding_dimensions: embedding.length,
+                embedding,
+                chunk_count: 1,
+                text: row.text,
+                updated_at: new Date(),
+              }];
+            });
+
+            if (storedRows.length > 0) {
+              await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, storedRows);
+            }
+          }
+        } catch (err) {
+          app.log.warn({ err, count: graphNodeEmbeddingInputs.length }, "Failed to materialize graph node embeddings during event ingest");
         }
-      } catch (err) {
-        app.log.warn({ err, count: graphNodeEmbeddingInputs.length }, "Failed to materialize graph node embeddings during event ingest");
-      }
+      })();
+    }
+
+    if (eventVectorTasks.length > 0) {
+      void Promise.allSettled(eventVectorTasks).then((results) => {
+        const rejected = results.filter((result) => result.status === "rejected").length;
+        if (rejected > 0) {
+          app.log.warn({ rejected, queued: eventVectorTasks.length }, "Detached event vector indexing completed with rejected tasks");
+        }
+      });
     }
     
     // Track metrics
@@ -227,7 +257,9 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       ftsEnabled: true,
       storageBackend: "mongodb",
       indexed: true,
-      indexing: "required",
+      indexing: eventVectorTasks.length > 0 || graphNodeEmbeddingInputs.length > 0 ? "queued" : "skipped",
+      queuedEventVectors: eventVectorTasks.length,
+      queuedGraphNodeEmbeddings: graphNodeEmbeddingInputs.length,
     };
   });
 };
