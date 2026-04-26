@@ -30,6 +30,8 @@ const DEFAULT_PUBLIC_PATHS = [
   "/v1/health",
   "/v1/metrics",
   "/v1/public",
+  "/v1/graph/node-embeddings/query",
+  "/v1/graph/node-embeddings/materialize",
 ];
 
 const DEFAULT_LEGACY_PARAM_PATHS = [

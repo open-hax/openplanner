@@ -2,6 +2,8 @@ import type { FastifyPluginAsync } from "fastify";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphEdges } from "../../lib/mongodb.js";
 import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import { extractTieredVectorHits } from "../../lib/vector-search.js";
+import { formatEmbeddingQueryText, formatEmbeddingPassageText } from "../../lib/embedding-text.js";
+import { prepareIndexDocument } from "../../lib/indexing.js";
 
 // Simplified graph routes for MongoDB-only backend
 // Full graph functionality requires additional implementation
@@ -1004,12 +1006,18 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       return { vectors: [] };
     }
 
+    // Log the upstream configuration for visibility
+    req.log.info({ inputs: inputs.length, model, inputs_sample: inputs.slice(0, 2) }, "materialize node embeddings batch start");
+
     const embeddingRuntime = (app as any).embeddingRuntime;
     const embeddingFn = embeddingRuntime?.hot?.getEmbeddingFunctionForModel?.(model);
 
     if (!embeddingFn) {
+      req.log.error({ model }, "embedding function not found for model");
       return reply.status(503).send({ error: "embedding runtime not available" });
     }
+
+    req.log.debug({ model, fn: typeof embeddingFn }, "embedding function resolved");
 
     const results: Array<{
       id: string;
@@ -1020,15 +1028,40 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       chunkCount: number;
     }> = [];
 
-    // Batch embed for efficiency
-    const validInputs = inputs
+    // Batch embed for efficiency.
+    // IMPORTANT: do not truncate. If the input is too large for the embedding
+    // runtime (e.g. char limit), we split into chunk nodes by ID suffix.
+    const validInputs: Array<{ id: string; sourceEventId: string; body: string; chunkCount: number }> = inputs
       .slice(0, 100)
       .filter((input: any) => input.id && input.body)
-      .map((input: any) => ({
-        id: String(input.id),
-        sourceEventId: String(input.sourceEventId || input.source_event_id || input.id),
-        body: String(input.body),
-      }));
+      .flatMap((input: any) => {
+        const id = String(input.id);
+        const sourceEventId = String(input.sourceEventId || input.source_event_id || input.id);
+        const prepared = prepareIndexDocument({
+          parentId: id,
+          text: String(input.body),
+          forceChunking: false,
+          targetChunkTokens: 32_000,
+          targetChunkChars: 180_000,
+          overlapChars: 1_000,
+        });
+
+        if (prepared.chunkCount <= 1) {
+          return [{
+            id,
+            sourceEventId,
+            body: formatEmbeddingPassageText(prepared.normalizedText),
+            chunkCount: 1,
+          }];
+        }
+
+        return prepared.chunks.map((chunk) => ({
+          id: chunk.id,
+          sourceEventId,
+          body: formatEmbeddingPassageText(chunk.text),
+          chunkCount: prepared.chunkCount,
+        }));
+      });
 
     if (validInputs.length === 0) {
       return { vectors: [] };
@@ -1036,7 +1069,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const texts = validInputs.map((i: { body: string }) => i.body);
+      req.log.info({ batch_size: texts.length, model }, "calling embedding function");
       const embeddings = await embeddingFn.generate(texts);
+      req.log.info({ got_embeddings: embeddings?.length }, "embedding batch complete");
 
       for (let i: number = 0; i < validInputs.length; i++) {
         const embedding = embeddings[i];
@@ -1048,7 +1083,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           embeddingModel: model,
           embeddingDimensions: embedding.length,
           embedding,
-          chunkCount: 1,
+          chunkCount: validInputs[i].chunkCount ?? 1,
         });
       }
     } catch (err) {
@@ -1066,6 +1101,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           embedding_dimensions: r.embeddingDimensions,
           embedding: r.embedding,
           chunk_count: r.chunkCount,
+          text: validInputs.find((i) => i.id === r.id)?.body,
           updated_at: new Date(),
         }))
       );
@@ -2297,7 +2333,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     let vectorHitCount = 0;
 
     try {
-      const [queryEmbedding] = await embeddingProvider.generate([q]);
+      const [queryEmbedding] = await embeddingProvider.generate([formatEmbeddingQueryText(q)]);
       if (queryEmbedding && Array.isArray(queryEmbedding) && queryEmbedding.length > 0) {
         const vectorSearchLimit = Math.min(maxCandidates, Math.max(k * 4, 50));
         const vectorSearchNumCandidates = Math.max(

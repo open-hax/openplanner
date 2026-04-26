@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { upsertEvent, upsertGraphEdges, upsertGraphNodeEmbeddings } from "../../lib/mongodb.js";
-import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
+import { prepareIndexDocument } from "../../lib/indexing.js";
 import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import { counterInc } from "../../lib/metrics.js";
 import type { EventIngestRequest, EventEnvelopeV1 } from "../../lib/types.js";
+import { splitSentences, deduplicateByHash, computeTextHash } from "../../lib/sentence-split.js";
+import { formatEmbeddingPassageText } from "../../lib/embedding-text.js";
 
 function norm(v: any): string | null {
   if (v === undefined || v === null) return null;
@@ -65,12 +67,86 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       data?: Record<string, unknown> | null;
       updated_at?: Date;
     }> = [];
-    const graphNodeEmbeddingInputs: Array<{
+    const graphNodeEmbeddingInputs = new Map<string, {
       node_id: string;
       source_event_id: string;
       project?: string | null;
       text: string;
-    }> = [];
+      chunk_count: number;
+    }>();
+
+    const derivedGraphNodeOps: any[] = [];
+    const derivedEventIds = new Set<string>();
+    const now = new Date();
+
+    const queueDerivedGraphNodeEvent = (params: {
+      id: string;
+      ts: Date;
+      project?: string | null;
+      nodeId: string;
+      nodeKind: string;
+      label: string;
+      preview: string;
+      extra?: Record<string, unknown>;
+    }): void => {
+      if (derivedEventIds.has(params.id)) return;
+      derivedEventIds.add(params.id);
+
+      derivedGraphNodeOps.push({
+        updateOne: {
+          filter: { _id: params.id },
+          update: {
+            $set: {
+              id: params.id,
+              ts: params.ts,
+              source: "openplanner-derive",
+              kind: "graph.node",
+              project: params.project ?? null,
+              session: null,
+              message: params.label,
+              role: null,
+              author: null,
+              model: null,
+              tags: null,
+              text: "",
+              attachments: null,
+              extra: {
+                node_id: params.nodeId,
+                node_kind: params.nodeKind,
+                label: params.label,
+                preview: params.preview,
+                content_hash: computeTextHash(params.preview),
+                lake: params.project ?? undefined,
+                ...(params.extra ?? {}),
+              },
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              createdAt: now,
+            },
+          },
+          upsert: true,
+        },
+      });
+    };
+
+    const queueNodeEmbedding = (params: {
+      nodeId: string;
+      sourceEventId: string;
+      project?: string | null;
+      text: string;
+      chunkCount?: number;
+    }): void => {
+      const normalized = formatEmbeddingPassageText(params.text);
+      if (!normalized) return;
+      graphNodeEmbeddingInputs.set(params.nodeId, {
+        node_id: params.nodeId,
+        source_event_id: params.sourceEventId,
+        project: params.project ?? null,
+        text: normalized,
+        chunk_count: params.chunkCount ?? 1,
+      });
+    };
 
     for (const ev of body.events) {
       validateEvent(ev);
@@ -128,12 +204,128 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
         const directText = norm(ev.text)?.trim() ?? "";
         const body = directText || preview;
         if (nodeId && body) {
-          graphNodeEmbeddingInputs.push({
-            node_id: nodeId,
-            source_event_id: ev.id,
-            project,
+          const label = String(extra.label ?? extra.path ?? (sr as any).message ?? nodeId).trim() || nodeId;
+          const prepared = prepareIndexDocument({
+            parentId: nodeId,
             text: body,
+            extra,
+            forceChunking: false,
+            targetChunkTokens: 32_000,
+            targetChunkChars: 180_000,
+            overlapChars: 1_000,
           });
+
+          if (prepared.chunkCount <= 1) {
+            queueNodeEmbedding({
+              nodeId,
+              sourceEventId: ev.id,
+              project,
+              text: prepared.normalizedText,
+              chunkCount: 1,
+            });
+          } else {
+            for (const chunk of prepared.chunks) {
+              const chunkLabel = `${label} [chunk ${chunk.chunkIndex + 1}/${chunk.chunkCount}]`;
+              const chunkPreview = chunk.text.slice(0, 800);
+              const chunkEventId = `graph.node:doc_chunk:${chunk.id}`;
+
+              queueDerivedGraphNodeEvent({
+                id: chunkEventId,
+                ts: new Date(ev.ts),
+                project,
+                nodeId: chunk.id,
+                nodeKind: "doc_chunk",
+                label: chunkLabel,
+                preview: chunkPreview,
+                extra: {
+                  parent_node_id: nodeId,
+                  chunk_index: chunk.chunkIndex,
+                  chunk_count: chunk.chunkCount,
+                },
+              });
+
+              projectedGraphEdges.push({
+                source_node_id: nodeId,
+                target_node_id: chunk.id,
+                edge_kind: "contains_chunk",
+                layer: "derived",
+                project,
+                source: "openplanner-derive",
+                data: {
+                  parent_node_id: nodeId,
+                  chunk_index: chunk.chunkIndex,
+                  chunk_count: chunk.chunkCount,
+                },
+                updated_at: new Date(ev.ts),
+              });
+
+              queueNodeEmbedding({
+                nodeId: chunk.id,
+                sourceEventId: ev.id,
+                project,
+                text: chunk.text,
+                chunkCount: chunk.chunkCount,
+              });
+            }
+          }
+
+          const sentenceHashesInDoc = new Set<string>();
+          const sentenceNodeIdsQueued = new Set<string>();
+
+          const sentenceSources = prepared.chunkCount <= 1
+            ? [{ text: prepared.normalizedText }]
+            : prepared.chunks.map((chunk) => ({ text: chunk.text }));
+
+          for (const sourceChunk of sentenceSources) {
+            const sentences = splitSentences(sourceChunk.text);
+            const uniqueSentences = deduplicateByHash(sentences);
+
+            for (const [hash, sent] of uniqueSentences) {
+              if (sent.tokens <= 3) continue;
+              if (sentenceHashesInDoc.has(hash)) continue;
+              sentenceHashesInDoc.add(hash);
+
+              const sentenceNodeId = `${project ?? "devel"}:sentence:${hash}`;
+              const sentenceEventId = `graph.node:sentence:${sentenceNodeId}`;
+
+              if (!sentenceNodeIdsQueued.has(sentenceNodeId)) {
+                sentenceNodeIdsQueued.add(sentenceNodeId);
+                queueDerivedGraphNodeEvent({
+                  id: sentenceEventId,
+                  ts: new Date(ev.ts),
+                  project,
+                  nodeId: sentenceNodeId,
+                  nodeKind: "sentence",
+                  label: sent.sentence.length > 120 ? sent.sentence.slice(0, 117) + "..." : sent.sentence,
+                  preview: sent.sentence,
+                  extra: {
+                    derived_from_node_id: nodeId,
+                  },
+                });
+              }
+
+              projectedGraphEdges.push({
+                source_node_id: nodeId,
+                target_node_id: sentenceNodeId,
+                edge_kind: "contains_sentence",
+                layer: "derived",
+                project,
+                source: "openplanner-derive",
+                data: {
+                  sentence_hash: hash,
+                },
+                updated_at: new Date(ev.ts),
+              });
+
+              queueNodeEmbedding({
+                nodeId: sentenceNodeId,
+                sourceEventId: ev.id,
+                project,
+                text: sent.sentence,
+                chunkCount: 1,
+              });
+            }
+          }
         }
       }
 
@@ -178,17 +370,31 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    if (derivedGraphNodeOps.length > 0) {
+      const batchSize = 1000;
+      for (let i = 0; i < derivedGraphNodeOps.length; i += batchSize) {
+        await app.mongo.events.bulkWrite(derivedGraphNodeOps.slice(i, i + batchSize), { ordered: false });
+      }
+    }
+
     if (projectedGraphEdges.length > 0) {
       await upsertGraphEdges(app.mongo.graphEdges, projectedGraphEdges);
     }
 
-    if (graphNodeEmbeddingInputs.length > 0) {
+    if (graphNodeEmbeddingInputs.size > 0) {
       void (async () => {
         try {
           const embeddingRuntime = (app as any).embeddingRuntime;
-          const groupedByModel = new Map<string, Array<(typeof graphNodeEmbeddingInputs)[number]>>();
+          type GraphNodeEmbeddingInput = {
+            node_id: string;
+            source_event_id: string;
+            project?: string | null;
+            text: string;
+            chunk_count: number;
+          };
+          const groupedByModel = new Map<string, GraphNodeEmbeddingInput[]>();
 
-          for (const input of graphNodeEmbeddingInputs) {
+          for (const input of graphNodeEmbeddingInputs.values()) {
             const model = embeddingRuntime.hot.getModel({
               source: "graph-event",
               kind: "graph.node",
@@ -201,13 +407,27 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
 
           for (const [model, rows] of groupedByModel) {
             const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunctionForModel(model);
+            const nodeIds = rows.map((row) => row.node_id);
+            const existing = await app.mongo.graphNodeEmbeddings
+              .find({ node_id: { $in: nodeIds }, embedding_model: model })
+              .project({ node_id: 1, text: 1 })
+              .toArray();
+            const existingTextById = new Map(existing.map((row: any) => [String(row.node_id), String(row.text ?? "")] as const));
+
+            const toEmbed = rows.filter((row) => {
+              const previous = existingTextById.get(row.node_id);
+              return !previous || previous !== row.text;
+            });
+
+            if (toEmbed.length === 0) continue;
+
             const embeddings = await withTimeout(
-              embeddingFunction.generate(rows.map((row) => row.text)) as Promise<number[][]>,
+              embeddingFunction.generate(toEmbed.map((row) => row.text)) as Promise<number[][]>,
               10_000,
               `graph node embedding batch ${model}`,
             );
 
-            const storedRows = rows.flatMap((row, idx) => {
+            const storedRows = toEmbed.flatMap((row, idx) => {
               const embedding = embeddings[idx];
               if (!Array.isArray(embedding) || embedding.length === 0) return [];
               return [{
@@ -217,7 +437,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
                 embedding_model: model,
                 embedding_dimensions: embedding.length,
                 embedding,
-                chunk_count: 1,
+                chunk_count: row.chunk_count ?? 1,
                 text: row.text,
                 updated_at: new Date(),
               }];
@@ -228,7 +448,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
             }
           }
         } catch (err) {
-          app.log.warn({ err, count: graphNodeEmbeddingInputs.length }, "Failed to materialize graph node embeddings during event ingest");
+          app.log.warn({ err, count: graphNodeEmbeddingInputs.size }, "Failed to materialize graph node embeddings during event ingest");
         }
       })();
     }
@@ -257,9 +477,9 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       ftsEnabled: true,
       storageBackend: "mongodb",
       indexed: true,
-      indexing: eventVectorTasks.length > 0 || graphNodeEmbeddingInputs.length > 0 ? "queued" : "skipped",
+      indexing: eventVectorTasks.length > 0 || graphNodeEmbeddingInputs.size > 0 ? "queued" : "skipped",
       queuedEventVectors: eventVectorTasks.length,
-      queuedGraphNodeEmbeddings: graphNodeEmbeddingInputs.length,
+      queuedGraphNodeEmbeddings: graphNodeEmbeddingInputs.size,
     };
   });
 };
