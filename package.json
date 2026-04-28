@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/main.js",
-    "dev": "tsc -w"
+    "dev": "tsc -w",
+    "test": "tsx --tsconfig tsconfig.json"
   },
   "dependencies": {
     "@fastify/multipart": "^8.2.0",

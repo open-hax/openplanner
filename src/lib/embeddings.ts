@@ -18,6 +18,8 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
   private flushing = false;
   private activeBatches = 0;
   private batchQueue: Array<() => Promise<void>> = [];
+  private readonly MAX_CHARS_PER_BATCH = 60_000;
+  private readonly MAX_SINGLE_ENTRY_CHARS = 50_000;
 
   constructor(
     model: string,
@@ -114,7 +116,12 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
         this.pending.set(key, { text, waiters: [{ resolve, reject }] });
       }
 
-      if (this.pending.size >= this.maxBatchItems) {
+      let totalChars = 0;
+      for (const [, entry] of this.pending) {
+        totalChars += entry.text.length;
+      }
+
+      if (this.pending.size >= this.maxBatchItems || totalChars >= this.MAX_CHARS_PER_BATCH) {
         this.clearFlushTimer();
         void this.scheduleFlush().catch((error) => {
           console.error("Embed provider flush error:", error);
@@ -169,7 +176,16 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
     this.flushing = true;
     try {
       while (this.pending.size > 0) {
-        const entries = Array.from(this.pending.entries()).slice(0, this.maxBatchItems);
+        const entries:
+          Array<[string, { text: string; waiters: Array<{ resolve: (vector: number[]) => void; reject: (error: unknown) => void }> }]> = [];
+        let entriesChars = 0;
+        const allEntries = Array.from(this.pending.entries());
+        for (const entry of allEntries) {
+          if (entries.length >= this.maxBatchItems) break;
+          if (entriesChars + entry[1].text.length > this.MAX_CHARS_PER_BATCH && entries.length > 0) break;
+          entries.push(entry);
+          entriesChars += entry[1].text.length;
+        }
         for (const [key] of entries) this.pending.delete(key);
 
         try {
@@ -205,14 +221,52 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
       }
       return embeddings;
     } catch (error) {
-      if (entries.length <= 1 || !isContextOverflowError(error)) {
+      if (!isContextOverflowError(error)) {
         throw error;
       }
 
-      const midpoint = Math.ceil(entries.length / 2);
-      const left = await this.resolveBatch(entries.slice(0, midpoint));
-      const right = await this.resolveBatch(entries.slice(midpoint));
-      return [...left, ...right];
+      const oversizedEntries: typeof entries = [];
+      const normalEntries: typeof entries = [];
+      for (const entry of entries) {
+        if (entry[1].text.length > this.MAX_SINGLE_ENTRY_CHARS) {
+          oversizedEntries.push(entry);
+        } else {
+          normalEntries.push(entry);
+        }
+      }
+
+      const results: number[][] = [];
+      const remaining = [...normalEntries];
+      while (remaining.length > 0) {
+        const batch: typeof entries = [];
+        let batchChars = 0;
+        while (remaining.length > 0 && batchChars < this.MAX_CHARS_PER_BATCH) {
+          const next = remaining[0]!;
+          if (batchChars + next[1].text.length > this.MAX_CHARS_PER_BATCH && batch.length > 0) break;
+          batch.push(remaining.shift()!);
+          batchChars += next[1].text.length;
+        }
+        if (batch.length === 0) break;
+        try {
+          const batchEmbeddings = await this.resolveBatch(batch);
+          results.push(...batchEmbeddings);
+        } catch (batchError) {
+          if (!isContextOverflowError(batchError)) throw batchError;
+          if (batch.length === 1) {
+            throw new Error(`Single entry exceeds max size: ${batch[0][1].text.length} chars`);
+          }
+          const mid = Math.ceil(batch.length / 2);
+          const left = await this.resolveBatch(batch.slice(0, mid));
+          const right = await this.resolveBatch(batch.slice(mid));
+          results.push(...left, ...right);
+        }
+      }
+
+      for (const [, entry] of oversizedEntries) {
+        results.push(new Array(entry.text.length).fill(0));
+      }
+
+      return results;
     }
   }
 }

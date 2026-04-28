@@ -28,15 +28,18 @@ export function splitSentences(text: string): SentenceWithHash[] {
   const sentences: SentenceWithHash[] = [];
 
   for (const node of tree) {
-    if (typeof node === "object" && "value" in node) {
-      const sentenceText = String(node.value).trim();
-      if (sentenceText.length > 0) {
-        const normalized = sentenceText.toLowerCase();
-        sentences.push({
-          sentence: sentenceText,
-          hash: sha256Hex(normalized),
-          tokens: estimateTokens(sentenceText),
-        });
+    if (typeof node === "object" && node !== null) {
+      const type = (node as any).type;
+      if (type === "Sentence") {
+        const sentenceText = String((node as any).raw ?? "").trim();
+        if (sentenceText.length > 0) {
+          const normalized = sentenceText.toLowerCase();
+          sentences.push({
+            sentence: sentenceText,
+            hash: sha256Hex(normalized),
+            tokens: estimateTokens(sentenceText),
+          });
+        }
       }
     }
   }

@@ -1041,9 +1041,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           parentId: id,
           text: String(input.body),
           forceChunking: false,
-          targetChunkTokens: 32_000,
-          targetChunkChars: 180_000,
-          overlapChars: 1_000,
+          targetChunkTokens: 28_000,
+          targetChunkChars: 80_000,
+          overlapChars: 500,
         });
 
         if (prepared.chunkCount <= 1) {
