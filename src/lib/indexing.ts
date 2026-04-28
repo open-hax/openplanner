@@ -7,8 +7,8 @@ const HTML_ARTIFACT_LINE_RE = /^\s*<\/?(?:div|span|section|article|main|header|f
 const DANGEROUS_BLOCK_RE = /<(script|style|noscript|iframe|object|embed|svg)[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
 const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 32_000;
-const DEFAULT_TARGET_CHUNK_TOKENS = 32_000;
-const DEFAULT_TARGET_CHUNK_CHARS = 120_000;
+const DEFAULT_TARGET_CHUNK_TOKENS = 28_000;
+const DEFAULT_TARGET_CHUNK_CHARS = 80_000;
 const DEFAULT_OVERLAP_CHARS = 1_000;
 const DEFAULT_BATCH_TOKEN_BUDGET = 512_000;
 const DEFAULT_BATCH_ITEM_LIMIT = 256;
@@ -234,7 +234,7 @@ export function isContextOverflowError(error: unknown): boolean {
   // We treat "input too large" (embed provider / OpenAI-style errors) the same as
   // context overflow, because the fix is the same: split the batch into smaller
   // pieces.
-  return /context window|ollama_context_overflow|exceeds model context window|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
+  return /context window|ollama_context_overflow|exceeds model context window|exceed_context_size|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
 }
 
 export function batchPreparedChunks(

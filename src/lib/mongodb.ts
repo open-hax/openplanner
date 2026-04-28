@@ -16,6 +16,59 @@ import { MongoClient, Db, Collection, IndexDirection } from "mongodb";
 const DEFAULT_EVENTS_TTL_SECONDS = 0;
 // Compact memories: 90 days default (they're summarized, so keep longer)
 const DEFAULT_COMPACTED_TTL_SECONDS = 0;
+const DEFAULT_GRAPH_NODE_EMBEDDING_DIMENSIONS = 1024;
+
+async function waitForQueryableSearchIndex(
+  collection: Collection<any>,
+  indexName: string,
+  timeoutMs = 60_000,
+  pollMs = 1_000,
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while ((Date.now() - startedAt) < timeoutMs) {
+    const rows = await collection.listSearchIndexes(indexName).toArray() as Array<{ status?: string; queryable?: boolean }>;
+    const current = rows[0];
+    const status = current?.status;
+    if (status === "READY" && current?.queryable === true) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+
+  throw new Error(`timed out waiting for graph search index ${indexName}`);
+}
+
+async function ensureGraphNodeEmbeddingVectorSearchIndex(
+  collection: Collection<any>,
+): Promise<void> {
+  const indexName = "embedding_vector";
+  const dimensions = Number(process.env.EMBED_PROVIDER_DIMENSIONS ?? DEFAULT_GRAPH_NODE_EMBEDDING_DIMENSIONS);
+  const existing = await collection.listSearchIndexes(indexName).toArray();
+
+  if (existing.length === 0) {
+    await collection.createSearchIndex({
+      name: indexName,
+      type: "vectorSearch",
+      definition: {
+        fields: [
+          {
+            type: "vector",
+            path: "embedding",
+            numDimensions: dimensions,
+            similarity: "cosine",
+          },
+          { type: "filter", path: "project" },
+          { type: "filter", path: "node_id" },
+          { type: "filter", path: "embedding_model" },
+          { type: "filter", path: "embedding_dimensions" },
+        ],
+      },
+    });
+  }
+
+  await waitForQueryableSearchIndex(collection, indexName);
+}
 
 export interface MongoConfig {
   uri: string;
@@ -329,6 +382,11 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphNodeEmbeddings.createIndex({ source_event_id: 1, embedding_model: 1, embedding_dimensions: 1 });
   await graphNodeEmbeddings.createIndex({ project: 1, updated_at: -1 as IndexDirection });
   await graphNodeEmbeddings.createIndex({ updated_at: -1 as IndexDirection });
+  try {
+    await ensureGraphNodeEmbeddingVectorSearchIndex(graphNodeEmbeddings);
+  } catch (error) {
+    console.warn("[mongodb] graph_node_embeddings vector index unavailable:", error instanceof Error ? error.message : String(error));
+  }
 
   // Semantic edges for graph clustering
   await graphSemanticEdges.createIndex({ source_node_id: 1, target_node_id: 1 }, { unique: true });

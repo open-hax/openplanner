@@ -11,6 +11,8 @@ import {
   type AntTrailEdge,
 } from "@workspace/eros-eris-field";
 
+import http from "node:http";
+
 type GraphViewNode = {
   id: string;
   kind: string;
@@ -60,6 +62,99 @@ type MaterializeGraphNodeEmbeddingInput = {
   body: string;
   sourceEventId?: string | null;
 };
+
+type ErosErisHealthSnapshot = {
+  startedAt: string;
+  ok: boolean;
+  service: string;
+  role: string;
+  shardIndex: number;
+  shardCount: number;
+  lastLoopAt: string | null;
+  lastRefreshAt: string | null;
+  lastWriteAt: string | null;
+  viewNodes: number;
+  viewEdges: number;
+  springs: number;
+  semanticPairs: number;
+  particles: number;
+  embeddingsCached: number;
+  refreshCount: number;
+  viewMeta: Record<string, unknown> | null;
+  inFlight: { refresh: boolean; write: boolean; hydrate: boolean; embed: number };
+  heartbeat: string | null;
+  lastError: string | null;
+  lastErrorAt: string | null;
+};
+
+let healthSnapshot: ErosErisHealthSnapshot = {
+  startedAt: new Date().toISOString(),
+  ok: true,
+  service: "eros-eris-field-app",
+  role: String(process.env.EROS_ERIS_WORKER_ROLE || "hybrid"),
+  shardIndex: Number.parseInt(String(process.env.SIM_SHARD_INDEX || "0"), 10) || 0,
+  shardCount: Math.max(1, Number.parseInt(String(process.env.SIM_SHARD_COUNT || "1"), 10) || 1),
+  lastLoopAt: null,
+  lastRefreshAt: null,
+  lastWriteAt: null,
+  viewNodes: 0,
+  viewEdges: 0,
+  springs: 0,
+  semanticPairs: 0,
+  particles: 0,
+  embeddingsCached: 0,
+  refreshCount: 0,
+  viewMeta: null,
+  inFlight: { refresh: false, write: false, hydrate: false, embed: 0 },
+  heartbeat: null,
+  lastError: null,
+  lastErrorAt: null,
+};
+
+function startHealthServer() {
+  const host = String(process.env.EROS_ERIS_HTTP_HOST || "0.0.0.0").trim();
+  const port = Number.parseInt(String(process.env.EROS_ERIS_HTTP_PORT || "8786"), 10);
+  if (!Number.isFinite(port) || port <= 0) {
+    console.warn(`[eros-eris] invalid EROS_ERIS_HTTP_PORT=${process.env.EROS_ERIS_HTTP_PORT}; skipping health server`);
+    return;
+  }
+
+  const server = http.createServer((req, res) => {
+    const url = req.url || "/";
+    if (req.method === "GET" && (url === "/health" || url.startsWith("/health?"))) {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      });
+      res.end(JSON.stringify(healthSnapshot));
+      return;
+    }
+
+    if (req.method === "GET" && (url === "/status" || url.startsWith("/status?"))) {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+      });
+      res.end(JSON.stringify(healthSnapshot));
+      return;
+    }
+
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: false, error: "not found" }));
+  });
+
+  server.listen(port, host, () => {
+    console.log(`[eros-eris] health server listening on http://${host}:${port}`);
+  });
+}
+
+function setHealthError(message: string) {
+  healthSnapshot = {
+    ...healthSnapshot,
+    lastError: message,
+    lastErrorAt: new Date().toISOString(),
+  };
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -958,6 +1053,13 @@ async function main(): Promise<void> {
   const graphViewComponentCount = Math.max(1, Math.min(16, Math.floor(num("GRAPH_VIEW_COMPONENT_COUNT", 6))));
   const simShardCount = Math.max(1, Math.min(64, Math.floor(num("SIM_SHARD_COUNT", 1))));
   const simShardIndex = ((Math.floor(num("SIM_SHARD_INDEX", 0)) % simShardCount) + simShardCount) % simShardCount;
+
+  healthSnapshot = {
+    ...healthSnapshot,
+    role: workerRole,
+    shardIndex: simShardIndex,
+    shardCount: simShardCount,
+  };
   const graphViewRotationEvery = Math.max(1, Math.min(32, Math.floor(num("GRAPH_VIEW_ROTATION_EVERY", 2))));
   const refreshPhaseOffsetMs = Math.floor((simShardIndex * baseRefreshMs) / Math.max(1, simShardCount));
   const writePhaseOffsetMs = Math.floor((simShardIndex * baseWriteMs) / Math.max(1, simShardCount));
@@ -1008,6 +1110,8 @@ async function main(): Promise<void> {
   let springs: SpringEdge[] = [];
   let antTrailEdges: SpringEdge[] = [];
   let currentViewNodes: GraphViewNode[] = [];
+  let currentViewEdgeCount = 0;
+  let lastViewMeta: Record<string, unknown> | null = null;
   let currentDegrees = new Map<string, number>();
   let refreshInFlight: Promise<void> | null = null;
   let writeInFlight: Promise<void> | null = null;
@@ -1130,6 +1234,29 @@ async function main(): Promise<void> {
   for (;;) {
     const now = Date.now();
 
+    healthSnapshot = {
+      ...healthSnapshot,
+      ok: true,
+      lastLoopAt: new Date(now).toISOString(),
+      lastRefreshAt: lastRefresh ? new Date(lastRefresh).toISOString() : null,
+      lastWriteAt: lastWrite ? new Date(lastWrite).toISOString() : null,
+      viewNodes: currentViewNodes.length,
+      viewEdges: currentViewEdgeCount,
+      springs: springs.length,
+      semanticPairs: semanticPairs.size,
+      particles: particlesById.size,
+      embeddingsCached: embeddings.size,
+      refreshCount: graphViewRefreshCount,
+      viewMeta: lastViewMeta,
+      inFlight: {
+        refresh: Boolean(refreshInFlight),
+        write: Boolean(writeInFlight),
+        hydrate: Boolean(hydrateInFlight),
+        embed: embedInFlight.size,
+      },
+      heartbeat: heartbeat.statusLine,
+    };
+
     if (now - lastRefresh >= heartbeat.refreshMs && !refreshInFlight) {
       refreshInFlight = (async () => {
         const refreshStartedAt = Date.now();
@@ -1220,6 +1347,8 @@ async function main(): Promise<void> {
         if (antSystem) antSystem.updateGraph(springs);
 
         currentViewNodes = view.nodes;
+        currentViewEdgeCount = view.edges.length;
+        lastViewMeta = view.meta as unknown as Record<string, unknown>;
         currentDegrees = degrees;
 
         if (enableVisibleEmbeddingHydration && openPlannerBaseUrl && !hydrateInFlight) {
@@ -1311,6 +1440,7 @@ async function main(): Promise<void> {
       })()
         .catch((error) => {
           const message = error instanceof Error ? error.message : String(error);
+          setHealthError(message);
           console.warn(`[eros-eris] refresh failed: ${message}`);
         })
         .finally(() => {
@@ -1447,6 +1577,7 @@ async function main(): Promise<void> {
           })
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err);
+            setHealthError(msg);
             // eslint-disable-next-line no-console
             console.warn(`[eros-eris] embedding refresh failed: ${msg}`);
           })
@@ -1515,6 +1646,7 @@ async function main(): Promise<void> {
           );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
+          setHealthError(message);
           console.warn(`[eros-eris] layout write failed: ${message}`);
         }
         lastWrite = Date.now();
@@ -1560,4 +1692,5 @@ async function main(): Promise<void> {
   }
 }
 
+startHealthServer();
 void main();

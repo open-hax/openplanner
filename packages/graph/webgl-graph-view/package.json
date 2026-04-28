@@ -1,10 +1,15 @@
 {
-  "name": "@workspace/webgl-graph-view",
-  "version": "0.1.0",
-  "private": true,
+  "name": "@octave-commons/webgl-graph-view",
+  "version": "0.3.0",
+  "private": false,
+  "liscense":"LGPL-3",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

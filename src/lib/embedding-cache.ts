@@ -15,6 +15,7 @@ export function makeEmbeddingCacheKey(params: {
 export class PersistentEmbeddingCache {
   private map = new Map<string, number[]>();
   private flushing = false;
+  private readonly maxEntries = 10000;
 
   constructor(private _cachePath: string) {}
 
@@ -22,7 +23,11 @@ export class PersistentEmbeddingCache {
     const result = new Map<string, number[]>();
     for (const key of keys) {
       const entry = this.map.get(key);
-      if (entry) result.set(key, entry);
+      if (entry) {
+        result.set(key, entry);
+        this.map.delete(key);
+        this.map.set(key, entry);
+      }
     }
     return result;
   }
@@ -52,7 +57,12 @@ export class PersistentEmbeddingCache {
     this.flushing = true;
     try {
       for (const { key, vector } of entries) {
+        this.map.delete(key);
         this.map.set(key, vector);
+      }
+      while (this.map.size > this.maxEntries) {
+        const firstKey = this.map.keys().next().value;
+        if (firstKey) this.map.delete(firstKey);
       }
     } finally {
       this.flushing = false;

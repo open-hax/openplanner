@@ -17,6 +17,7 @@ import { labelsRoutes } from "./labels.js";
 import { tenantsRoutes } from "./tenants.js";
 import { exportRoutes } from "./exports.js";
 import { reviewRoutes } from "./reviews.js";
+import { mongoRoutes } from "./mongo.js";
 
 export const v1Routes: FastifyPluginAsync = async (app) => {
   await app.register(healthRoutes);
@@ -37,4 +38,5 @@ export const v1Routes: FastifyPluginAsync = async (app) => {
   await app.register(tenantsRoutes, { prefix: "/tenants" });
   await app.register(exportRoutes, { prefix: "/export" });
   await app.register(reviewRoutes, { prefix: "/reviews" });
+  await app.register(mongoRoutes, { prefix: "/mongo" });
 };

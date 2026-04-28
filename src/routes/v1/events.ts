@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { upsertEvent, upsertGraphEdges, upsertGraphNodeEmbeddings } from "../../lib/mongodb.js";
-import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
+import { prepareIndexDocument } from "../../lib/indexing.js";
 import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import { counterInc } from "../../lib/metrics.js";
 import type { EventIngestRequest, EventEnvelopeV1 } from "../../lib/types.js";
+import { splitSentences, deduplicateByHash, computeTextHash } from "../../lib/sentence-split.js";
+import { formatEmbeddingPassageText } from "../../lib/embedding-text.js";
 
 function norm(v: any): string | null {
   if (v === undefined || v === null) return null;
@@ -16,6 +18,22 @@ function validateEvent(ev: EventEnvelopeV1) {
   if (!ev.ts) throw new Error("event.ts required (ISO)");
   if (!ev.source) throw new Error("event.source required");
   if (!ev.kind) throw new Error("event.kind required");
+}
+
+function hasIndexableEventText(ev: EventEnvelopeV1): boolean {
+  return typeof ev.text === "string" && ev.text.trim().length > 0;
+}
+
+export function shouldIndexEventHotVectors(ev: EventEnvelopeV1): boolean {
+  if (!hasIndexableEventText(ev)) return false;
+
+  // graph.node receives dedicated node-embedding materialization below, and
+  // graph.edge text is mostly structural glue (e.g. mentions_web URLs). Running
+  // both through the generic hot vector path just burns response time and can
+  // hold /v1/events open long enough for upstream header timeouts.
+  if (ev.kind === "graph.node" || ev.kind === "graph.edge") return false;
+
+  return true;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -38,6 +56,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     if (!body || !Array.isArray(body.events)) return reply.status(400).send({ error: "expected { events: [...] }" });
 
     const ids: string[] = [];
+    const eventVectorTasks: Array<Promise<void>> = [];
     const projectedGraphEdges: Array<{
       source_node_id: string;
       target_node_id: string;
@@ -48,12 +67,86 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       data?: Record<string, unknown> | null;
       updated_at?: Date;
     }> = [];
-    const graphNodeEmbeddingInputs: Array<{
+    const graphNodeEmbeddingInputs = new Map<string, {
       node_id: string;
       source_event_id: string;
       project?: string | null;
       text: string;
-    }> = [];
+      chunk_count: number;
+    }>();
+
+    const derivedGraphNodeOps: any[] = [];
+    const derivedEventIds = new Set<string>();
+    const now = new Date();
+
+    const queueDerivedGraphNodeEvent = (params: {
+      id: string;
+      ts: Date;
+      project?: string | null;
+      nodeId: string;
+      nodeKind: string;
+      label: string;
+      preview: string;
+      extra?: Record<string, unknown>;
+    }): void => {
+      if (derivedEventIds.has(params.id)) return;
+      derivedEventIds.add(params.id);
+
+      derivedGraphNodeOps.push({
+        updateOne: {
+          filter: { _id: params.id },
+          update: {
+            $set: {
+              id: params.id,
+              ts: params.ts,
+              source: "openplanner-derive",
+              kind: "graph.node",
+              project: params.project ?? null,
+              session: null,
+              message: params.label,
+              role: null,
+              author: null,
+              model: null,
+              tags: null,
+              text: "",
+              attachments: null,
+              extra: {
+                node_id: params.nodeId,
+                node_kind: params.nodeKind,
+                label: params.label,
+                preview: params.preview,
+                content_hash: computeTextHash(params.preview),
+                lake: params.project ?? undefined,
+                ...(params.extra ?? {}),
+              },
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              createdAt: now,
+            },
+          },
+          upsert: true,
+        },
+      });
+    };
+
+    const queueNodeEmbedding = (params: {
+      nodeId: string;
+      sourceEventId: string;
+      project?: string | null;
+      text: string;
+      chunkCount?: number;
+    }): void => {
+      const normalized = formatEmbeddingPassageText(params.text);
+      if (!normalized) return;
+      graphNodeEmbeddingInputs.set(params.nodeId, {
+        node_id: params.nodeId,
+        source_event_id: params.sourceEventId,
+        project: params.project ?? null,
+        text: normalized,
+        chunk_count: params.chunkCount ?? 1,
+      });
+    };
 
     for (const ev of body.events) {
       validateEvent(ev);
@@ -111,51 +204,176 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
         const directText = norm(ev.text)?.trim() ?? "";
         const body = directText || preview;
         if (nodeId && body) {
-          graphNodeEmbeddingInputs.push({
-            node_id: nodeId,
-            source_event_id: ev.id,
-            project,
+          const label = String(extra.label ?? extra.path ?? (sr as any).message ?? nodeId).trim() || nodeId;
+          const prepared = prepareIndexDocument({
+            parentId: nodeId,
             text: body,
+            extra,
+            forceChunking: false,
+            targetChunkTokens: 32_000,
+            targetChunkChars: 180_000,
+            overlapChars: 1_000,
           });
+
+          if (prepared.chunkCount <= 1) {
+            queueNodeEmbedding({
+              nodeId,
+              sourceEventId: ev.id,
+              project,
+              text: prepared.normalizedText,
+              chunkCount: 1,
+            });
+          } else {
+            for (const chunk of prepared.chunks) {
+              const chunkLabel = `${label} [chunk ${chunk.chunkIndex + 1}/${chunk.chunkCount}]`;
+              const chunkPreview = chunk.text.slice(0, 800);
+              const chunkEventId = `graph.node:doc_chunk:${chunk.id}`;
+
+              queueDerivedGraphNodeEvent({
+                id: chunkEventId,
+                ts: new Date(ev.ts),
+                project,
+                nodeId: chunk.id,
+                nodeKind: "doc_chunk",
+                label: chunkLabel,
+                preview: chunkPreview,
+                extra: {
+                  parent_node_id: nodeId,
+                  chunk_index: chunk.chunkIndex,
+                  chunk_count: chunk.chunkCount,
+                },
+              });
+
+              projectedGraphEdges.push({
+                source_node_id: nodeId,
+                target_node_id: chunk.id,
+                edge_kind: "contains_chunk",
+                layer: "derived",
+                project,
+                source: "openplanner-derive",
+                data: {
+                  parent_node_id: nodeId,
+                  chunk_index: chunk.chunkIndex,
+                  chunk_count: chunk.chunkCount,
+                },
+                updated_at: new Date(ev.ts),
+              });
+
+              queueNodeEmbedding({
+                nodeId: chunk.id,
+                sourceEventId: ev.id,
+                project,
+                text: chunk.text,
+                chunkCount: chunk.chunkCount,
+              });
+            }
+          }
+
+          const sentenceHashesInDoc = new Set<string>();
+          const sentenceNodeIdsQueued = new Set<string>();
+
+          const sentenceSources = prepared.chunkCount <= 1
+            ? [{ text: prepared.normalizedText }]
+            : prepared.chunks.map((chunk) => ({ text: chunk.text }));
+
+          for (const sourceChunk of sentenceSources) {
+            const sentences = splitSentences(sourceChunk.text);
+            const uniqueSentences = deduplicateByHash(sentences);
+
+            for (const [hash, sent] of uniqueSentences) {
+              if (sent.tokens <= 3) continue;
+              if (sentenceHashesInDoc.has(hash)) continue;
+              sentenceHashesInDoc.add(hash);
+
+              const sentenceNodeId = `${project ?? "devel"}:sentence:${hash}`;
+              const sentenceEventId = `graph.node:sentence:${sentenceNodeId}`;
+
+              if (!sentenceNodeIdsQueued.has(sentenceNodeId)) {
+                sentenceNodeIdsQueued.add(sentenceNodeId);
+                queueDerivedGraphNodeEvent({
+                  id: sentenceEventId,
+                  ts: new Date(ev.ts),
+                  project,
+                  nodeId: sentenceNodeId,
+                  nodeKind: "sentence",
+                  label: sent.sentence.length > 120 ? sent.sentence.slice(0, 117) + "..." : sent.sentence,
+                  preview: sent.sentence,
+                  extra: {
+                    derived_from_node_id: nodeId,
+                  },
+                });
+              }
+
+              projectedGraphEdges.push({
+                source_node_id: nodeId,
+                target_node_id: sentenceNodeId,
+                edge_kind: "contains_sentence",
+                layer: "derived",
+                project,
+                source: "openplanner-derive",
+                data: {
+                  sentence_hash: hash,
+                },
+                updated_at: new Date(ev.ts),
+              });
+
+              queueNodeEmbedding({
+                nodeId: sentenceNodeId,
+                sourceEventId: ev.id,
+                project,
+                text: sent.sentence,
+                chunkCount: 1,
+              });
+            }
+          }
         }
       }
 
-      if (ev.text) {
-        try {
-          const embeddingScope = {
-            source: ev.source,
-            kind: ev.kind,
-            project: project ?? undefined
-          };
-
-          const embeddingRuntime = (app as any).embeddingRuntime;
-          const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
-          const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
-          await withTimeout(indexTextInMongoVectors({
-            mongo: app.mongo,
-            tier: "hot",
-            parentId: ev.id,
-            text: ev.text,
-            extra,
-            metadata: {
-              ts: ev.ts,
+      if (shouldIndexEventHotVectors(ev)) {
+        eventVectorTasks.push((async () => {
+          try {
+            const embeddingScope = {
               source: ev.source,
               kind: ev.kind,
-              project: (sr as any).project,
-              session: (sr as any).session,
-              author: author ?? "",
-              role: role ?? "",
-              model: model ?? "",
-              embedding_model: embeddingModel ?? "",
-              search_tier: "hot",
-              visibility: extra.visibility ?? "internal",
-              title: extra.title ?? (sr as any).message ?? ev.id,
-            },
-            embeddingFunction,
-          }), 10000, `event vector index ${ev.id}`);
-        } catch (err) {
-          app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
-        }
+              project: project ?? undefined,
+            };
+
+            const embeddingRuntime = (app as any).embeddingRuntime;
+            const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+            const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+            await withTimeout(indexTextInMongoVectors({
+              mongo: app.mongo,
+              tier: "hot",
+              parentId: ev.id,
+              text: ev.text!,
+              extra,
+              metadata: {
+                ts: ev.ts,
+                source: ev.source,
+                kind: ev.kind,
+                project: (sr as any).project,
+                session: (sr as any).session,
+                author: author ?? "",
+                role: role ?? "",
+                model: model ?? "",
+                embedding_model: embeddingModel ?? "",
+                search_tier: "hot",
+                visibility: extra.visibility ?? "internal",
+                title: extra.title ?? (sr as any).message ?? ev.id,
+              },
+              embeddingFunction,
+            }), 10000, `event vector index ${ev.id}`);
+          } catch (err) {
+            app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
+          }
+        })());
+      }
+    }
+
+    if (derivedGraphNodeOps.length > 0) {
+      const batchSize = 1000;
+      for (let i = 0; i < derivedGraphNodeOps.length; i += batchSize) {
+        await app.mongo.events.bulkWrite(derivedGraphNodeOps.slice(i, i + batchSize), { ordered: false });
       }
     }
 
@@ -163,53 +381,85 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       await upsertGraphEdges(app.mongo.graphEdges, projectedGraphEdges);
     }
 
-    if (graphNodeEmbeddingInputs.length > 0) {
-      try {
-        const embeddingRuntime = (app as any).embeddingRuntime;
-        const groupedByModel = new Map<string, Array<(typeof graphNodeEmbeddingInputs)[number]>>();
+    if (graphNodeEmbeddingInputs.size > 0) {
+      void (async () => {
+        try {
+          const embeddingRuntime = (app as any).embeddingRuntime;
+          type GraphNodeEmbeddingInput = {
+            node_id: string;
+            source_event_id: string;
+            project?: string | null;
+            text: string;
+            chunk_count: number;
+          };
+          const groupedByModel = new Map<string, GraphNodeEmbeddingInput[]>();
 
-        for (const input of graphNodeEmbeddingInputs) {
-          const model = embeddingRuntime.hot.getModel({
-            source: "graph-event",
-            kind: "graph.node",
-            project: input.project ?? undefined,
-          });
-          const rows = groupedByModel.get(model) ?? [];
-          rows.push(input);
-          groupedByModel.set(model, rows);
-        }
-
-        for (const [model, rows] of groupedByModel) {
-          const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunctionForModel(model);
-          const embeddings = await withTimeout(
-            embeddingFunction.generate(rows.map((row) => row.text)) as Promise<number[][]>,
-            10_000,
-            `graph node embedding batch ${model}`,
-          );
-
-          const storedRows = rows.flatMap((row, idx) => {
-            const embedding = embeddings[idx];
-            if (!Array.isArray(embedding) || embedding.length === 0) return [];
-            return [{
-              node_id: row.node_id,
-              source_event_id: row.source_event_id,
-              project: row.project ?? null,
-              embedding_model: model,
-              embedding_dimensions: embedding.length,
-              embedding,
-              chunk_count: 1,
-              text: row.text,
-              updated_at: new Date(),
-            }];
-          });
-
-          if (storedRows.length > 0) {
-            await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, storedRows);
+          for (const input of graphNodeEmbeddingInputs.values()) {
+            const model = embeddingRuntime.hot.getModel({
+              source: "graph-event",
+              kind: "graph.node",
+              project: input.project ?? undefined,
+            });
+            const rows = groupedByModel.get(model) ?? [];
+            rows.push(input);
+            groupedByModel.set(model, rows);
           }
+
+          for (const [model, rows] of groupedByModel) {
+            const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunctionForModel(model);
+            const nodeIds = rows.map((row) => row.node_id);
+            const existing = await app.mongo.graphNodeEmbeddings
+              .find({ node_id: { $in: nodeIds }, embedding_model: model })
+              .project({ node_id: 1, text: 1 })
+              .toArray();
+            const existingTextById = new Map(existing.map((row: any) => [String(row.node_id), String(row.text ?? "")] as const));
+
+            const toEmbed = rows.filter((row) => {
+              const previous = existingTextById.get(row.node_id);
+              return !previous || previous !== row.text;
+            });
+
+            if (toEmbed.length === 0) continue;
+
+            const embeddings = await withTimeout(
+              embeddingFunction.generate(toEmbed.map((row) => row.text)) as Promise<number[][]>,
+              10_000,
+              `graph node embedding batch ${model}`,
+            );
+
+            const storedRows = toEmbed.flatMap((row, idx) => {
+              const embedding = embeddings[idx];
+              if (!Array.isArray(embedding) || embedding.length === 0) return [];
+              return [{
+                node_id: row.node_id,
+                source_event_id: row.source_event_id,
+                project: row.project ?? null,
+                embedding_model: model,
+                embedding_dimensions: embedding.length,
+                embedding,
+                chunk_count: row.chunk_count ?? 1,
+                text: row.text,
+                updated_at: new Date(),
+              }];
+            });
+
+            if (storedRows.length > 0) {
+              await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, storedRows);
+            }
+          }
+        } catch (err) {
+          app.log.warn({ err, count: graphNodeEmbeddingInputs.size }, "Failed to materialize graph node embeddings during event ingest");
         }
-      } catch (err) {
-        app.log.warn({ err, count: graphNodeEmbeddingInputs.length }, "Failed to materialize graph node embeddings during event ingest");
-      }
+      })();
+    }
+
+    if (eventVectorTasks.length > 0) {
+      void Promise.allSettled(eventVectorTasks).then((results) => {
+        const rejected = results.filter((result) => result.status === "rejected").length;
+        if (rejected > 0) {
+          app.log.warn({ rejected, queued: eventVectorTasks.length }, "Detached event vector indexing completed with rejected tasks");
+        }
+      });
     }
     
     // Track metrics
@@ -227,7 +477,9 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       ftsEnabled: true,
       storageBackend: "mongodb",
       indexed: true,
-      indexing: "required",
+      indexing: eventVectorTasks.length > 0 || graphNodeEmbeddingInputs.size > 0 ? "queued" : "skipped",
+      queuedEventVectors: eventVectorTasks.length,
+      queuedGraphNodeEmbeddings: graphNodeEmbeddingInputs.size,
     };
   });
 };

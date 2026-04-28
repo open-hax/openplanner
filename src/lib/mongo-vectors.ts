@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import type { ClientSession, Collection, Filter } from "mongodb";
 import type { IEmbeddingFunction } from "./embeddings.js";
+import { formatEmbeddingQueryText } from "./embedding-text.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "./indexing.js";
 import type { MongoConnection, MongoVectorDocument, MongoVectorPartitionDocument } from "./mongodb.js";
 
@@ -779,6 +780,7 @@ export async function queryMongoVectorsByText(params: {
   where?: Record<string, unknown>;
   getEmbeddingFunctionForModel: (model: string) => IEmbeddingFunction;
 }): Promise<RawQueryResult> {
+  const queryText = formatEmbeddingQueryText(params.q);
   const partitions = await listMongoVectorPartitions(params.mongo, params.tier);
   if (partitions.length === 0) {
     return emptyResult();
@@ -793,7 +795,7 @@ export async function queryMongoVectorsByText(params: {
     let queryEmbedding = queryEmbeddingsByPartitionKey.get(cacheKey);
     if (!queryEmbedding) {
       const embeddingFunction = params.getEmbeddingFunctionForModel(partition.model);
-      const [generatedEmbedding] = await embeddingFunction.generate([params.q]);
+      const [generatedEmbedding] = await embeddingFunction.generate([queryText]);
       queryEmbedding = Array.isArray(generatedEmbedding) && generatedEmbedding.length === partition.dimensions
         ? generatedEmbedding
         : undefined;
