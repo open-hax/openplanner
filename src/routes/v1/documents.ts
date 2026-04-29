@@ -1,15 +1,21 @@
 import type { FastifyPluginAsync } from "fastify";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { open } from "lmdb";
+import { createClient } from "redis";
 import {
   cacheGet,
   cachePut,
+  createLayeredCache,
+  createLmdbCache,
   createMemoryLruCache,
+  createRedisCache,
   documentCacheKey,
   documentNeedsHydration,
   hydrateDocumentRow,
   rowToDocument as cljsRowToDocument,
 } from "@open-hax/openplanner-document-hydration";
+import type { CacheHandle } from "@open-hax/openplanner-document-hydration";
 import { upsertEvent } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
 import { deleteMongoVectorEntriesByFilter, indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
@@ -130,10 +136,32 @@ export async function countFieldValues(
   }, {});
 }
 
-const documentHydrationCache = createMemoryLruCache({
-  maxEntries: 1024,
-  defaultTtlMs: Number(process.env.OPENPLANNER_HYDRATION_CACHE_TTL_MS ?? 5 * 60 * 60 * 1000),
-});
+let documentHydrationCachePromise: Promise<CacheHandle> | null = null;
+
+async function createDocumentHydrationCache(): Promise<CacheHandle> {
+  const ttlMs = Number(process.env.OPENPLANNER_HYDRATION_CACHE_TTL_MS ?? 5 * 60 * 60 * 1000);
+  const layers: CacheHandle[] = [createMemoryLruCache({ maxEntries: 1024, defaultTtlMs: ttlMs })];
+
+  const redisUrl = process.env.OPENPLANNER_HYDRATION_REDIS_URL;
+  if (redisUrl) {
+    const client = createClient({ url: redisUrl });
+    await client.connect();
+    layers.push(createRedisCache({ client, prefix: "hydration:", defaultTtlMs: ttlMs }));
+  }
+
+  const lmdbPath = process.env.OPENPLANNER_HYDRATION_LMDB_PATH;
+  if (lmdbPath) {
+    const db = open({ path: lmdbPath });
+    layers.push(createLmdbCache({ db, prefix: "hydration:", defaultTtlMs: ttlMs }));
+  }
+
+  return layers.length === 1 ? layers[0] : createLayeredCache(layers);
+}
+
+async function getDocumentHydrationCache(): Promise<CacheHandle> {
+  documentHydrationCachePromise ??= createDocumentHydrationCache();
+  return documentHydrationCachePromise;
+}
 
 function sourceRoot(): string {
   return process.env.OPENPLANNER_SOURCE_ROOT ?? "/home/err/devel";
@@ -159,6 +187,7 @@ async function loadSourceText(row: Record<string, unknown>): Promise<string | nu
   const cacheKey = documentCacheKey(row);
   if (!cacheKey) return null;
 
+  const documentHydrationCache = await getDocumentHydrationCache();
   const cached = await cacheGet(documentHydrationCache, cacheKey);
   if (typeof cached === "string") return cached;
 
