@@ -1,11 +1,10 @@
 import crypto from "node:crypto";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
 import type { ClientSession, Collection, Filter } from "mongodb";
 import type { IEmbeddingFunction } from "./embeddings.js";
 import { formatEmbeddingQueryText } from "./embedding-text.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "./indexing.js";
 import type { MongoConnection, MongoVectorDocument, MongoVectorPartitionDocument } from "./mongodb.js";
+import { loadHydrationSourceText } from "./source-hydration.js";
 
 export type MongoVectorTier = "hot" | "compact";
 
@@ -112,34 +111,28 @@ function sourceRefFromExtra(extra: Record<string, unknown> | undefined): SourceR
   };
 }
 
-function sourceRoot(): string {
-  return process.env.OPENPLANNER_SOURCE_ROOT ?? "/home/err/devel";
-}
-
-function safeSourcePath(sourceRef: unknown): string | null {
-  const ref = objectValue(sourceRef);
-  const rawPath = nonBlankString(ref.source_path) ?? nonBlankString(ref.sourcePath);
-  if (!rawPath) return null;
-  const root = path.resolve(sourceRoot());
-  const candidate = path.resolve(root, rawPath.startsWith("/") ? rawPath.slice(1) : rawPath);
-  return candidate === root || candidate.startsWith(`${root}${path.sep}`) ? candidate : null;
-}
-
-async function hydrateVectorDocumentText(doc: MongoVectorDocument): Promise<string> {
+export async function hydrateVectorDocumentText(doc: MongoVectorDocument): Promise<string> {
   if (doc.text || doc.source_text_redacted !== true) return doc.text ?? "";
-  const filePath = safeSourcePath(doc.source_ref);
-  if (!filePath) return "";
-  try {
-    const sourceText = await readFile(filePath, "utf8");
-    const start = typeof doc.char_start === "number" && doc.char_start >= 0 ? doc.char_start : null;
-    const end = typeof doc.char_end === "number" && doc.char_end >= 0 ? doc.char_end : null;
-    if (start !== null && end !== null && end >= start) {
-      return sourceText.slice(start, end);
-    }
-    return sourceText;
-  } catch {
-    return "";
+  const ref = objectValue(doc.source_ref);
+  const sourceText = await loadHydrationSourceText({
+    id: doc.parent_id ?? doc._id,
+    text: "",
+    project: nonBlankString(ref.lake) ?? doc.project,
+    extra: {
+      source_path: nonBlankString(ref.source_path) ?? nonBlankString(ref.sourcePath),
+      url: nonBlankString(ref.url),
+      hostname: nonBlankString(ref.hostname),
+      lake: nonBlankString(ref.lake) ?? doc.project,
+      content_hash: nonBlankString(ref.content_hash) ?? nonBlankString(ref.contentHash),
+    },
+  });
+  if (!sourceText) return "";
+  const start = typeof doc.char_start === "number" && doc.char_start >= 0 ? doc.char_start : null;
+  const end = typeof doc.char_end === "number" && doc.char_end >= 0 ? doc.char_end : null;
+  if (start !== null && end !== null && end >= start) {
+    return sourceText.slice(start, end);
   }
+  return sourceText;
 }
 
 function sha256Text(text: string): string {

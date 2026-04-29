@@ -1,24 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { open } from "lmdb";
-import { createClient } from "redis";
 import {
-  cacheGet,
-  cachePut,
-  createLayeredCache,
-  createLmdbCache,
-  createMemoryLruCache,
-  createRedisCache,
-  documentCacheKey,
-  documentNeedsHydration,
-  hydrateDocumentRow,
   rowToDocument as cljsRowToDocument,
 } from "@open-hax/openplanner-document-hydration";
-import type { CacheHandle } from "@open-hax/openplanner-document-hydration";
 import { upsertEvent } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
 import { deleteMongoVectorEntriesByFilter, indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
+import { hydrateRowFromSourceCache } from "../../lib/source-hydration.js";
 import type {
   DocumentPatchRequest,
   DocumentRecord,
@@ -136,81 +123,8 @@ export async function countFieldValues(
   }, {});
 }
 
-let documentHydrationCachePromise: Promise<CacheHandle> | null = null;
-
-async function createDocumentHydrationCache(): Promise<CacheHandle> {
-  const ttlMs = Number(process.env.OPENPLANNER_HYDRATION_CACHE_TTL_MS ?? 5 * 60 * 60 * 1000);
-  const layers: CacheHandle[] = [createMemoryLruCache({ maxEntries: 1024, defaultTtlMs: ttlMs })];
-
-  const redisUrl = process.env.OPENPLANNER_HYDRATION_REDIS_URL;
-  if (redisUrl) {
-    const client = createClient({ url: redisUrl });
-    await client.connect();
-    layers.push(createRedisCache({ client, prefix: "hydration:", defaultTtlMs: ttlMs }));
-  }
-
-  const lmdbPath = process.env.OPENPLANNER_HYDRATION_LMDB_PATH;
-  if (lmdbPath) {
-    const db = open({ path: lmdbPath });
-    layers.push(createLmdbCache({ db, prefix: "hydration:", defaultTtlMs: ttlMs }));
-  }
-
-  return layers.length === 1 ? layers[0] : createLayeredCache(layers);
-}
-
-async function getDocumentHydrationCache(): Promise<CacheHandle> {
-  documentHydrationCachePromise ??= createDocumentHydrationCache();
-  return documentHydrationCachePromise;
-}
-
-function sourceRoot(): string {
-  return process.env.OPENPLANNER_SOURCE_ROOT ?? "/home/err/devel";
-}
-
-function sourcePathFromRow(row: Record<string, unknown>): string | undefined {
-  const extra = parseJson(row.extra);
-  const metadata = (extra.metadata && typeof extra.metadata === "object") ? (extra.metadata as Record<string, unknown>) : {};
-  const raw = extra.source_path ?? extra.path ?? metadata.path ?? metadata.file_id;
-  return typeof raw === "string" && raw.trim().length > 0 ? raw : undefined;
-}
-
-function safeSourceFilePath(row: Record<string, unknown>): string | undefined {
-  const rawPath = sourcePathFromRow(row);
-  if (!rawPath) return undefined;
-
-  const root = path.resolve(sourceRoot());
-  const candidate = path.resolve(root, rawPath.startsWith("/") ? rawPath.slice(1) : rawPath);
-  return candidate.startsWith(`${root}${path.sep}`) || candidate === root ? candidate : undefined;
-}
-
-async function loadSourceText(row: Record<string, unknown>): Promise<string | null> {
-  const cacheKey = documentCacheKey(row);
-  if (!cacheKey) return null;
-
-  const documentHydrationCache = await getDocumentHydrationCache();
-  const cached = await cacheGet(documentHydrationCache, cacheKey);
-  if (typeof cached === "string") return cached;
-
-  const filePath = safeSourceFilePath(row);
-  if (!filePath) return null;
-
-  try {
-    const text = await readFile(filePath, "utf8");
-    await cachePut(documentHydrationCache, cacheKey, text);
-    return text;
-  } catch {
-    return null;
-  }
-}
-
-async function hydrateDocumentRowForApi(row: Record<string, unknown>): Promise<Record<string, unknown>> {
-  if (!documentNeedsHydration(row)) return row;
-  const sourceText = await loadSourceText(row);
-  return hydrateDocumentRow(row, sourceText).row as Record<string, unknown>;
-}
-
 export async function hydrateDocumentRowsForApi(rows: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> {
-  return Promise.all(rows.map((row) => hydrateDocumentRowForApi(row)));
+  return Promise.all(rows.map((row) => hydrateRowFromSourceCache(row)));
 }
 
 export function rowToDocument(row: Record<string, unknown>): DocumentRecord {
@@ -344,7 +258,7 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
 export async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
   const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
   if (!row) return null;
-  const hydrated = await hydrateDocumentRowForApi(row as Record<string, unknown>);
+  const hydrated = await hydrateRowFromSourceCache(row as Record<string, unknown>);
   return rowToDocument(hydrated);
 }
 
