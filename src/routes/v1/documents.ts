@@ -130,7 +130,10 @@ export async function countFieldValues(
   }, {});
 }
 
-const documentHydrationCache = createMemoryLruCache({ maxEntries: 1024, defaultTtlMs: 5 * 60 * 60 * 1000 });
+const documentHydrationCache = createMemoryLruCache({
+  maxEntries: 1024,
+  defaultTtlMs: Number(process.env.OPENPLANNER_HYDRATION_CACHE_TTL_MS ?? 5 * 60 * 60 * 1000),
+});
 
 function sourceRoot(): string {
   return process.env.OPENPLANNER_SOURCE_ROOT ?? "/home/err/devel";
@@ -156,7 +159,7 @@ async function loadSourceText(row: Record<string, unknown>): Promise<string | nu
   const cacheKey = documentCacheKey(row);
   if (!cacheKey) return null;
 
-  const cached = cacheGet(documentHydrationCache, cacheKey);
+  const cached = await cacheGet(documentHydrationCache, cacheKey);
   if (typeof cached === "string") return cached;
 
   const filePath = safeSourceFilePath(row);
@@ -164,7 +167,7 @@ async function loadSourceText(row: Record<string, unknown>): Promise<string | nu
 
   try {
     const text = await readFile(filePath, "utf8");
-    cachePut(documentHydrationCache, cacheKey, text);
+    await cachePut(documentHydrationCache, cacheKey, text);
     return text;
   } catch {
     return null;

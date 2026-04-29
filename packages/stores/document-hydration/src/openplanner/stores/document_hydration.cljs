@@ -12,6 +12,8 @@
   (cache-stats [this]))
 
 (defn- now-ms [] (.now js/Date))
+(defn- promise [v] (js/Promise.resolve v))
+(defn- pthen [v f] (.then (promise v) f))
 
 (defn- obj?
   [x]
@@ -188,17 +190,145 @@
       (- before (count @state))))
 
   (cache-stats [_]
-    {:size (count @state)
+    {:type "memory-lru"
+     :size (count @state)
      :maxEntries max-entries
      :defaultTtlMs default-ttl-ms}))
+
+(deftype RedisCache [client prefix default-ttl-ms]
+  CacheStore
+  (cache-get [_ k]
+    (.get client (str prefix k)))
+
+  (cache-put! [_ k v opts]
+    (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
+          key (str prefix k)]
+      (if (pos? ttl-ms)
+        (.set client key v #js {:PX ttl-ms})
+        (.set client key v))))
+
+  (cache-evict! [_ k]
+    (pthen (.del client (str prefix k)) pos?))
+
+  (cache-touch! [_ k opts]
+    (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)]
+      (if (pos? ttl-ms)
+        (pthen (.pExpire client (str prefix k) ttl-ms) pos?)
+        (promise false))))
+
+  (cache-cleanup! [_]
+    (promise 0))
+
+  (cache-stats [_]
+    {:type "redis"
+     :prefix prefix
+     :defaultTtlMs default-ttl-ms}))
+
+(deftype LmdbTtlCache [db prefix default-ttl-ms]
+  CacheStore
+  (cache-get [_ k]
+    (let [key (str prefix k)
+          entry (.get db key)
+          now (now-ms)]
+      (cond
+        (nil? entry) nil
+        (and (jget entry "expiresAt") (< (jget entry "expiresAt") now))
+        (do (.remove db key) nil)
+        :else (jget entry "value"))))
+
+  (cache-put! [_ k v opts]
+    (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
+          now (now-ms)
+          expires-at (when (pos? ttl-ms) (+ now ttl-ms))]
+      (.put db (str prefix k) #js {:value v :createdAt now :touchedAt now :expiresAt expires-at})))
+
+  (cache-evict! [_ k]
+    (.remove db (str prefix k)))
+
+  (cache-touch! [_ k opts]
+    (let [key (str prefix k)
+          entry (.get db key)]
+      (if-not entry
+        false
+        (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
+              now (now-ms)]
+          (.put db key #js {:value (jget entry "value")
+                            :createdAt (or (jget entry "createdAt") now)
+                            :touchedAt now
+                            :expiresAt (when (pos? ttl-ms) (+ now ttl-ms))})))))
+
+  (cache-cleanup! [_]
+    ;; LMDB key-range cleanup is intentionally left to explicit future compaction.
+    0)
+
+  (cache-stats [_]
+    {:type "lmdb-ttl"
+     :prefix prefix
+     :defaultTtlMs default-ttl-ms}))
+
+(deftype LayeredCache [layers]
+  CacheStore
+  (cache-get [_ k]
+    (letfn [(try-layer [seen remaining]
+              (if (empty? remaining)
+                (promise nil)
+                (let [layer (first remaining)]
+                  (pthen (cache-get layer k)
+                         (fn [v]
+                           (if (some? v)
+                             (do
+                               (doseq [prior seen]
+                                 (cache-put! prior k v nil))
+                               v)
+                             (try-layer (conj seen layer) (rest remaining))))))))]
+      (try-layer [] layers)))
+
+  (cache-put! [_ k v opts]
+    (js/Promise.all (clj->js (map #(cache-put! % k v opts) layers))))
+
+  (cache-evict! [_ k]
+    (js/Promise.all (clj->js (map #(cache-evict! % k) layers))))
+
+  (cache-touch! [_ k opts]
+    (js/Promise.all (clj->js (map #(cache-touch! % k opts) layers))))
+
+  (cache-cleanup! [_]
+    (pthen (js/Promise.all (clj->js (map cache-cleanup! layers)))
+           (fn [xs] (reduce + 0 (js->clj xs)))))
+
+  (cache-stats [_]
+    {:type "layered"
+     :layers (mapv cache-stats layers)}))
+
+(defn- opts-map
+  [opts]
+  (if (obj? opts) (js->clj opts :keywordize-keys true) (or opts {})))
 
 (defn create-memory-lru-cache
   ([] (create-memory-lru-cache nil))
   ([opts]
-   (let [opts (if (obj? opts) (js->clj opts :keywordize-keys true) (or opts {}))]
+   (let [opts (opts-map opts)]
      (MemoryLruCache. (atom {})
                       (long (or (:maxEntries opts) 512))
                       (long (or (:defaultTtlMs opts) (* 5 60 60 1000)))))))
+
+(defn create-redis-cache
+  [opts]
+  (let [{:keys [client prefix defaultTtlMs]} (opts-map opts)]
+    (when-not client
+      (throw (js/Error. "createRedisCache requires a connected Redis client")))
+    (RedisCache. client (or prefix "") (long (or defaultTtlMs (* 5 60 60 1000))))))
+
+(defn create-lmdb-cache
+  [opts]
+  (let [{:keys [db prefix defaultTtlMs]} (opts-map opts)]
+    (when-not db
+      (throw (js/Error. "createLmdbCache requires an open LMDB database handle")))
+    (LmdbTtlCache. db (or prefix "") (long (or defaultTtlMs (* 5 60 60 1000))))))
+
+(defn create-layered-cache
+  [caches]
+  (LayeredCache. (vec (array-seq caches))))
 
 (defn cache-get-js [cache k] (cache-get cache k))
 (defn cache-put-js
