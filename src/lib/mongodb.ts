@@ -271,6 +271,20 @@ export interface SemanticGraphRunDocument {
   updatedAt: Date;
 }
 
+export interface MigrationJobDocument {
+  _id: string;
+  entity: string;
+  object_id: string;
+  trigger: string;
+  status: "queued" | "running" | "applied" | "failed" | "skipped";
+  plan: Record<string, unknown> | null;
+  error: Record<string, unknown> | string | null;
+  attempts: number;
+  priority: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GardenDocument {
   _id: string;
   garden_id: string;
@@ -318,6 +332,7 @@ export interface MongoConnection {
   graphEdges: Collection<GraphEdgeDocument>;
   graphClusterMemberships: Collection<GraphClusterMembershipDocument>;
   semanticGraphRuns: Collection<SemanticGraphRunDocument>;
+  migrationJobs: Collection<MigrationJobDocument>;
   gardens: Collection<GardenDocument>;
   ftsEnabled: boolean; // MongoDB has text search, always true
 }
@@ -346,6 +361,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
   const graphClusterMemberships = db.collection<GraphClusterMembershipDocument>("graph_cluster_memberships");
   const semanticGraphRuns = db.collection<SemanticGraphRunDocument>("semantic_graph_runs");
+  const migrationJobs = db.collection<MigrationJobDocument>("migration_jobs");
   const gardens = db.collection<GardenDocument>("gardens");
 
   // Create indexes for events
@@ -427,6 +443,10 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await semanticGraphRuns.createIndex({ graph_version: 1 }, { unique: true });
   await semanticGraphRuns.createIndex({ status: 1, finished_at: -1 as IndexDirection });
 
+  // Lazy migration jobs for validation-triggered and graph-crawl-triggered work
+  await migrationJobs.createIndex({ status: 1, priority: -1 as IndexDirection, updatedAt: 1 });
+  await migrationJobs.createIndex({ entity: 1, object_id: 1, trigger: 1 }, { unique: true });
+
   // Gardens collection for published websites
   await gardens.createIndex({ garden_id: 1 }, { unique: true });
   await gardens.createIndex({ owner_id: 1, createdAt: -1 as IndexDirection });
@@ -499,9 +519,45 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphEdges,
     graphClusterMemberships,
     semanticGraphRuns,
+    migrationJobs,
     gardens,
     ftsEnabled: true, // MongoDB always has text search
   };
+}
+
+export async function enqueueMigrationJob(
+  collection: Collection<MigrationJobDocument>,
+  job: {
+    entity: string;
+    object_id: string;
+    trigger: string;
+    plan?: Record<string, unknown> | null;
+    error?: Record<string, unknown> | string | null;
+    priority?: number;
+  },
+): Promise<void> {
+  const now = new Date();
+  const id = `${job.entity}:${job.object_id}:${job.trigger}`;
+  await collection.updateOne(
+    { _id: id },
+    {
+      $set: {
+        entity: job.entity,
+        object_id: job.object_id,
+        trigger: job.trigger,
+        plan: job.plan ?? null,
+        error: job.error ?? null,
+        priority: job.priority ?? 0,
+        updatedAt: now,
+      },
+      $setOnInsert: {
+        status: "queued",
+        attempts: 0,
+        createdAt: now,
+      },
+    },
+    { upsert: true },
+  );
 }
 
 /**
