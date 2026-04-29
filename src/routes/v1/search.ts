@@ -3,6 +3,7 @@ import { ftsSearch, ilikeSearch } from "../../lib/mongodb.js";
 import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import type { FtsSearchRequest, VectorSearchRequest } from "../../lib/types.js";
 import { extractTieredVectorHits, mergeTieredVectorHits } from "../../lib/vector-search.js";
+import { openApiSchemas } from "./openapi.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -43,7 +44,14 @@ export const searchRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  app.post<{ Body: VectorSearchRequest }>("/search/vector", async (req, reply) => {
+  app.post<{ Body: VectorSearchRequest }>("/search/vector", {
+    schema: {
+      body: openApiSchemas.vectorSearchRequestSchema,
+      response: {
+        200: openApiSchemas.vectorSearchResponseSchema,
+      },
+    },
+  }, async (req, reply) => {
     const body = req.body;
     const q = body.q;
     const k = body.k ?? 20;
