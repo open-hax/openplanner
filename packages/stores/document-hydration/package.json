@@ -1,0 +1,22 @@
+{
+  "name": "@open-hax/openplanner-document-hydration",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "shadow-cljs release lib",
+    "watch": "shadow-cljs watch lib"
+  },
+  "devDependencies": {
+    "shadow-cljs": "^3.3.5"
+  }
+}

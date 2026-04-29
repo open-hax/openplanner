@@ -4,12 +4,13 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "pnpm --filter @open-hax/openplanner-document-hydration build && tsc",
     "start": "node dist/main.js",
     "dev": "tsc -w",
     "test": "tsx --tsconfig tsconfig.json"
   },
   "dependencies": {
+    "@open-hax/openplanner-document-hydration": "workspace:*",
     "@fastify/multipart": "^8.2.0",
     "@fastify/sensible": "^5.6.0",
     "@types/yauzl": "^2.10.3",

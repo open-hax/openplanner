@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { DocumentPatchRequest, DocumentRecord } from "../../lib/types.js";
-import { buildDocumentFilter, countFieldValues, documentToEvent, getDocumentById, persistAndMaybeIndex, rowToDocument } from "./documents.js";
+import { buildDocumentFilter, countFieldValues, documentToEvent, getDocumentById, hydrateDocumentRowsForApi, persistAndMaybeIndex, rowToDocument } from "./documents.js";
 
 type CmsDocument = {
   doc_id: string;
@@ -121,7 +121,8 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     if (limit !== null) cursor = cursor.limit(limit);
 
     const rows = await cursor.toArray();
-    const documents = rows.map((row: Record<string, unknown>) => toCmsDocument(rowToDocument(row), tenantId));
+    const hydratedRows = await hydrateDocumentRowsForApi(rows as Array<Record<string, unknown>>);
+    const documents = hydratedRows.map((row) => toCmsDocument(rowToDocument(row), tenantId));
 
     return {
       documents,
@@ -480,7 +481,8 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     if (limit !== null) cursor = cursor.limit(limit);
 
     const rows = await cursor.toArray();
-    const documents = rows.map((row: Record<string, unknown>) => toCmsDocument(rowToDocument(row), tenantId));
+    const hydratedRows = await hydrateDocumentRowsForApi(rows as Array<Record<string, unknown>>);
+    const documents = hydratedRows.map((row) => toCmsDocument(rowToDocument(row), tenantId));
 
     return {
       documents,

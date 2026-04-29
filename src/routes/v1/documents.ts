@@ -1,4 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import {
+  cacheGet,
+  cachePut,
+  createMemoryLruCache,
+  documentCacheKey,
+  documentNeedsHydration,
+  hydrateDocumentRow,
+  rowToDocument as cljsRowToDocument,
+} from "@open-hax/openplanner-document-hydration";
 import { upsertEvent } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
 import { deleteMongoVectorEntriesByFilter, indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
@@ -119,31 +130,59 @@ export async function countFieldValues(
   }, {});
 }
 
-export function rowToDocument(row: Record<string, unknown>): DocumentRecord {
+const documentHydrationCache = createMemoryLruCache({ maxEntries: 1024, defaultTtlMs: 5 * 60 * 60 * 1000 });
+
+function sourceRoot(): string {
+  return process.env.OPENPLANNER_SOURCE_ROOT ?? "/home/err/devel";
+}
+
+function sourcePathFromRow(row: Record<string, unknown>): string | undefined {
   const extra = parseJson(row.extra);
   const metadata = (extra.metadata && typeof extra.metadata === "object") ? (extra.metadata as Record<string, unknown>) : {};
-  const ts = row.ts instanceof Date ? row.ts.toISOString() : String(row.ts ?? new Date().toISOString());
+  const raw = extra.source_path ?? extra.path ?? metadata.path ?? metadata.file_id;
+  return typeof raw === "string" && raw.trim().length > 0 ? raw : undefined;
+}
 
-  return {
-    id: String(row.id),
-    title: String(extra.title ?? row.message ?? row.id),
-    content: String(row.text ?? ""),
-    project: String(row.project ?? "devel"),
-    kind: (DOCUMENT_KINDS.has(String(row.kind)) ? String(row.kind) : "docs") as DocumentRecord["kind"],
-    visibility: normalizeVisibility(extra.visibility),
-    source: row.source ? String(row.source) : undefined,
-    sourcePath: extra.source_path ? String(extra.source_path) : undefined,
-    domain: extra.domain ? String(extra.domain) : undefined,
-    language: extra.language ? String(extra.language) : undefined,
-    createdBy: extra.created_by ? String(extra.created_by) : undefined,
-    publishedBy: extra.published_by ? String(extra.published_by) : undefined,
-    publishedAt: extra.published_at ? String(extra.published_at) : null,
-    aiDrafted: Boolean(extra.ai_drafted),
-    aiModel: extra.ai_model ? String(extra.ai_model) : null,
-    aiPromptHash: extra.ai_prompt_hash ? String(extra.ai_prompt_hash) : null,
-    metadata,
-    ts,
-  };
+function safeSourceFilePath(row: Record<string, unknown>): string | undefined {
+  const rawPath = sourcePathFromRow(row);
+  if (!rawPath) return undefined;
+
+  const root = path.resolve(sourceRoot());
+  const candidate = path.resolve(root, rawPath.startsWith("/") ? rawPath.slice(1) : rawPath);
+  return candidate.startsWith(`${root}${path.sep}`) || candidate === root ? candidate : undefined;
+}
+
+async function loadSourceText(row: Record<string, unknown>): Promise<string | null> {
+  const cacheKey = documentCacheKey(row);
+  if (!cacheKey) return null;
+
+  const cached = cacheGet(documentHydrationCache, cacheKey);
+  if (typeof cached === "string") return cached;
+
+  const filePath = safeSourceFilePath(row);
+  if (!filePath) return null;
+
+  try {
+    const text = await readFile(filePath, "utf8");
+    cachePut(documentHydrationCache, cacheKey, text);
+    return text;
+  } catch {
+    return null;
+  }
+}
+
+async function hydrateDocumentRowForApi(row: Record<string, unknown>): Promise<Record<string, unknown>> {
+  if (!documentNeedsHydration(row)) return row;
+  const sourceText = await loadSourceText(row);
+  return hydrateDocumentRow(row, sourceText).row as Record<string, unknown>;
+}
+
+export async function hydrateDocumentRowsForApi(rows: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> {
+  return Promise.all(rows.map((row) => hydrateDocumentRowForApi(row)));
+}
+
+export function rowToDocument(row: Record<string, unknown>): DocumentRecord {
+  return cljsRowToDocument(row) as unknown as DocumentRecord;
 }
 
 export function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventEnvelopeV1 {
@@ -272,7 +311,9 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
 
 export async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
   const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
-  return row ? rowToDocument(row as Record<string, unknown>) : null;
+  if (!row) return null;
+  const hydrated = await hydrateDocumentRowForApi(row as Record<string, unknown>);
+  return rowToDocument(hydrated);
 }
 
 export const documentRoutes: FastifyPluginAsync = async (app) => {
@@ -341,13 +382,14 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     if (limit !== null) cursor = cursor.limit(limit);
 
     const rows = await cursor.toArray();
+    const hydratedRows = await hydrateDocumentRowsForApi(rows as Array<Record<string, unknown>>);
     return {
       ok: true,
-      count: rows.length,
+      count: hydratedRows.length,
       total,
       offset,
       limit,
-      rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)),
+      rows: hydratedRows.map((row) => rowToDocument(row)),
       storageBackend: "mongodb",
     };
   });
