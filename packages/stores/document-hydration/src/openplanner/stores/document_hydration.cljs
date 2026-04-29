@@ -195,7 +195,7 @@
      :maxEntries max-entries
      :defaultTtlMs default-ttl-ms}))
 
-(deftype RedisCache [client prefix default-ttl-ms]
+(deftype RedisCache [^js client prefix default-ttl-ms]
   CacheStore
   (cache-get [_ k]
     (.get client (str prefix k)))
@@ -224,7 +224,7 @@
      :prefix prefix
      :defaultTtlMs default-ttl-ms}))
 
-(deftype LmdbTtlCache [db prefix default-ttl-ms]
+(deftype LmdbTtlCache [^js db prefix default-ttl-ms]
   CacheStore
   (cache-get [_ k]
     (let [key (str prefix k)
@@ -314,17 +314,21 @@
 
 (defn create-redis-cache
   [opts]
-  (let [{:keys [client prefix defaultTtlMs]} (opts-map opts)]
+  (let [client (jget opts "client")
+        prefix (or (jget opts "prefix") "")
+        default-ttl-ms (or (jget opts "defaultTtlMs") (* 5 60 60 1000))]
     (when-not client
       (throw (js/Error. "createRedisCache requires a connected Redis client")))
-    (RedisCache. client (or prefix "") (long (or defaultTtlMs (* 5 60 60 1000))))))
+    (RedisCache. client prefix (long default-ttl-ms))))
 
 (defn create-lmdb-cache
   [opts]
-  (let [{:keys [db prefix defaultTtlMs]} (opts-map opts)]
+  (let [db (jget opts "db")
+        prefix (or (jget opts "prefix") "")
+        default-ttl-ms (or (jget opts "defaultTtlMs") (* 5 60 60 1000))]
     (when-not db
       (throw (js/Error. "createLmdbCache requires an open LMDB database handle")))
-    (LmdbTtlCache. db (or prefix "") (long (or defaultTtlMs (* 5 60 60 1000))))))
+    (LmdbTtlCache. db prefix (long default-ttl-ms))))
 
 (defn create-layered-cache
   [caches]

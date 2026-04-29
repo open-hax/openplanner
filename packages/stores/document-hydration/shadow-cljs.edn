@@ -1,4 +1,4 @@
-{:source-paths ["src"]
+{:source-paths ["src" "test"]
  :dependencies []
  :builds
  {:lib
@@ -20,4 +20,10 @@
                                :cacheTouch openplanner.stores.document-hydration/cache-touch-js
                                :cacheCleanup openplanner.stores.document-hydration/cache-cleanup-js
                                :cacheStats openplanner.stores.document-hydration/cache-stats-js}}}
+   :compiler-options {:output-feature-set :es-next}}
+
+  :test
+  {:target :node-script
+   :output-to "target/test.cjs"
+   :main openplanner.stores.document-hydration-test/-main
    :compiler-options {:output-feature-set :es-next}}}}

@@ -14,7 +14,8 @@
   },
   "scripts": {
     "build": "shadow-cljs release lib",
-    "watch": "shadow-cljs watch lib"
+    "watch": "shadow-cljs watch lib",
+    "test": "shadow-cljs compile test && node target/test.cjs"
   },
   "devDependencies": {
     "shadow-cljs": "^3.3.5"
