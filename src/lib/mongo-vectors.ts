@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { ClientSession, Collection, Filter } from "mongodb";
 import type { IEmbeddingFunction } from "./embeddings.js";
 import { formatEmbeddingQueryText } from "./embedding-text.js";
@@ -108,6 +110,36 @@ function sourceRefFromExtra(extra: Record<string, unknown> | undefined): SourceR
     ...(lake ? { lake } : {}),
     ...(contentHash ? { content_hash: contentHash } : {}),
   };
+}
+
+function sourceRoot(): string {
+  return process.env.OPENPLANNER_SOURCE_ROOT ?? "/home/err/devel";
+}
+
+function safeSourcePath(sourceRef: unknown): string | null {
+  const ref = objectValue(sourceRef);
+  const rawPath = nonBlankString(ref.source_path) ?? nonBlankString(ref.sourcePath);
+  if (!rawPath) return null;
+  const root = path.resolve(sourceRoot());
+  const candidate = path.resolve(root, rawPath.startsWith("/") ? rawPath.slice(1) : rawPath);
+  return candidate === root || candidate.startsWith(`${root}${path.sep}`) ? candidate : null;
+}
+
+async function hydrateVectorDocumentText(doc: MongoVectorDocument): Promise<string> {
+  if (doc.text || doc.source_text_redacted !== true) return doc.text ?? "";
+  const filePath = safeSourcePath(doc.source_ref);
+  if (!filePath) return "";
+  try {
+    const sourceText = await readFile(filePath, "utf8");
+    const start = typeof doc.char_start === "number" && doc.char_start >= 0 ? doc.char_start : null;
+    const end = typeof doc.char_end === "number" && doc.char_end >= 0 ? doc.char_end : null;
+    if (start !== null && end !== null && end >= start) {
+      return sourceText.slice(start, end);
+    }
+    return sourceText;
+  } catch {
+    return "";
+  }
 }
 
 function sha256Text(text: string): string {
@@ -926,10 +958,11 @@ export async function queryMongoVectorsByText(params: {
   const sorted = rows
     .sort((left, right) => right.score - left.score || left.doc._id.localeCompare(right.doc._id))
     .slice(0, Math.max(1, params.k));
+  const documents = await Promise.all(sorted.map((entry) => hydrateVectorDocumentText(entry.doc)));
 
   return {
     ids: [sorted.map((entry) => entry.doc._id)],
-    documents: [sorted.map((entry) => entry.doc.text)],
+    documents: [documents],
     metadatas: [sorted.map((entry) => toMetadata(entry.doc))],
     distances: [sorted.map((entry) => Number.isFinite(entry.score) ? 1 - entry.score : null)],
     include: ["documents", "metadatas", "distances"],
