@@ -29,6 +29,8 @@ export type PreparedIndexChunk = {
   text: string;
   chunkIndex: number;
   chunkCount: number;
+  charStart?: number | null;
+  charEnd?: number | null;
 };
 
 export type PreparedIndexDocument = {
@@ -180,6 +182,18 @@ function chunkText(input: string, targetTokens: number, targetChars: number, ove
   return out.filter(Boolean);
 }
 
+function locateChunkOffsets(text: string, chunks: string[]): Array<{ charStart: number | null; charEnd: number | null }> {
+  let searchFrom = 0;
+  return chunks.map((chunk) => {
+    let start = text.indexOf(chunk, searchFrom);
+    if (start < 0) start = text.indexOf(chunk);
+    if (start < 0) return { charStart: null, charEnd: null };
+    const charEnd = start + chunk.length;
+    searchFrom = Math.max(start + 1, charEnd - DEFAULT_OVERLAP_CHARS);
+    return { charStart: start, charEnd };
+  });
+}
+
 export function prepareIndexDocument(params: {
   parentId: string;
   text: string;
@@ -209,11 +223,14 @@ export function prepareIndexDocument(params: {
     ? chunkText(normalizedText, targetChunkTokens, targetChunkChars, overlapChars)
     : [normalizedText];
 
+  const offsets = locateChunkOffsets(normalizedText, parts);
   const chunks = parts.map((text, index) => ({
     id: parts.length === 1 ? params.parentId : `${params.parentId}#chunk:${String(index).padStart(4, "0")}`,
     text,
     chunkIndex: index,
     chunkCount: parts.length,
+    charStart: offsets[index]?.charStart ?? null,
+    charEnd: offsets[index]?.charEnd ?? null,
   }));
 
   return {

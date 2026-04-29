@@ -49,6 +49,8 @@ test("prepareIndexDocument returns single chunk for small text", () => {
   assert.equal(result.chunks[0]!.id, "test-doc");
   assert.equal(result.chunks[0]!.chunkIndex, 0);
   assert.equal(result.chunks[0]!.chunkCount, 1);
+  assert.equal(result.chunks[0]!.charStart, 0);
+  assert.equal(result.chunks[0]!.charEnd, result.normalizedText.length);
 });
 
 test("prepareIndexDocument chunks large text", () => {
@@ -66,6 +68,9 @@ test("prepareIndexDocument chunks large text", () => {
     assert.equal(chunk.id, `big-doc#chunk:${String(i).padStart(4, "0")}`, `chunk ${i} id mismatch`);
     assert.equal(chunk.chunkIndex, i);
     assert.equal(chunk.chunkCount, result.chunkCount);
+    if (chunk.charStart !== null && chunk.charStart !== undefined && chunk.charEnd !== null && chunk.charEnd !== undefined) {
+      assert.equal(result.normalizedText.slice(chunk.charStart, chunk.charEnd), chunk.text);
+    }
   }
 });
 

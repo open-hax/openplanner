@@ -23,6 +23,14 @@ export type MongoVectorEntry = {
   metadata: Record<string, unknown>;
 };
 
+type SourceRef = {
+  source_path?: string;
+  url?: string;
+  hostname?: string;
+  lake?: string;
+  content_hash?: string;
+};
+
 const VECTOR_SEARCH_INDEX_NAME = "vs_embedding";
 const FILTERABLE_PATHS = ["source", "kind", "project", "session", "visibility", "parent_id", "embedding_model"] as const;
 const FILTERABLE_PATH_SET = new Set<string>(FILTERABLE_PATHS);
@@ -67,6 +75,62 @@ function toNumberOrNull(value: unknown): number | null {
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function nonBlankString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function sourceRefFromExtra(extra: Record<string, unknown> | undefined): SourceRef | null {
+  const metadata = objectValue(extra?.metadata);
+  const sourcePath = nonBlankString(extra?.source_path)
+    ?? nonBlankString(extra?.path)
+    ?? nonBlankString(metadata.path)
+    ?? nonBlankString(metadata.file_id);
+  const url = nonBlankString(extra?.url) ?? nonBlankString(metadata.url);
+  const hostname = nonBlankString(extra?.hostname) ?? nonBlankString(metadata.hostname);
+  const lake = nonBlankString(extra?.lake) ?? nonBlankString(metadata.lake);
+  const contentHash = nonBlankString(extra?.content_hash)
+    ?? nonBlankString(metadata.content_hash)
+    ?? nonBlankString(objectValue(extra?.migration_2).text_hash_sha256);
+
+  if (!sourcePath && !url && !hostname) return null;
+  return {
+    ...(sourcePath ? { source_path: sourcePath } : {}),
+    ...(url ? { url } : {}),
+    ...(hostname ? { hostname } : {}),
+    ...(lake ? { lake } : {}),
+    ...(contentHash ? { content_hash: contentHash } : {}),
+  };
+}
+
+function sha256Text(text: string): string {
+  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
+}
+
+function sourceRedactionMetadata(params: {
+  extra?: Record<string, unknown>;
+  rawText: string;
+  chunkText: string;
+  charStart?: number | null;
+  charEnd?: number | null;
+}): Record<string, unknown> {
+  const sourceRef = sourceRefFromExtra(params.extra);
+  if (!sourceRef) return {};
+  return {
+    source_text_redacted: true,
+    source_ref: sourceRef,
+    text_hash_sha256: sourceRef.content_hash ?? sha256Text(params.rawText),
+    chunk_text_hash_sha256: sha256Text(params.chunkText),
+    char_start: params.charStart ?? null,
+    char_end: params.charEnd ?? null,
+  };
 }
 
 function normalizeScalarFilterValue(value: unknown): unknown {
@@ -210,6 +274,12 @@ function toMetadata(doc: MongoVectorDocument): Record<string, unknown> {
     seed_id: doc.seed_id ?? null,
     member_count: doc.member_count ?? null,
     char_count: doc.char_count ?? null,
+    source_text_redacted: doc.source_text_redacted ?? false,
+    source_ref: doc.source_ref ?? null,
+    text_hash_sha256: doc.text_hash_sha256 ?? null,
+    chunk_text_hash_sha256: doc.chunk_text_hash_sha256 ?? null,
+    char_start: doc.char_start ?? null,
+    char_end: doc.char_end ?? null,
   };
 }
 
@@ -442,10 +512,11 @@ export async function listMongoVectorPartitions(
 
 function toMongoVectorDocument(entry: MongoVectorEntry, tier: MongoVectorTier, now: Date): MongoVectorDocument {
   const ts = asDate(entry.metadata.ts);
+  const sourceTextRedacted = entry.metadata.source_text_redacted === true;
   return {
     _id: entry.id,
     parent_id: entry.parentId,
-    text: entry.text,
+    text: sourceTextRedacted ? "" : entry.text,
     embedding: entry.embedding,
     ts,
     source: toStringOrNull(entry.metadata.source) ?? "",
@@ -469,6 +540,12 @@ function toMongoVectorDocument(entry: MongoVectorEntry, tier: MongoVectorTier, n
     seed_id: toStringOrNull(entry.metadata.seed_id),
     member_count: toNumberOrNull(entry.metadata.member_count),
     char_count: toNumberOrNull(entry.metadata.char_count),
+    source_text_redacted: sourceTextRedacted,
+    source_ref: sourceTextRedacted ? objectValue(entry.metadata.source_ref) : null,
+    text_hash_sha256: toStringOrNull(entry.metadata.text_hash_sha256),
+    chunk_text_hash_sha256: toStringOrNull(entry.metadata.chunk_text_hash_sha256),
+    char_start: toNumberOrNull(entry.metadata.char_start),
+    char_end: toNumberOrNull(entry.metadata.char_end),
     createdAt: now,
     updatedAt: now,
   };
@@ -653,6 +730,13 @@ export async function indexTextInMongoVectors(params: {
           embedding,
           metadata: {
             ...params.metadata,
+            ...sourceRedactionMetadata({
+              extra: params.extra,
+              rawText: prepared.rawText,
+              chunkText: chunk.text,
+              charStart: chunk.charStart,
+              charEnd: chunk.charEnd,
+            }),
             chunk_id: chunk.id,
             chunk_index: chunk.chunkIndex,
             chunk_count: chunk.chunkCount,
@@ -722,6 +806,12 @@ async function queryPartitionWithNativeVectorSearch(params: {
         seed_id: 1,
         member_count: 1,
         char_count: 1,
+        source_text_redacted: 1,
+        source_ref: 1,
+        text_hash_sha256: 1,
+        chunk_text_hash_sha256: 1,
+        char_start: 1,
+        char_end: 1,
         createdAt: 1,
         updatedAt: 1,
         score: { $meta: "vectorSearchScore" },
@@ -901,6 +991,7 @@ export async function batchIndexTextsInMongoVectors(params: {
   const preparedItems: Array<{
     id: string;
     prepared: ReturnType<typeof prepareIndexDocument>;
+    extra?: Record<string, unknown>;
     metadata: Record<string, unknown>;
   }> = [];
   
@@ -911,7 +1002,7 @@ export async function batchIndexTextsInMongoVectors(params: {
         text: item.text,
         extra: item.extra,
       });
-      preparedItems.push({ id: item.id, prepared, metadata: item.metadata });
+      preparedItems.push({ id: item.id, prepared, extra: item.extra, metadata: item.metadata });
     } catch (error) {
       failed.push({ id: item.id, error: error instanceof Error ? error.message : String(error) });
     }
@@ -927,6 +1018,13 @@ export async function batchIndexTextsInMongoVectors(params: {
         text: chunk.text,
         metadata: {
           ...item.metadata,
+          ...sourceRedactionMetadata({
+            extra: item.extra,
+            rawText: item.prepared.rawText,
+            chunkText: chunk.text,
+            charStart: chunk.charStart,
+            charEnd: chunk.charEnd,
+          }),
           chunk_id: chunk.id,
           chunk_index: chunk.chunkIndex,
           chunk_count: chunk.chunkCount,

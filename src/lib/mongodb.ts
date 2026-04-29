@@ -112,6 +112,12 @@ export interface MongoVectorDocument {
   seed_id: string | null;
   member_count: number | null;
   char_count: number | null;
+  source_text_redacted?: boolean;
+  source_ref?: Record<string, unknown> | null;
+  text_hash_sha256?: string | null;
+  chunk_text_hash_sha256?: string | null;
+  char_start?: number | null;
+  char_end?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
