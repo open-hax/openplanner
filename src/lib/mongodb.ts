@@ -11,6 +11,7 @@
  */
 
 import { MongoClient, Db, Collection, IndexDirection } from "mongodb";
+import { eventMigrationState, OPENPLANNER_SCHEMA_TARGETS, type MigrationState } from "./schema-versions.js";
 
 // Default TTL: 30 days in seconds (disabled if 0)
 const DEFAULT_EVENTS_TTL_SECONDS = 0;
@@ -118,6 +119,8 @@ export interface MongoVectorDocument {
   chunk_text_hash_sha256?: string | null;
   char_start?: number | null;
   char_end?: number | null;
+  schema_version?: number;
+  migration_state?: MigrationState | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -151,6 +154,8 @@ export interface EventDocument {
   text: string | null;
   attachments: unknown[] | null;
   extra: unknown | null;
+  schema_version?: number;
+  migration_state?: MigrationState | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -349,6 +354,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await events.createIndex({ kind: 1, ts: -1 });
   await events.createIndex({ project: 1, ts: -1 });
   await events.createIndex({ session: 1, ts: -1 });
+  await events.createIndex({ schema_version: 1, ts: -1 });
   await events.createIndex({ "text": "text" }); // Full-text search index
 
   // Create indexes for compacted_memories
@@ -366,6 +372,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await hotVectors.createIndex({ session: 1, ts: -1 });
   await hotVectors.createIndex({ visibility: 1, ts: -1 });
   await hotVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
+  await hotVectors.createIndex({ schema_version: 1, ts: -1 });
 
   await compactVectors.createIndex({ parent_id: 1 });
   await compactVectors.createIndex({ ts: -1 });
@@ -375,6 +382,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await compactVectors.createIndex({ session: 1, ts: -1 });
   await compactVectors.createIndex({ visibility: 1, ts: -1 });
   await compactVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
+  await compactVectors.createIndex({ schema_version: 1, ts: -1 });
 
   await vectorPartitions.createIndex({ collectionName: 1 }, { unique: true });
   await vectorPartitions.createIndex({ tier: 1, model: 1, dimensions: 1 }, { unique: true });
@@ -511,11 +519,15 @@ export async function upsertEvent(
   event: Omit<EventDocument, "_id" | "createdAt" | "updatedAt">
 ): Promise<void> {
   const now = new Date();
+  const schemaVersion = event.schema_version ?? OPENPLANNER_SCHEMA_TARGETS.event;
+  const state = event.migration_state ?? eventMigrationState(now);
   await collection.updateOne(
     { _id: event.id },
     {
       $set: {
         ...event,
+        schema_version: schemaVersion,
+        migration_state: state,
         updatedAt: now,
       },
       $setOnInsert: {

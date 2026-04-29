@@ -14,6 +14,7 @@ export type SourceRef = Partial<{
 
 export type EventEnvelopeV1 = {
   schema: "openplanner.event.v1";
+  schema_version?: number;
   id: string;
   ts: string; // ISO
   source: string;
@@ -23,6 +24,7 @@ export type EventEnvelopeV1 = {
   attachments?: BlobRef[];
   meta?: Record<string, unknown>;
   extra?: Record<string, unknown>;
+  migration_state?: Record<string, unknown>;
 };
 
 export type EventIngestRequest = { events: EventEnvelopeV1[] };

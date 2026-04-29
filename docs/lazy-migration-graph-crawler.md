@@ -134,7 +134,7 @@ This avoids the interrupted-run failure mode where parent text is removed before
 ## Next implementation steps
 
 1. Add `schema_version` and `migration_state` to new writes in OpenPlanner events and vector rows.
-2. Add a TypeScript client helper that calls the Clojure graph planner after route validation errors.
+2. Wire `src/lib/lazy-migrations.ts` into route schema validation failure paths and choose inline vs enqueue behavior based on migration mode.
 3. Add a durable migration job queue collection in MongoDB.
 4. Extend `/v1/graph/crawl/tick` to query graph neighborhoods and enqueue bounded migration jobs.
 5. Promote current Migration 2 logic into graph-node migration handlers instead of only CLI batches.

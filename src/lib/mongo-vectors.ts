@@ -4,6 +4,7 @@ import type { IEmbeddingFunction } from "./embeddings.js";
 import { formatEmbeddingQueryText } from "./embedding-text.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "./indexing.js";
 import type { MongoConnection, MongoVectorDocument, MongoVectorPartitionDocument } from "./mongodb.js";
+import { OPENPLANNER_SCHEMA_TARGETS, vectorChunkMigrationState } from "./schema-versions.js";
 import { loadHydrationSourceText } from "./source-hydration.js";
 
 export type MongoVectorTier = "hot" | "compact";
@@ -305,6 +306,8 @@ function toMetadata(doc: MongoVectorDocument): Record<string, unknown> {
     chunk_text_hash_sha256: doc.chunk_text_hash_sha256 ?? null,
     char_start: doc.char_start ?? null,
     char_end: doc.char_end ?? null,
+    schema_version: doc.schema_version ?? null,
+    migration_state: doc.migration_state ?? null,
   };
 }
 
@@ -366,6 +369,7 @@ async function ensurePartitionSupportIndexes(collection: Collection<MongoVectorD
   await collection.createIndex({ session: 1, ts: -1 });
   await collection.createIndex({ visibility: 1, ts: -1 });
   await collection.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
+  await collection.createIndex({ schema_version: 1, ts: -1 });
 }
 
 async function ensurePartitionVectorSearchIndex(
@@ -571,6 +575,8 @@ function toMongoVectorDocument(entry: MongoVectorEntry, tier: MongoVectorTier, n
     chunk_text_hash_sha256: toStringOrNull(entry.metadata.chunk_text_hash_sha256),
     char_start: toNumberOrNull(entry.metadata.char_start),
     char_end: toNumberOrNull(entry.metadata.char_end),
+    schema_version: OPENPLANNER_SCHEMA_TARGETS.vectorChunk,
+    migration_state: vectorChunkMigrationState(now),
     createdAt: now,
     updatedAt: now,
   };

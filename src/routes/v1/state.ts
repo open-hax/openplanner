@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { OPENPLANNER_SCHEMA_TARGETS } from "../../lib/schema-versions.js";
 
 const DOCUMENT_KINDS = ["code", "docs", "config", "data", "document.chunk"];
 
@@ -34,7 +35,7 @@ const redactionStateResponseSchema = {
     generatedAt: { type: "string", format: "date-time" },
     checks: {
       type: "object",
-      required: ["vectorRedaction", "documentBacklog"],
+      required: ["vectorRedaction", "documentBacklog", "schemaVersions"],
       properties: {
         vectorRedaction: {
           type: "object",
@@ -54,6 +55,18 @@ const redactionStateResponseSchema = {
             ok: { type: "boolean" },
             rehydratableEventsWithText: { type: "number" },
             redactedEvents: { type: "number" },
+          },
+          additionalProperties: true,
+        },
+        schemaVersions: {
+          type: "object",
+          required: ["ok", "eventTarget", "vectorChunkTarget", "eventsMissingOrBehind", "vectorsMissingOrBehind"],
+          properties: {
+            ok: { type: "boolean" },
+            eventTarget: { type: "number" },
+            vectorChunkTarget: { type: "number" },
+            eventsMissingOrBehind: { type: "number" },
+            vectorsMissingOrBehind: { type: "number" },
           },
           additionalProperties: true,
         },
@@ -143,6 +156,31 @@ async function documentBacklogStats(app: any) {
   };
 }
 
+async function schemaVersionStats(app: any, collectionNames: string[]) {
+  const eventTarget = OPENPLANNER_SCHEMA_TARGETS.event;
+  const vectorChunkTarget = OPENPLANNER_SCHEMA_TARGETS.vectorChunk;
+  const eventsMissingOrBehind = await app.mongo.events.countDocuments({
+    $or: [
+      { schema_version: { $exists: false } },
+      { schema_version: { $lt: eventTarget } },
+    ],
+  });
+  const vectorCounts = await Promise.all(collectionNames.map((name) => app.mongo.db.collection(name).countDocuments({
+    $or: [
+      { schema_version: { $exists: false } },
+      { schema_version: { $lt: vectorChunkTarget } },
+    ],
+  })));
+  const vectorsMissingOrBehind = vectorCounts.reduce((sum, count) => sum + count, 0);
+  return {
+    ok: eventsMissingOrBehind === 0 && vectorsMissingOrBehind === 0,
+    eventTarget,
+    vectorChunkTarget,
+    eventsMissingOrBehind,
+    vectorsMissingOrBehind,
+  };
+}
+
 export const stateRoutes: FastifyPluginAsync = async (app) => {
   app.get<{
     Querystring: { strict?: boolean };
@@ -162,6 +200,7 @@ export const stateRoutes: FastifyPluginAsync = async (app) => {
       redactedMissingOffsets: acc.redactedMissingOffsets + row.redactedMissingOffsets,
     }), { redactedWithStoredText: 0, redactedMissingSourceRef: 0, redactedMissingOffsets: 0 });
     const documentBacklog = await documentBacklogStats(app);
+    const schemaVersions = await schemaVersionStats(app, collections.map((collection) => collection.name));
     const vectorOk = vectorTotals.redactedWithStoredText === 0 && vectorTotals.redactedMissingSourceRef === 0;
     const strictBacklogOk = !strict || documentBacklog.ok;
     const ok = vectorOk && strictBacklogOk;
@@ -178,6 +217,7 @@ export const stateRoutes: FastifyPluginAsync = async (app) => {
           ...vectorTotals,
         },
         documentBacklog,
+        schemaVersions,
       },
       collections,
     };

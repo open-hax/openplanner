@@ -6,6 +6,7 @@ import { counterInc } from "../../lib/metrics.js";
 import type { EventIngestRequest, EventEnvelopeV1 } from "../../lib/types.js";
 import { splitSentences, deduplicateByHash, computeTextHash } from "../../lib/sentence-split.js";
 import { formatEmbeddingPassageText } from "../../lib/embedding-text.js";
+import { eventMigrationState, OPENPLANNER_SCHEMA_TARGETS } from "../../lib/schema-versions.js";
 
 function norm(v: any): string | null {
   if (v === undefined || v === null) return null;
@@ -119,6 +120,8 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
                 lake: params.project ?? undefined,
                 ...(params.extra ?? {}),
               },
+              schema_version: OPENPLANNER_SCHEMA_TARGETS.event,
+              migration_state: eventMigrationState(now),
               updatedAt: now,
             },
             $setOnInsert: {
@@ -176,6 +179,8 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
         text: norm(ev.text ?? ""),
         attachments: ev.attachments ?? null,
         extra: ev.extra ?? null,
+        schema_version: ev.schema_version,
+        migration_state: ev.migration_state as any,
       });
 
       ids.push(ev.id);
