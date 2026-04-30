@@ -1,0 +1,62 @@
+export type EdgeClaimStatus =
+  | "proposed"
+  | "supported"
+  | "active"
+  | "refuted"
+  | "rejected"
+  | "superseded"
+  | "expired"
+  | "withdrawn";
+
+export type EdgeClaimDirection = "directed" | "undirected";
+
+export type EdgeClaimIdInput = {
+  sourceNodeId?: string;
+  source_node_id?: string;
+  source?: string;
+  targetNodeId?: string;
+  target_node_id?: string;
+  target?: string;
+  relationKind?: string;
+  relation_kind?: string;
+  kind?: string;
+  direction?: unknown;
+  scope?: Record<string, unknown> | null;
+};
+
+export type EdgeClaimProjectionInput = EdgeClaimIdInput & {
+  claimId?: string;
+  claim_id?: string;
+  status?: unknown;
+  confidence?: unknown;
+  validUntil?: unknown;
+  valid_until?: unknown;
+};
+
+export type EdgeClaimProjectionOptions = {
+  statuses?: unknown[];
+  includeExpired?: boolean;
+  now?: unknown;
+};
+
+export type ProjectedEdgeClaim = {
+  source: string;
+  target: string;
+  kind: string;
+  claim_id: string;
+  confidence: number;
+  direction: EdgeClaimDirection;
+  scope: Record<string, unknown>;
+  status: EdgeClaimStatus;
+};
+
+export function normalizeEdgeClaimStatus(value: unknown, fallback?: EdgeClaimStatus): EdgeClaimStatus;
+export function normalizeEdgeClaimDirection(value: unknown): EdgeClaimDirection;
+export function normalizeEdgeClaimScope(value: unknown): Record<string, unknown> | null;
+export function buildEdgeClaimId(input: EdgeClaimIdInput): string;
+export function claimProjectable(claim: EdgeClaimProjectionInput, options?: EdgeClaimProjectionOptions): boolean;
+export function projectEdgeClaim(claim: EdgeClaimProjectionInput, options?: EdgeClaimProjectionOptions): ProjectedEdgeClaim | null;
+export function projectEdgeClaims(claims: EdgeClaimProjectionInput[], options?: EdgeClaimProjectionOptions): {
+  edges: ProjectedEdgeClaim[];
+  stats: { claims: number; edges: number };
+};
