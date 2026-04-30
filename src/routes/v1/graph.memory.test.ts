@@ -5,6 +5,7 @@ import {
   normalizeEdgeClaimDirection,
   normalizeEdgeClaimStatus,
   resolveGraphMemorySeedNodes,
+  semanticChargeFromSimilarity,
 } from "./graph.js";
 
 describe("resolveGraphMemorySeedNodes", () => {
@@ -55,6 +56,14 @@ describe("resolveGraphMemorySeedNodes", () => {
     expect(result.vectorHitCount).toBe(1);
     expect(result.seedNodeIds).toEqual(["devel:file:docs/openplanner.md"]);
     expect(result.seedScoresMap.get("devel:file:docs/openplanner.md")).toBe(0.81);
+  });
+});
+
+describe("semantic force helpers", () => {
+  it("maps similarity to bounded semantic charge", () => {
+    expect(semanticChargeFromSimilarity(1)).toBeGreaterThan(0.9);
+    expect(semanticChargeFromSimilarity(-1)).toBeLessThan(-0.9);
+    expect(semanticChargeFromSimilarity(0)).toBe(0);
   });
 });
 

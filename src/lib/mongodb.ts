@@ -224,6 +224,23 @@ export interface GraphSemanticEdgeDocument {
   updatedAt: Date;
 }
 
+export interface GraphSemanticForceSampleDocument {
+  _id: string;
+  source_node_id: string;
+  target_node_id: string;
+  similarity: number;
+  charge: number;
+  force_kind: string;
+  field_profile: string;
+  project: string | null;
+  embedding_model: string | null;
+  embedding_dimensions: number | null;
+  source: string | null;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GraphEdgeDocument {
   _id: string;
   source_node_id: string;
@@ -361,6 +378,7 @@ export interface MongoConnection {
   graphLayoutOverrides: Collection<GraphLayoutOverrideDocument>;
   graphNodeEmbeddings: Collection<GraphNodeEmbeddingDocument>;
   graphSemanticEdges: Collection<GraphSemanticEdgeDocument>;
+  graphSemanticForceSamples: Collection<GraphSemanticForceSampleDocument>;
   graphEdges: Collection<GraphEdgeDocument>;
   graphEdgeClaims: Collection<GraphEdgeClaimDocument>;
   graphClusterMemberships: Collection<GraphClusterMembershipDocument>;
@@ -391,6 +409,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphLayoutOverrides = db.collection<GraphLayoutOverrideDocument>(config.graphLayoutCollection);
   const graphNodeEmbeddings = db.collection<GraphNodeEmbeddingDocument>(config.graphNodeEmbeddingCollection);
   const graphSemanticEdges = db.collection<GraphSemanticEdgeDocument>("graph_semantic_edges");
+  const graphSemanticForceSamples = db.collection<GraphSemanticForceSampleDocument>("graph_semantic_force_samples");
   const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
   const graphEdgeClaims = db.collection<GraphEdgeClaimDocument>("graph_edge_claims");
   const graphClusterMemberships = db.collection<GraphClusterMembershipDocument>("graph_cluster_memberships");
@@ -459,6 +478,13 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphSemanticEdges.createIndex({ similarity: -1 as IndexDirection });
   await graphSemanticEdges.createIndex({ graph_version: 1, updated_at: -1 as IndexDirection });
   await graphSemanticEdges.createIndex({ clustering_version: 1, updated_at: -1 as IndexDirection });
+
+  // Semantic force samples are layout/runtime force-cache data, not relation truth.
+  await graphSemanticForceSamples.createIndex({ source_node_id: 1, target_node_id: 1, field_profile: 1, embedding_model: 1 }, { unique: true });
+  await graphSemanticForceSamples.createIndex({ source_node_id: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticForceSamples.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticForceSamples.createIndex({ field_profile: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticForceSamples.createIndex({ project: 1, updated_at: -1 as IndexDirection });
 
   // ALL graph edges (structural + semantic) from graph-weaver
   await graphEdges.createIndex({ source_node_id: 1, target_node_id: 1, edge_kind: 1 }, { unique: true });
@@ -559,6 +585,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphLayoutOverrides,
     graphNodeEmbeddings,
     graphSemanticEdges,
+    graphSemanticForceSamples,
     graphEdges,
     graphEdgeClaims,
     graphClusterMemberships,
@@ -794,6 +821,66 @@ export async function upsertGraphSemanticEdges(
               embedding_model: row.embedding_model ?? null,
               graph_version: row.graph_version ?? null,
               clustering_version: row.clustering_version ?? null,
+              source: row.source ?? null,
+              updated_at: row.updated_at ?? now,
+              updatedAt: now,
+            },
+            $setOnInsert: {
+              createdAt: now,
+            },
+          },
+          upsert: true,
+        },
+      };
+    }),
+    { ordered: false },
+  );
+
+  return rows.length;
+}
+
+export async function upsertGraphSemanticForceSamples(
+  collection: Collection<GraphSemanticForceSampleDocument>,
+  rows: Array<{
+    source_node_id: string;
+    target_node_id: string;
+    similarity: number;
+    charge?: number;
+    force_kind?: string;
+    field_profile?: string;
+    project?: string | null;
+    embedding_model?: string | null;
+    embedding_dimensions?: number | null;
+    source?: string | null;
+    updated_at?: Date;
+  }>,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const now = new Date();
+
+  await collection.bulkWrite(
+    rows.map((row) => {
+      const [sourceNodeId, targetNodeId] = row.source_node_id < row.target_node_id
+        ? [row.source_node_id, row.target_node_id]
+        : [row.target_node_id, row.source_node_id];
+      const fieldProfile = row.field_profile ?? "layout.v1";
+      const embeddingModel = row.embedding_model ?? null;
+      const edgeId = `${sourceNodeId}||${targetNodeId}||${fieldProfile}||${embeddingModel ?? ""}`;
+
+      return {
+        updateOne: {
+          filter: { _id: edgeId },
+          update: {
+            $set: {
+              source_node_id: sourceNodeId,
+              target_node_id: targetNodeId,
+              similarity: row.similarity,
+              charge: row.charge ?? row.similarity,
+              force_kind: row.force_kind ?? "semantic_charge",
+              field_profile: fieldProfile,
+              project: row.project ?? null,
+              embedding_model: embeddingModel,
+              embedding_dimensions: row.embedding_dimensions ?? null,
               source: row.source ?? null,
               updated_at: row.updated_at ?? now,
               updatedAt: now,

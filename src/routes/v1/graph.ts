@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { createHash } from "node:crypto";
-import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphEdges } from "../../lib/mongodb.js";
+import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphSemanticForceSamples, upsertGraphEdges } from "../../lib/mongodb.js";
 import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus } from "../../lib/mongodb.js";
 import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import { extractTieredVectorHits } from "../../lib/vector-search.js";
@@ -248,6 +248,30 @@ export function edgeClaimToApi(row: GraphEdgeClaimDocument): Record<string, unkn
     decay_policy: row.decay_policy,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+export function semanticChargeFromSimilarity(similarity: unknown, alpha = 2.4): number {
+  const sim = Number(similarity ?? 0);
+  const safeSim = Number.isFinite(sim) ? Math.max(-1, Math.min(1, sim)) : 0;
+  const safeAlpha = Number.isFinite(alpha) ? Math.max(0.01, alpha) : 2.4;
+  return Math.tanh(safeSim * safeAlpha);
+}
+
+function semanticForceSampleToApi(row: any): Record<string, unknown> {
+  return {
+    source: row.source_node_id,
+    target: row.target_node_id,
+    similarity: row.similarity,
+    charge: row.charge,
+    forceKind: row.force_kind,
+    fieldProfile: row.field_profile,
+    project: row.project,
+    embeddingModel: row.embedding_model,
+    embeddingDimensions: row.embedding_dimensions,
+    sourceSystem: row.source,
+    updatedAt: row.updated_at,
+    compatibilityKind: "semantic_force_sample",
   };
 }
 
@@ -1321,6 +1345,123 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }));
 
     return { edges };
+  });
+
+  // ============================================================
+  // Semantic Force Samples (force cache, not graph truth)
+  // ============================================================
+
+  app.post("/graph/semantic-force/upsert", async (req: any) => {
+    const source = req.body?.source ?? "eros-eris-field";
+    const embeddingModel = req.body?.embeddingModel ?? req.body?.embedding_model;
+    const embeddingDimensions = req.body?.embeddingDimensions ?? req.body?.embedding_dimensions;
+    const project = req.body?.project;
+    const fieldProfile = String(req.body?.fieldProfile ?? req.body?.field_profile ?? "layout.v1");
+    const forceKind = String(req.body?.forceKind ?? req.body?.force_kind ?? "semantic_charge");
+    const chargeAlpha = Number(req.body?.chargeAlpha ?? req.body?.charge_alpha ?? 2.4);
+    const samples = Array.isArray(req.body?.samples) ? req.body.samples : (Array.isArray(req.body?.edges) ? req.body.edges : []);
+
+    if (samples.length === 0) {
+      return { ok: true, stored: 0, compatibilityKind: "semantic_force_sample" };
+    }
+
+    const rows = samples.map((sample: any) => {
+      const similarity = Number(sample.similarity ?? sample.sim ?? 0);
+      return {
+        source_node_id: String(sample.source ?? sample.a ?? sample.source_node_id),
+        target_node_id: String(sample.target ?? sample.b ?? sample.target_node_id),
+        similarity,
+        charge: Number.isFinite(Number(sample.charge)) ? Number(sample.charge) : semanticChargeFromSimilarity(similarity, chargeAlpha),
+        force_kind: String(sample.force_kind ?? sample.forceKind ?? forceKind),
+        field_profile: String(sample.field_profile ?? sample.fieldProfile ?? fieldProfile),
+        project: project ?? null,
+        embedding_model: embeddingModel ?? null,
+        embedding_dimensions: Number.isFinite(Number(embeddingDimensions)) ? Number(embeddingDimensions) : null,
+        source,
+        updated_at: new Date(),
+      };
+    }).filter((row: any) => row.source_node_id && row.target_node_id && row.source_node_id !== row.target_node_id);
+
+    const stored = await upsertGraphSemanticForceSamples(app.mongo.graphSemanticForceSamples, rows);
+    return { ok: true, stored, compatibilityKind: "semantic_force_sample" };
+  });
+
+  app.post("/graph/semantic-force/query", async (req: any) => {
+    const nodeIds = uniqueStrings(req.body?.nodeIds ?? req.body?.node_ids);
+    const fieldProfile = String(req.body?.fieldProfile ?? req.body?.field_profile ?? "").trim();
+    const minCharge = Number(req.body?.minCharge ?? req.body?.min_charge ?? -1);
+    const maxCharge = Number(req.body?.maxCharge ?? req.body?.max_charge ?? 1);
+    const includeLegacyFallback = req.body?.includeLegacyFallback === true || req.body?.include_legacy_fallback === true;
+    const limit = Math.max(1, Math.min(100000, Number(req.body?.limit ?? 50000)));
+
+    const filter: Record<string, unknown> = {
+      charge: { $gte: minCharge, $lte: maxCharge },
+    };
+    if (nodeIds.length > 0) {
+      filter.$or = [
+        { source_node_id: { $in: nodeIds } },
+        { target_node_id: { $in: nodeIds } },
+      ];
+    }
+    if (fieldProfile) filter.field_profile = fieldProfile;
+
+    const rows = await app.mongo.graphSemanticForceSamples.find(filter).limit(limit).toArray();
+    if (rows.length > 0 || !includeLegacyFallback) {
+      return { ok: true, count: rows.length, samples: rows.map(semanticForceSampleToApi), source: "semantic_force_samples" };
+    }
+
+    const legacyFilter: Record<string, unknown> = nodeIds.length > 0
+      ? {
+          $or: [
+            { source_node_id: { $in: nodeIds } },
+            { target_node_id: { $in: nodeIds } },
+          ],
+        }
+      : {};
+    const legacyRows = await app.mongo.graphSemanticEdges.find(legacyFilter).limit(limit).toArray();
+    const samples = legacyRows.map((row: any) => ({
+      source: row.source_node_id,
+      target: row.target_node_id,
+      similarity: row.similarity,
+      charge: semanticChargeFromSimilarity(row.similarity),
+      forceKind: "semantic_charge",
+      fieldProfile: "legacy.semantic_edges",
+      project: row.project,
+      embeddingModel: row.embedding_model,
+      sourceSystem: row.source,
+      updatedAt: row.updated_at,
+      compatibilityKind: "semantic_force_legacy",
+    }));
+    return { ok: true, count: samples.length, samples, source: "legacy_semantic_edges" };
+  });
+
+  app.get("/graph/semantic-force", async (req: any) => {
+    const limit = Math.max(1, Math.min(100000, Number(req.query?.limit ?? 50000)));
+    const fieldProfile = typeof req.query?.fieldProfile === "string" ? req.query.fieldProfile.trim() : "";
+    const includeLegacyFallback = req.query?.includeLegacyFallback === "true" || req.query?.include_legacy_fallback === "true";
+    const filter: Record<string, unknown> = {};
+    if (fieldProfile) filter.field_profile = fieldProfile;
+
+    const rows = await app.mongo.graphSemanticForceSamples.find(filter).limit(limit).toArray();
+    if (rows.length > 0 || !includeLegacyFallback) {
+      return { ok: true, count: rows.length, samples: rows.map(semanticForceSampleToApi), source: "semantic_force_samples" };
+    }
+
+    const legacyRows = await app.mongo.graphSemanticEdges.find({}).limit(limit).toArray();
+    const samples = legacyRows.map((row: any) => ({
+      source: row.source_node_id,
+      target: row.target_node_id,
+      similarity: row.similarity,
+      charge: semanticChargeFromSimilarity(row.similarity),
+      forceKind: "semantic_charge",
+      fieldProfile: "legacy.semantic_edges",
+      project: row.project,
+      embeddingModel: row.embedding_model,
+      sourceSystem: row.source,
+      updatedAt: row.updated_at,
+      compatibilityKind: "semantic_force_legacy",
+    }));
+    return { ok: true, count: samples.length, samples, source: "legacy_semantic_edges" };
   });
 
   // ============================================================
