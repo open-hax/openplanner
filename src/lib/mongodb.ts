@@ -247,6 +247,37 @@ export interface GraphSemanticForceSampleDocument {
   updatedAt: Date;
 }
 
+export interface GraphSemanticFieldCellDocument {
+  _id: string;
+  cell_id: string;
+  field_profile: string;
+  project: string | null;
+  embedding_model: string | null;
+  embedding_dimensions: number | null;
+  level: number;
+  ix: number;
+  iy: number;
+  bounds: {
+    min_x: number;
+    min_y: number;
+    max_x: number;
+    max_y: number;
+  };
+  center_x: number;
+  center_y: number;
+  half_extent: number;
+  mass: number;
+  node_count: number;
+  node_ids: string[];
+  child_cell_ids: string[];
+  centroid_embedding: number[];
+  charge: number;
+  source: string | null;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GraphEdgeDocument {
   _id: string;
   source_node_id: string;
@@ -442,6 +473,7 @@ export interface MongoConnection {
   graphNodeEmbeddings: Collection<GraphNodeEmbeddingDocument>;
   graphSemanticEdges: Collection<GraphSemanticEdgeDocument>;
   graphSemanticForceSamples: Collection<GraphSemanticForceSampleDocument>;
+  graphSemanticFieldCells: Collection<GraphSemanticFieldCellDocument>;
   graphEdges: Collection<GraphEdgeDocument>;
   graphEdgeClaims: Collection<GraphEdgeClaimDocument>;
   graphDaimoiTrails: Collection<GraphDaimoiTrailDocument>;
@@ -475,6 +507,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphNodeEmbeddings = db.collection<GraphNodeEmbeddingDocument>(config.graphNodeEmbeddingCollection);
   const graphSemanticEdges = db.collection<GraphSemanticEdgeDocument>("graph_semantic_edges");
   const graphSemanticForceSamples = db.collection<GraphSemanticForceSampleDocument>("graph_semantic_force_samples");
+  const graphSemanticFieldCells = db.collection<GraphSemanticFieldCellDocument>("graph_semantic_field_cells");
   const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
   const graphEdgeClaims = db.collection<GraphEdgeClaimDocument>("graph_edge_claims");
   const graphDaimoiTrails = db.collection<GraphDaimoiTrailDocument>("graph_daimoi_trails");
@@ -554,6 +587,11 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphSemanticForceSamples.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
   await graphSemanticForceSamples.createIndex({ field_profile: 1, updated_at: -1 as IndexDirection });
   await graphSemanticForceSamples.createIndex({ project: 1, updated_at: -1 as IndexDirection });
+
+  await graphSemanticFieldCells.createIndex({ cell_id: 1 }, { unique: true });
+  await graphSemanticFieldCells.createIndex({ field_profile: 1, level: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticFieldCells.createIndex({ project: 1, field_profile: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticFieldCells.createIndex({ node_ids: 1, field_profile: 1 });
 
   // ALL graph edges (structural + semantic) from graph-weaver
   await graphEdges.createIndex({ source_node_id: 1, target_node_id: 1, edge_kind: 1 }, { unique: true });
@@ -671,6 +709,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphNodeEmbeddings,
     graphSemanticEdges,
     graphSemanticForceSamples,
+    graphSemanticFieldCells,
     graphEdges,
     graphEdgeClaims,
     graphDaimoiTrails,

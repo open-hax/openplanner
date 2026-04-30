@@ -485,11 +485,18 @@ Near-term acceptable roles:
 - exact pairwise similarity for selected node pairs,
 - slab-backed score batches,
 - local semantic charge matrix over a bounded active ViewGraph,
+- Barnes-Hut / quadtree semantic-field cell comparisons,
 - force-cache refresh for visible/query-active nodes.
 
 Vexx should not be described as the product-level ANN search engine. OpenPlanner
 may still use vector search for seeding, but Vexx's architectural role is to
 accelerate semantic gravity and charge calculations.
+
+For local durable stacks, Vexx runs as a host-side PM2 sidecar on
+`127.0.0.1:8791`; OpenPlanner containers reach it at
+`http://host.docker.internal:8791`. This avoids requiring the accelerator ABI to
+work inside the OpenPlanner container while still letting graph-memory and
+semantic-field ticks call Vexx for comparison work.
 
 ## Migration plan
 
@@ -509,6 +516,11 @@ accelerate semantic gravity and charge calculations.
 
 - Add a semantic-force cache keyed by embedding model, dimensions, node ids, and
   field profile.
+- Build `/v1/graph/semantic-field/run` as the bounded Barnes-Hut/quadtree
+  projection tick: aggregate TruthGraph/ViewGraph nodes into field cells,
+  compare cell centroids through Vexx when configured, and persist only field
+  cells plus `semantic_field_multipole` force samples. These are simulation
+  force surfaces, not durable relation edges.
 - Teach layout code to consume force samples instead of canonical semantic edges.
 - Rename UI/API labels away from "semantic edge" where possible.
 

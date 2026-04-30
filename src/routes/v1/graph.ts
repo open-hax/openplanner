@@ -2,7 +2,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphSemanticForceSamples, upsertGraphEdges } from "../../lib/mongodb.js";
-import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus, GraphViewNodeDocument, GraphViewNodeSourceMetadata } from "../../lib/mongodb.js";
+import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus, GraphSemanticFieldCellDocument, GraphViewNodeDocument, GraphViewNodeSourceMetadata } from "../../lib/mongodb.js";
 import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import { extractTieredVectorHits } from "../../lib/vector-search.js";
 import { formatEmbeddingQueryText, formatEmbeddingPassageText } from "../../lib/embedding-text.js";
@@ -154,6 +154,29 @@ type GraphNodeEmbeddingCandidate = {
   project?: string;
   score?: number;
   embedding?: number[];
+};
+
+type SemanticFieldParticle = {
+  nodeId: string;
+  project: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number;
+  embedding: number[];
+  x: number;
+  y: number;
+};
+
+type SemanticFieldCell = Omit<GraphSemanticFieldCellDocument, "_id" | "createdAt" | "updatedAt"> & {
+  children: SemanticFieldCell[];
+};
+
+type SemanticFieldInteraction = {
+  source: string;
+  target: string;
+  similarity: number;
+  charge: number;
+  sourceLevel: number;
+  targetLevel: number;
 };
 
 const EDGE_CLAIM_STATUSES = [
@@ -349,6 +372,282 @@ function graphViewNodeToApi(row: GraphViewNodeDocument): Record<string, unknown>
   };
 }
 
+function semanticFieldCellToApi(row: GraphSemanticFieldCellDocument | SemanticFieldCell): Record<string, unknown> {
+  return {
+    cell_id: row.cell_id,
+    fieldProfile: row.field_profile,
+    project: row.project,
+    embeddingModel: row.embedding_model,
+    embeddingDimensions: row.embedding_dimensions,
+    level: row.level,
+    ix: row.ix,
+    iy: row.iy,
+    bounds: row.bounds,
+    center: { x: row.center_x, y: row.center_y },
+    halfExtent: row.half_extent,
+    mass: row.mass,
+    nodeCount: row.node_count,
+    nodeIds: row.node_ids,
+    childCellIds: row.child_cell_ids,
+    charge: row.charge,
+    source: row.source,
+    updatedAt: row.updated_at,
+    compatibilityKind: "semantic_field_cell",
+  };
+}
+
+function semanticFieldBounds(particles: SemanticFieldParticle[]): { minX: number; minY: number; maxX: number; maxY: number } {
+  if (particles.length === 0) return { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const particle of particles) {
+    minX = Math.min(minX, particle.x);
+    minY = Math.min(minY, particle.y);
+    maxX = Math.max(maxX, particle.x);
+    maxY = Math.max(maxY, particle.y);
+  }
+  const width = Math.max(1, maxX - minX);
+  const height = Math.max(1, maxY - minY);
+  const side = Math.max(width, height);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  return { minX: cx - side / 2, minY: cy - side / 2, maxX: cx + side / 2, maxY: cy + side / 2 };
+}
+
+function buildSemanticFieldCells(params: {
+  particles: SemanticFieldParticle[];
+  fieldProfile: string;
+  project: string | null;
+  maxDepth: number;
+  maxLeafSize: number;
+  now: Date;
+  source: string;
+}): SemanticFieldCell[] {
+  const bounds = semanticFieldBounds(params.particles);
+  const allCells: SemanticFieldCell[] = [];
+  const root = buildSemanticFieldCellRecursive({
+    ...params,
+    particles: params.particles,
+    bounds,
+    level: 0,
+    ix: 0,
+    iy: 0,
+    allCells,
+  });
+  return root ? allCells : [];
+}
+
+function buildSemanticFieldCellRecursive(params: {
+  particles: SemanticFieldParticle[];
+  fieldProfile: string;
+  project: string | null;
+  maxDepth: number;
+  maxLeafSize: number;
+  now: Date;
+  source: string;
+  bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  level: number;
+  ix: number;
+  iy: number;
+  allCells: SemanticFieldCell[];
+}): SemanticFieldCell | null {
+  if (params.particles.length === 0) return null;
+  const midX = (params.bounds.minX + params.bounds.maxX) / 2;
+  const midY = (params.bounds.minY + params.bounds.maxY) / 2;
+  const canSplit = params.level < params.maxDepth && params.particles.length > params.maxLeafSize;
+  const children: SemanticFieldCell[] = [];
+  if (canSplit) {
+    const quadrants: SemanticFieldParticle[][] = [[], [], [], []];
+    for (const particle of params.particles) {
+      const east = particle.x >= midX;
+      const north = particle.y >= midY;
+      const index = !east && north ? 0 : east && north ? 1 : !east && !north ? 2 : 3;
+      quadrants[index]!.push(particle);
+    }
+    const childBounds = [
+      { minX: params.bounds.minX, minY: midY, maxX: midX, maxY: params.bounds.maxY },
+      { minX: midX, minY: midY, maxX: params.bounds.maxX, maxY: params.bounds.maxY },
+      { minX: params.bounds.minX, minY: params.bounds.minY, maxX: midX, maxY: midY },
+      { minX: midX, minY: params.bounds.minY, maxX: params.bounds.maxX, maxY: midY },
+    ];
+    for (let index = 0; index < quadrants.length; index += 1) {
+      const child = buildSemanticFieldCellRecursive({
+        ...params,
+        particles: quadrants[index]!,
+        bounds: childBounds[index]!,
+        level: params.level + 1,
+        ix: params.ix * 2 + (index === 1 || index === 3 ? 1 : 0),
+        iy: params.iy * 2 + (index === 0 || index === 1 ? 1 : 0),
+      });
+      if (child) children.push(child);
+    }
+  }
+
+  const embedding = averageEmbeddingVectors(params.particles.map((particle) => particle.embedding));
+  const nodeIds = params.particles.map((particle) => particle.nodeId).sort();
+  const cellId = `field:semantic:${hashHex(JSON.stringify({
+    fieldProfile: params.fieldProfile,
+    level: params.level,
+    ix: params.ix,
+    iy: params.iy,
+    nodeIds,
+  }), 24)}`;
+  const cell: SemanticFieldCell = {
+    cell_id: cellId,
+    field_profile: params.fieldProfile,
+    project: params.project,
+    embedding_model: params.particles[0]?.embeddingModel ?? null,
+    embedding_dimensions: params.particles[0]?.embeddingDimensions ?? null,
+    level: params.level,
+    ix: params.ix,
+    iy: params.iy,
+    bounds: {
+      min_x: params.bounds.minX,
+      min_y: params.bounds.minY,
+      max_x: params.bounds.maxX,
+      max_y: params.bounds.maxY,
+    },
+    center_x: params.particles.reduce((sum, particle) => sum + particle.x, 0) / Math.max(1, params.particles.length),
+    center_y: params.particles.reduce((sum, particle) => sum + particle.y, 0) / Math.max(1, params.particles.length),
+    half_extent: Math.max(params.bounds.maxX - params.bounds.minX, params.bounds.maxY - params.bounds.minY) / 2,
+    mass: params.particles.length,
+    node_count: params.particles.length,
+    node_ids: nodeIds,
+    child_cell_ids: children.map((child) => child.cell_id),
+    centroid_embedding: embedding,
+    charge: semanticChargeFromSimilarity(0),
+    source: params.source,
+    updated_at: params.now,
+    children,
+  };
+  params.allCells.push(cell);
+  return cell;
+}
+
+function collectSemanticFieldPairs(cells: SemanticFieldCell[], theta: number, maxPairs: number): Array<[SemanticFieldCell, SemanticFieldCell]> {
+  const root = cells.find((cell) => cell.level === 0);
+  if (!root) return [];
+  const pairs: Array<[SemanticFieldCell, SemanticFieldCell]> = [];
+  const pushPair = (left: SemanticFieldCell, right: SemanticFieldCell): void => {
+    if (pairs.length >= maxPairs || left.cell_id === right.cell_id) return;
+    const dx = left.center_x - right.center_x;
+    const dy = left.center_y - right.center_y;
+    const dist = Math.max(1e-6, Math.sqrt(dx * dx + dy * dy));
+    const size = Math.max(left.half_extent, right.half_extent) * 2;
+    const farEnough = size / dist < theta;
+    if (farEnough || (left.children.length === 0 && right.children.length === 0)) {
+      pairs.push([left, right]);
+      return;
+    }
+    const splitLeft = left.children.length > 0 && (left.half_extent >= right.half_extent || right.children.length === 0);
+    const expanded = splitLeft ? left.children.map((child) => [child, right] as const) : right.children.map((child) => [left, child] as const);
+    for (const [a, b] of expanded) {
+      if (pairs.length >= maxPairs) return;
+      pushPair(a, b);
+    }
+  };
+  const walk = (cell: SemanticFieldCell): void => {
+    for (const child of cell.children) walk(child);
+    for (let i = 0; i < cell.children.length; i += 1) {
+      for (let j = i + 1; j < cell.children.length; j += 1) {
+        if (pairs.length >= maxPairs) return;
+        pushPair(cell.children[i]!, cell.children[j]!);
+      }
+    }
+  };
+  walk(root);
+  return pairs;
+}
+
+function localCosineSimilarity(left: number[], right: number[]): number {
+  if (left.length === 0 || left.length !== right.length) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    dot += left[index]! * right[index]!;
+    normA += left[index]! * left[index]!;
+    normB += right[index]! * right[index]!;
+  }
+  const denominator = Math.sqrt(normA) * Math.sqrt(normB);
+  return denominator > 0 ? Math.max(-1, Math.min(1, dot / denominator)) : 0;
+}
+
+async function compareSemanticFieldPairs(params: {
+  pairs: Array<[SemanticFieldCell, SemanticFieldCell]>;
+  vexxBaseUrl: string;
+  vexxApiKey?: string;
+  device: string;
+  requireAccel: boolean;
+  timeoutMs: number;
+  chargeAlpha: number;
+}): Promise<{ interactions: SemanticFieldInteraction[]; provider: string; vexxCalls: number; vexxFailures: number }> {
+  const interactions: SemanticFieldInteraction[] = [];
+  let vexxCalls = 0;
+  let vexxFailures = 0;
+  let provider = "local-cosine";
+  const byLeft = new Map<string, { left: SemanticFieldCell; right: SemanticFieldCell[] }>();
+  for (const [left, right] of params.pairs) {
+    const row = byLeft.get(left.cell_id) ?? { left, right: [] };
+    row.right.push(right);
+    byLeft.set(left.cell_id, row);
+  }
+
+  for (const row of byLeft.values()) {
+    const validRight = row.right.filter((right) => right.centroid_embedding.length === row.left.centroid_embedding.length);
+    if (validRight.length === 0) continue;
+    const baseUrl = params.vexxBaseUrl.trim().replace(/\/$/, "");
+    let scores: number[] | null = null;
+    if (baseUrl) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), Math.max(1000, params.timeoutMs));
+      try {
+        const response = await fetch(`${baseUrl}/v1/cosine/matrix`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(params.vexxApiKey ? { authorization: `Bearer ${params.vexxApiKey}` } : {}),
+          },
+          body: JSON.stringify({
+            left: [row.left.centroid_embedding],
+            right: validRight.map((right) => right.centroid_embedding),
+            device: params.device,
+            requireAccel: params.requireAccel,
+          }),
+          signal: controller.signal,
+        });
+        if (response.ok) {
+          const payload = await response.json() as { matrix?: number[]; provider?: string; device?: string };
+          if (Array.isArray(payload.matrix) && payload.matrix.length === validRight.length) {
+            scores = payload.matrix.map((score) => Number(score));
+            provider = `vexx:${payload.provider ?? payload.device ?? params.device}`;
+            vexxCalls += 1;
+          }
+        }
+      } catch {
+        vexxFailures += 1;
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+    const finalScores = scores ?? validRight.map((right) => localCosineSimilarity(row.left.centroid_embedding, right.centroid_embedding));
+    for (let index = 0; index < validRight.length; index += 1) {
+      const similarity = Math.max(-1, Math.min(1, Number(finalScores[index] ?? 0)));
+      interactions.push({
+        source: row.left.cell_id,
+        target: validRight[index]!.cell_id,
+        similarity,
+        charge: semanticChargeFromSimilarity(similarity, params.chargeAlpha),
+        sourceLevel: row.left.level,
+        targetLevel: validRight[index]!.level,
+      });
+    }
+  }
+  return { interactions, provider, vexxCalls, vexxFailures };
+}
+
 function hostResourcePressureScalar(): { scalar: number; components: Record<string, number> } {
   const totalMem = Math.max(1, os.totalmem());
   const freeMem = Math.max(0, os.freemem());
@@ -490,7 +789,7 @@ async function fallbackGraphMemorySeedSearch(params: {
   const fetchLimit = Math.min(50000, Math.max(k, maxCandidates), totalCandidates);
   const scored: GraphMemorySeedScore[] = [];
 
-  const vexxBaseUrl = process.env.VEXX_BASE_URL || "http://host.docker.internal:8787";
+  const vexxBaseUrl = process.env.VEXX_BASE_URL || "http://host.docker.internal:8791";
   const vexxTimeoutMs = 30000;
   const fetchBatchSize = 500;
 
@@ -1787,6 +2086,153 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       compatibilityKind: "semantic_force_legacy",
     }));
     return { ok: true, count: samples.length, samples, source: "legacy_semantic_edges" };
+  });
+
+  // ============================================================
+  // Semantic Field Cells (Barnes-Hut / quadtree force projection)
+  // ============================================================
+
+  app.get("/graph/semantic-field/cells", async (req: any) => {
+    const fieldProfile = typeof req.query?.fieldProfile === "string" ? req.query.fieldProfile.trim() : "semantic_field.barnes_hut.v1";
+    const project = typeof req.query?.project === "string" ? req.query.project.trim() : "";
+    const level = req.query?.level === undefined ? null : Number(req.query.level);
+    const limit = Math.max(1, Math.min(10000, Number(req.query?.limit ?? 1000)));
+    const filter: Record<string, unknown> = { field_profile: fieldProfile };
+    if (project) filter.project = project;
+    if (level !== null && Number.isFinite(level)) filter.level = level;
+    const rows = await app.mongo.graphSemanticFieldCells
+      .find(filter)
+      .sort({ level: 1, node_count: -1 })
+      .limit(limit)
+      .toArray();
+    return { ok: true, count: rows.length, cells: rows.map(semanticFieldCellToApi) };
+  });
+
+  app.post("/graph/semantic-field/run", async (req: any) => {
+    const dryRun = req.body?.dryRun === true;
+    const fieldProfile = String(req.body?.fieldProfile ?? req.body?.field_profile ?? "semantic_field.barnes_hut.v1");
+    const project = typeof req.body?.project === "string" && req.body.project.trim() ? req.body.project.trim() : null;
+    const embeddingModel = typeof req.body?.embeddingModel === "string" ? req.body.embeddingModel.trim() : "";
+    const embeddingDimensions = Number(req.body?.embeddingDimensions ?? req.body?.embedding_dimensions ?? 0);
+    const nodeIds = uniqueStrings(req.body?.nodeIds ?? req.body?.node_ids);
+    const maxNodes = Math.max(2, Math.min(5000, Number(req.body?.maxNodes ?? req.body?.max_nodes ?? 500)));
+    const maxDepth = Math.max(1, Math.min(10, Number(req.body?.maxDepth ?? req.body?.max_depth ?? 6)));
+    const maxLeafSize = Math.max(1, Math.min(256, Number(req.body?.maxLeafSize ?? req.body?.max_leaf_size ?? 24)));
+    const theta = Math.max(0.1, Math.min(2.0, Number(req.body?.theta ?? 0.85)));
+    const maxInteractions = Math.max(1, Math.min(50000, Number(req.body?.maxInteractions ?? req.body?.max_interactions ?? 5000)));
+    const minAbsCharge = Math.max(0, Math.min(1, Number(req.body?.minAbsCharge ?? req.body?.min_abs_charge ?? 0.08)));
+    const chargeAlpha = Math.max(0.01, Number(req.body?.chargeAlpha ?? req.body?.charge_alpha ?? 2.4));
+    const now = new Date();
+
+    const embeddingFilter: Record<string, unknown> = { embedding: { $exists: true } };
+    if (project) embeddingFilter.project = project;
+    if (embeddingModel) embeddingFilter.embedding_model = embeddingModel;
+    if (Number.isFinite(embeddingDimensions) && embeddingDimensions > 0) embeddingFilter.embedding_dimensions = embeddingDimensions;
+    if (nodeIds.length > 0) embeddingFilter.node_id = { $in: nodeIds };
+
+    const embeddingRows = await app.mongo.graphNodeEmbeddings
+      .find(embeddingFilter, { projection: { node_id: 1, project: 1, embedding_model: 1, embedding_dimensions: 1, embedding: 1, updated_at: 1 } })
+      .sort({ updated_at: -1 })
+      .limit(maxNodes)
+      .toArray();
+    const usableRows = embeddingRows.filter((row) => Array.isArray(row.embedding) && row.embedding.length > 0);
+    const ids = usableRows.map((row) => String(row.node_id));
+    const layoutRows = ids.length > 0
+      ? await app.mongo.graphLayoutOverrides.find({ node_id: { $in: ids } }, { projection: { node_id: 1, x: 1, y: 1 } }).toArray()
+      : [];
+    const layoutByNode = new Map(layoutRows.map((row) => [String(row.node_id), { x: Number(row.x), y: Number(row.y) }]));
+    const particles: SemanticFieldParticle[] = usableRows.map((row) => {
+      const nodeId = String(row.node_id);
+      const layout = layoutByNode.get(nodeId);
+      const fallback = hashPositionForNodeId(nodeId);
+      return {
+        nodeId,
+        project: row.project ?? null,
+        embeddingModel: row.embedding_model ?? null,
+        embeddingDimensions: Number(row.embedding_dimensions ?? row.embedding.length),
+        embedding: row.embedding,
+        x: Number.isFinite(layout?.x) ? Number(layout?.x) : fallback.x,
+        y: Number.isFinite(layout?.y) ? Number(layout?.y) : fallback.y,
+      };
+    });
+
+    const cells = buildSemanticFieldCells({
+      particles,
+      fieldProfile,
+      project,
+      maxDepth,
+      maxLeafSize,
+      now,
+      source: "openplanner.semantic-field",
+    });
+    const pairs = collectSemanticFieldPairs(cells, theta, maxInteractions);
+    const comparison = await compareSemanticFieldPairs({
+      pairs,
+      vexxBaseUrl: String(req.body?.vexxBaseUrl ?? req.body?.vexx_base_url ?? process.env.VEXX_BASE_URL ?? "http://host.docker.internal:8791"),
+      vexxApiKey: String(req.body?.vexxApiKey ?? req.body?.vexx_api_key ?? process.env.VEXX_API_KEY ?? "") || undefined,
+      device: String(req.body?.vexxDevice ?? req.body?.vexx_device ?? process.env.VEXX_DEVICE ?? "AUTO"),
+      requireAccel: req.body?.vexxRequireAccel === true || /^(1|true|yes|on)$/i.test(String(process.env.VEXX_REQUIRE_ACCEL ?? "false")),
+      timeoutMs: Math.max(1000, Number(req.body?.vexxTimeoutMs ?? req.body?.vexx_timeout_ms ?? process.env.VEXX_TIMEOUT_MS ?? 30000)),
+      chargeAlpha,
+    });
+    const interactions = comparison.interactions.filter((interaction) => Math.abs(interaction.charge) >= minAbsCharge);
+
+    if (!dryRun && cells.length > 0) {
+      await app.mongo.graphSemanticFieldCells.bulkWrite(cells.map((cell) => {
+        const { children: _children, ...document } = cell;
+        return {
+          replaceOne: {
+            filter: { cell_id: cell.cell_id },
+            replacement: {
+              ...document,
+              _id: cell.cell_id,
+              createdAt: now,
+              updatedAt: now,
+            },
+            upsert: true,
+          },
+        };
+      }), { ordered: false });
+    }
+
+    const forceRows = interactions.map((interaction) => ({
+      source_node_id: interaction.source,
+      target_node_id: interaction.target,
+      similarity: interaction.similarity,
+      charge: interaction.charge,
+      force_kind: "semantic_field_multipole",
+      field_profile: fieldProfile,
+      project,
+      embedding_model: cells.find((cell) => cell.cell_id === interaction.source)?.embedding_model ?? null,
+      embedding_dimensions: cells.find((cell) => cell.cell_id === interaction.source)?.embedding_dimensions ?? null,
+      source: "openplanner.semantic-field",
+      updated_at: now,
+    }));
+    const storedInteractions = dryRun || forceRows.length === 0
+      ? 0
+      : await upsertGraphSemanticForceSamples(app.mongo.graphSemanticForceSamples, forceRows);
+
+    return {
+      ok: true,
+      dryRun,
+      fieldProfile,
+      source: "semantic_field_cells",
+      projection: "barnes_hut_quadtree",
+      theta,
+      maxDepth,
+      maxLeafSize,
+      nodeCount: particles.length,
+      cellCount: cells.length,
+      candidateInteractionCount: pairs.length,
+      interactionCount: interactions.length,
+      storedCells: dryRun ? 0 : cells.length,
+      storedInteractions,
+      comparisonProvider: comparison.provider,
+      vexxCalls: comparison.vexxCalls,
+      vexxFailures: comparison.vexxFailures,
+      cells: cells.slice(0, Math.min(25, cells.length)).map(semanticFieldCellToApi),
+      interactions: interactions.slice(0, Math.min(25, interactions.length)),
+    };
   });
 
   // ============================================================
