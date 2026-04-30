@@ -92,11 +92,36 @@ function sampleByStride<T>(rows: T[], max: number): T[] {
 }
 
 function downsampleSnapshot(
-  snapshot: { nodes: Array<{ id: string }>; edges: Array<{ id: string; source: string; target: string }> },
+  snapshot: {
+    nodes: Array<{ id: string; kind?: string; layer?: string }>;
+    edges: Array<{ id: string; source: string; target: string; kind?: string; layer?: string }>;
+  },
   opts: { maxNodes: number; maxEdges: number },
 ) {
   const totalNodes = snapshot.nodes.length;
   const totalEdges = snapshot.edges.length;
+  const priorityNodeIds = new Set(
+    snapshot.nodes
+      .filter((node) => node.kind === "presence" || node.layer === "presence")
+      .map((node) => node.id),
+  );
+  const priorityEdges = snapshot.edges.filter(
+    (edge) => edge.layer === "presence" || priorityNodeIds.has(edge.source) || priorityNodeIds.has(edge.target),
+  );
+  const priorityEdgeIds = new Set(priorityEdges.map((edge) => edge.id));
+
+  const prioritizeEdges = (rows: Array<{ id: string; source: string; target: string; kind?: string; layer?: string }>) => {
+    const byId = new Map<string, { id: string; source: string; target: string; kind?: string; layer?: string }>();
+    for (const edge of priorityEdges) {
+      if (byId.size >= opts.maxEdges) break;
+      byId.set(edge.id, edge);
+    }
+    for (const edge of rows) {
+      if (byId.size >= opts.maxEdges) break;
+      byId.set(edge.id, edge);
+    }
+    return [...byId.values()];
+  };
 
   if (totalNodes <= opts.maxNodes && totalEdges <= opts.maxEdges) {
     return {
@@ -113,7 +138,12 @@ function downsampleSnapshot(
   let sampledEdges = false;
   if (edges.length > opts.maxEdges) {
     sampledEdges = true;
-    edges = sampleByStride([...edges].sort((a, b) => a.id.localeCompare(b.id)), opts.maxEdges);
+    const regularBudget = Math.max(0, opts.maxEdges - Math.min(priorityEdges.length, opts.maxEdges));
+    const regularEdges = sampleByStride(
+      [...edges].filter((edge) => !priorityEdgeIds.has(edge.id)).sort((a, b) => a.id.localeCompare(b.id)),
+      regularBudget,
+    );
+    edges = prioritizeEdges(regularEdges);
   }
 
   if (edges.length === 0) {
@@ -141,11 +171,26 @@ function downsampleSnapshot(
     sampledEdges = true;
     const ratio = opts.maxNodes / Math.max(1, keep.size);
     const nextEdgeBudget = Math.max(200, Math.floor(edges.length * ratio));
-    edges = sampleByStride(edges, nextEdgeBudget);
+    const priorityBudget = Math.min(priorityEdges.length, nextEdgeBudget);
+    const regularBudget = Math.max(0, nextEdgeBudget - priorityBudget);
+    edges = prioritizeEdges(sampleByStride(edges.filter((edge) => !priorityEdgeIds.has(edge.id)), regularBudget));
     keep = computeKeep(edges);
   }
 
   let nodes = snapshot.nodes.filter((n) => keep.has(n.id));
+  if (priorityNodeIds.size > 0) {
+    const byId = new Map<string, { id: string; kind?: string; layer?: string }>();
+    for (const node of snapshot.nodes) {
+      if (!priorityNodeIds.has(node.id)) continue;
+      if (byId.size >= opts.maxNodes) break;
+      byId.set(node.id, node);
+    }
+    for (const node of nodes) {
+      if (byId.size >= opts.maxNodes) break;
+      byId.set(node.id, node);
+    }
+    nodes = [...byId.values()];
+  }
   let sampledNodes = nodes.length < totalNodes;
 
   if (nodes.length === 0 && snapshot.nodes.length > 0) {
@@ -601,6 +646,9 @@ async function main(): Promise<void> {
                 projects: openPlannerProjects,
                 includeSemantic: includeSemanticEdges,
                 semanticMinSimilarity,
+                maxNodes: config.render.maxRenderNodes,
+                maxEdges: config.render.maxRenderEdges,
+                maxSemanticEdges: config.render.maxRenderEdges,
               })
           : localSourceMode === "openplanner-lakes"
             ? await rebuildLakeGraph({

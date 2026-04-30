@@ -500,6 +500,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const includeLayout = req.query?.includeLayout === "true" || req.query?.includeLayout === true;
     const includeSemantic = req.query?.includeSemantic === "true" || req.query?.includeSemantic === true;
     const semanticMinSimilarity = Math.max(0, Math.min(1, Number(req.query?.semanticMinSimilarity ?? 0.7)));
+    const maxNodes = Math.max(100, Math.min(60_000, Number(req.query?.maxNodes ?? 12_000)));
+    const maxEdges = Math.max(100, Math.min(240_000, Number(req.query?.maxEdges ?? 40_000)));
+    const maxSemanticEdges = Math.max(0, Math.min(240_000, Number(req.query?.maxSemanticEdges ?? maxEdges)));
 
     const projects = projectsParam ? projectsParam.split(",").map((p: string) => p.trim()).filter(Boolean) : [];
     const projectFilter = projects.length > 0 ? { project: { $in: [...projects, null] } } : {};
@@ -512,12 +515,43 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       project: 1, message: 1,
     };
 
-    const [nodeDocs, edgeDocs, layoutRows, semanticEdgeDocs] = await Promise.all([
-      app.mongo.events.find({ kind: "graph.node", ...nodeProjectFilter }, { projection: nodeProjection }).toArray(),
-      app.mongo.graphEdges.find(projectFilter).toArray(),
-      includeLayout ? app.mongo.graphLayoutOverrides.find(nodeProjectFilter).toArray() : Promise.resolve([]),
-      includeSemantic ? app.mongo.graphSemanticEdges.find({ similarity: { $gte: semanticMinSimilarity } }).toArray() : Promise.resolve([]),
-    ]) as [any[], any[], any[], any[]];
+    const nodeDocs = await app.mongo.events
+      .find({ kind: "graph.node", ...nodeProjectFilter }, { projection: nodeProjection })
+      .limit(maxNodes)
+      .toArray() as any[];
+
+    const nodeIds = new Set<string>();
+    for (const doc of nodeDocs) {
+      const extra = doc.extra ?? {};
+      const nodeId = extra.node_id ?? doc.message ?? doc._id;
+      if (typeof nodeId === "string" && nodeId) nodeIds.add(nodeId);
+    }
+    const nodeIdList = [...nodeIds];
+
+    const nodeBoundaryFilter = nodeIdList.length > 0
+      ? {
+          $or: [
+            { source_node_id: { $in: nodeIdList } },
+            { target_node_id: { $in: nodeIdList } },
+          ],
+        }
+      : {};
+    const scopedEdgeFilter = nodeIdList.length > 0
+      ? (projects.length > 0 ? { $and: [projectFilter, nodeBoundaryFilter] } : nodeBoundaryFilter)
+      : projectFilter;
+    const semanticFilter = nodeIdList.length > 0
+      ? { $and: [{ similarity: { $gte: semanticMinSimilarity } }, nodeBoundaryFilter] }
+      : { similarity: { $gte: semanticMinSimilarity } };
+
+    const [edgeDocs, layoutRows, semanticEdgeDocs] = await Promise.all([
+      app.mongo.graphEdges.find(scopedEdgeFilter).limit(maxEdges).toArray(),
+      includeLayout && nodeIdList.length > 0
+        ? app.mongo.graphLayoutOverrides.find({ node_id: { $in: nodeIdList } }).limit(maxNodes).toArray()
+        : Promise.resolve([]),
+      includeSemantic && maxSemanticEdges > 0
+        ? app.mongo.graphSemanticEdges.find(semanticFilter).limit(maxSemanticEdges).toArray()
+        : Promise.resolve([]),
+    ]) as [any[], any[], any[]];
 
     const layoutById = new Map<string, { x: number; y: number }>();
     for (const row of layoutRows) {
@@ -526,7 +560,6 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const nodeIds = new Set<string>();
     const nodes: ExportNode[] = nodeDocs.map((doc: any) => {
       const extra = doc.extra ?? {};
       const nodeId = extra.node_id ?? doc.message ?? doc._id;

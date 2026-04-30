@@ -62,6 +62,9 @@ export async function rebuildOpenPlannerGraph(params: {
   projects?: string[];
   includeSemantic?: boolean;
   semanticMinSimilarity?: number;
+  maxNodes?: number;
+  maxEdges?: number;
+  maxSemanticEdges?: number;
 }): Promise<{ seeds: string[] }> {
   const baseUrl = trimBaseUrl(params.openPlannerBaseUrl || "");
   if (!baseUrl) {
@@ -78,6 +81,9 @@ export async function rebuildOpenPlannerGraph(params: {
       qs.set("semanticMinSimilarity", String(params.semanticMinSimilarity));
     }
   }
+  if (typeof params.maxNodes === "number") qs.set("maxNodes", String(Math.max(100, Math.floor(params.maxNodes))));
+  if (typeof params.maxEdges === "number") qs.set("maxEdges", String(Math.max(100, Math.floor(params.maxEdges))));
+  if (typeof params.maxSemanticEdges === "number") qs.set("maxSemanticEdges", String(Math.max(0, Math.floor(params.maxSemanticEdges))));
   const query = `?${qs.toString()}`;
   const payload = await fetchJson<ExportPayload>(`${baseUrl}/v1/graph/export${query}`, params.openPlannerApiKey);
 
