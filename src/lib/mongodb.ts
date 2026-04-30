@@ -219,6 +219,12 @@ export interface GraphSemanticEdgeDocument {
   graph_version: string | null;
   clustering_version: string | null;
   source: string | null;
+  conductance?: number | null;
+  resistance?: number | null;
+  status?: "active" | "weak" | "broken" | null;
+  reinforcement_count?: number | null;
+  last_reinforced_at?: Date | null;
+  decay_half_life_ms?: number | null;
   updated_at: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -539,6 +545,8 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphSemanticEdges.createIndex({ similarity: -1 as IndexDirection });
   await graphSemanticEdges.createIndex({ graph_version: 1, updated_at: -1 as IndexDirection });
   await graphSemanticEdges.createIndex({ clustering_version: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticEdges.createIndex({ status: 1, conductance: 1, updated_at: -1 as IndexDirection });
+  await graphSemanticEdges.createIndex({ last_reinforced_at: 1, status: 1 });
 
   // Semantic force samples are layout/runtime force-cache data, not relation truth.
   await graphSemanticForceSamples.createIndex({ source_node_id: 1, target_node_id: 1, field_profile: 1, embedding_model: 1 }, { unique: true });

@@ -385,6 +385,23 @@ function semanticForceSampleToApi(row: any): Record<string, unknown> {
   };
 }
 
+function semanticCircuitConductance(similarity: unknown, reinforcement = 1): number {
+  const sim = Math.max(0, Math.min(1, Number(similarity ?? 0)));
+  const gain = Math.max(0, Number(reinforcement ?? 1));
+  return Math.max(0, sim * gain);
+}
+
+function decayedConductance(params: {
+  conductance: number;
+  lastReinforcedAt: Date;
+  now: Date;
+  halfLifeMs: number;
+}): number {
+  const ageMs = Math.max(0, params.now.getTime() - params.lastReinforcedAt.getTime());
+  const halfLifeMs = Math.max(1, params.halfLifeMs);
+  return Math.max(0, Number(params.conductance ?? 0)) * Math.pow(0.5, ageMs / halfLifeMs);
+}
+
 function hashHex(value: string, length = 24): string {
   return createHash("sha256").update(value).digest("hex").slice(0, length);
 }
@@ -745,6 +762,12 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           edgeType: edgeKind,
           data: {
             similarity: doc.similarity,
+            conductance: doc.conductance,
+            resistance: doc.resistance,
+            status: doc.status,
+            reinforcement_count: doc.reinforcement_count,
+            last_reinforced_at: doc.last_reinforced_at,
+            decay_half_life_ms: doc.decay_half_life_ms,
             embedding_model: doc.embedding_model,
             source: doc.source,
           },
@@ -1531,6 +1554,122 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }));
 
     return { edges };
+  });
+
+  app.post("/graph/semantic-edges/decay", async (req: any) => {
+    const dryRun = req.body?.dryRun === true;
+    const now = req.body?.now ? new Date(String(req.body.now)) : new Date();
+    const halfLifeMs = Math.max(1_000, Number(req.body?.halfLifeMs ?? req.body?.decayHalfLifeMs ?? 60 * 60 * 1000));
+    const breakBelow = Math.max(0, Number(req.body?.breakBelow ?? 0.05));
+    const pruneBelow = Math.max(0, Number(req.body?.pruneBelow ?? 0.005));
+    const limit = Math.max(1, Math.min(100000, Number(req.body?.limit ?? 10000)));
+    const project = typeof req.body?.project === "string" ? req.body.project.trim() : "";
+    const nodeIds = uniqueStrings(req.body?.nodeIds ?? req.body?.node_ids);
+    if (Number.isNaN(now.getTime())) return { ok: false, error: "now must be an ISO timestamp" };
+
+    const filter: Record<string, unknown> = project ? { project } : {};
+    if (nodeIds.length > 0) {
+      filter.$or = [
+        { source_node_id: { $in: nodeIds } },
+        { target_node_id: { $in: nodeIds } },
+      ];
+    }
+    const rows = await app.mongo.graphSemanticEdges.find(filter).limit(limit).toArray();
+    let checked = 0;
+    let weakened = 0;
+    let broken = 0;
+    let pruned = 0;
+    const updates: any[] = [];
+    const deletes: any[] = [];
+
+    for (const row of rows) {
+      const similarity = Number(row.similarity ?? 0);
+      if (!Number.isFinite(similarity)) continue;
+      checked += 1;
+      const baseConductance = Number.isFinite(Number(row.conductance))
+        ? Number(row.conductance)
+        : semanticCircuitConductance(similarity);
+      const lastReinforcedAt = row.last_reinforced_at instanceof Date
+        ? row.last_reinforced_at
+        : (row.updated_at instanceof Date ? row.updated_at : new Date(row.updated_at ?? row.updatedAt ?? row.createdAt ?? now));
+      const effectiveHalfLifeMs = Math.max(1_000, Number(row.decay_half_life_ms ?? halfLifeMs));
+      const conductance = decayedConductance({ conductance: baseConductance, lastReinforcedAt, now, halfLifeMs: effectiveHalfLifeMs });
+      if (conductance <= pruneBelow) {
+        pruned += 1;
+        deletes.push({ deleteOne: { filter: { _id: row._id } } });
+        continue;
+      }
+      weakened += 1;
+      const status = conductance <= breakBelow ? "broken" : "active";
+      if (status === "broken") broken += 1;
+      updates.push({
+        updateOne: {
+          filter: { _id: row._id },
+          update: {
+            $set: {
+              conductance,
+              resistance: conductance > 0 ? 1 / conductance : 1_000_000_000,
+              status,
+              decay_half_life_ms: effectiveHalfLifeMs,
+              updated_at: now,
+              updatedAt: now,
+            },
+          },
+        },
+      });
+    }
+
+    if (!dryRun) {
+      const ops = [...updates, ...deletes];
+      if (ops.length > 0) await app.mongo.graphSemanticEdges.bulkWrite(ops, { ordered: false });
+    }
+
+    return {
+      ok: true,
+      dryRun,
+      checked,
+      weakened,
+      broken,
+      pruned,
+      updated: dryRun ? 0 : updates.length,
+      deleted: dryRun ? 0 : deletes.length,
+      halfLifeMs,
+      breakBelow,
+      pruneBelow,
+    };
+  });
+
+  const semanticEdgeDecayIntervalMs = Math.max(30_000, Number(process.env.GRAPH_SEMANTIC_EDGE_DECAY_INTERVAL_MS ?? 5 * 60 * 1000));
+  const semanticEdgeDecayTimer = setInterval(() => {
+    const apiKey = String(process.env.OPENPLANNER_API_KEY ?? "").trim();
+    void app.inject({
+      method: "POST",
+      url: "/v1/graph/semantic-edges/decay",
+      headers: {
+        ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),
+        "content-type": "application/json",
+      },
+      payload: {
+        limit: Number(process.env.GRAPH_SEMANTIC_EDGE_DECAY_LIMIT ?? 10000),
+        halfLifeMs: Number(process.env.GRAPH_SEMANTIC_EDGE_DECAY_HALF_LIFE_MS ?? 60 * 60 * 1000),
+        breakBelow: Number(process.env.GRAPH_SEMANTIC_EDGE_DECAY_BREAK_BELOW ?? 0.05),
+        pruneBelow: Number(process.env.GRAPH_SEMANTIC_EDGE_DECAY_PRUNE_BELOW ?? 0.005),
+      },
+    }).then((response) => {
+      if (response.statusCode >= 400) {
+        app.log.warn({ statusCode: response.statusCode, body: response.body }, "scheduled semantic edge decay failed");
+        return;
+      }
+      const payload = JSON.parse(response.body || "{}");
+      if (payload.checked > 0 && (payload.pruned > 0 || payload.broken > 0)) {
+        app.log.info(payload, "scheduled semantic edge decay applied");
+      }
+    }).catch((error) => {
+      app.log.warn({ error }, "scheduled semantic edge decay failed");
+    });
+  }, semanticEdgeDecayIntervalMs);
+  app.addHook("onClose", async () => {
+    clearInterval(semanticEdgeDecayTimer);
   });
 
   // ============================================================
@@ -3713,6 +3852,45 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         status: row.status,
       }));
 
+    const semanticReinforcements = traversedEdges
+      .filter((edge) => edge.edgeKind === "semantic_force_legacy" || edge.edgeKind === "semantic_force")
+      .map((edge) => {
+        const source = String(edge.source ?? "");
+        const target = String(edge.target ?? "");
+        const similarity = Number(edge.similarity ?? 0);
+        const conductance = semanticCircuitConductance(similarity, Number(edge.charge ?? similarity));
+        return { source, target, conductance, similarity };
+      })
+      .filter((edge) => edge.source && edge.target && edge.source !== edge.target && edge.conductance > 0);
+    if (semanticReinforcements.length > 0) {
+      const reinforcedAt = new Date();
+      try {
+        await app.mongo.graphSemanticEdges.bulkWrite(semanticReinforcements.map((edge) => ({
+          updateOne: {
+            filter: {
+              $or: [
+                { source_node_id: edge.source, target_node_id: edge.target },
+                { source_node_id: edge.target, target_node_id: edge.source },
+              ],
+            },
+            update: {
+              $set: {
+                status: "active",
+                last_reinforced_at: reinforcedAt,
+                decay_half_life_ms: 60 * 60 * 1000,
+                updated_at: reinforcedAt,
+                updatedAt: reinforcedAt,
+              },
+              $max: { conductance: edge.conductance },
+              $inc: { reinforcement_count: 1 },
+            },
+          },
+        })), { ordered: false });
+      } catch (error) {
+        req.log.warn({ error }, "failed to reinforce traversed semantic edges");
+      }
+    }
+
     let persistedTrailCount = 0;
     if (persistDaimoiTrails && emittedDaimoi.length > 0 && app.mongo.graphDaimoiTrails) {
       const emittedAt = new Date();
@@ -3811,6 +3989,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         visited: visited.size,
         edges: traversedEdges.length,
         forceSamples: forceSamples.length,
+        semanticReinforcements: semanticReinforcements.length,
         edgeClaims: activeClaimRows.length,
         legacySemanticEdges: legacySemanticEdges.length,
         trailSamples: priorTrailRows.length,

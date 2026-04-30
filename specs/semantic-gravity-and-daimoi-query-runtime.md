@@ -206,7 +206,8 @@ Query behavior:
 A force layer derived from embeddings and active nodes.
 
 Semantic gravity is not persisted as graph truth. It may be cached as sampled
-force data or pair scores.
+force data, pair scores, or transient semantic circuits. Any pairwise semantic
+edge/circuit must decay unless daimoi traversal reinforces it.
 
 Suggested force semantics:
 
@@ -225,6 +226,18 @@ semantic_force_samples
 semantic_charge_cache
 layout_force_cache
 ```
+
+Decay rule:
+
+```text
+conductance(t) = conductance(last_reinforced_at)
+               * 0.5 ^ ((t - last_reinforced_at) / decay_half_life)
+```
+
+If conductance falls below `breakBelow`, the semantic circuit becomes broken. If
+it falls below `pruneBelow`, it is pruned. Daimoi traversal over a semantic force
+edge reinforces the corresponding semantic circuit by updating
+`last_reinforced_at`, conductance, and reinforcement count.
 
 Legacy `graph_semantic_edges` may be read as `semantic_force_cache_legacy` during
 migration, but new graph truth should not depend on it.
@@ -567,6 +580,8 @@ accelerate semantic gravity and charge calculations.
   without changing relation truth.
 - The evolving noise field perturbs movement cost but remains bounded and
   deterministic for a query/edge/time sample.
+- Semantic circuits not reinforced by daimoi decay, break, and eventually prune.
+- Daimoi traversal reinforces the semantic circuits it actually uses.
 - Vexx can be used to score selected active ViewGraph pairs without persisting
   those scores as relation edges.
 

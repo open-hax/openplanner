@@ -412,6 +412,9 @@ async function main(): Promise<void> {
     String(process.env.GRAPH_WEAVER_INCLUDE_WEB_LAYER_WHEN_IDLE || (["openplanner-lakes", "openplanner-graph"].includes(localSourceMode) ? "false" : "true")),
   );
   const includeWebLayer = webCrawlEnabled || includeWebLayerWhenIdle;
+  const semanticDecayIntervalMs = Math.max(5_000, Number(process.env.GRAPH_WEAVER_SEMANTIC_DECAY_INTERVAL_MS ?? 60_000));
+  const semanticDecayBreakBelow = Math.max(0, Number(process.env.GRAPH_WEAVER_SEMANTIC_DECAY_BREAK_BELOW ?? 0.05));
+  const semanticDecayPruneBelow = Math.max(0, Number(process.env.GRAPH_WEAVER_SEMANTIC_DECAY_PRUNE_BELOW ?? 0.005));
   const graphPersistenceMode = (() => {
     if (requestedPersistenceMode === "mongo" || requestedPersistenceMode === "openplanner") return requestedPersistenceMode;
     if (localSourceMode === "openplanner-graph") return "openplanner";
@@ -1523,6 +1526,19 @@ async function main(): Promise<void> {
     layoutUpsertPositions,
   });
 
+  const semanticDecayTimer = setInterval(() => {
+    void decaySemanticEdges({
+      breakBelow: semanticDecayBreakBelow,
+      pruneBelow: semanticDecayPruneBelow,
+    }).then((result) => {
+      if (result.checked > 0 && (result.weakened > 0 || result.pruned > 0)) {
+        console.log(`[devel-graph-weaver] semantic decay checked=${result.checked} weakened=${result.weakened} broken=${result.broken} pruned=${result.pruned}`);
+      }
+    }).catch((error) => {
+      console.error("[devel-graph-weaver] semantic decay failed", error);
+    });
+  }, semanticDecayIntervalMs);
+
   // --- HTTP server
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -1641,6 +1657,7 @@ async function main(): Promise<void> {
       void daimoiAuditMongo.close().catch(() => {});
     }
     if (rescanTimer) clearInterval(rescanTimer);
+    if (semanticDecayTimer) clearInterval(semanticDecayTimer);
     try {
       wss.close();
     } catch {

@@ -9,7 +9,8 @@
     "dev": "tsc -w",
     "dev:watch:container": "sh ./scripts/dev-watch-container.sh",
     "test": "tsx --tsconfig tsconfig.json",
-    "test:e2e:compact-viewgraph": "tsx --tsconfig tsconfig.json tests/e2e-compact-viewgraph.test.mjs"
+    "test:e2e:compact-viewgraph": "tsx --tsconfig tsconfig.json tests/e2e-compact-viewgraph.test.mjs",
+    "test:e2e:semantic-edge-decay": "tsx --tsconfig tsconfig.json tests/e2e-semantic-edge-decay.test.mjs"
   },
   "dependencies": {
     "@open-hax/openplanner-document-hydration": "workspace:*",
