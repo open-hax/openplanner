@@ -240,10 +240,15 @@ region produced when query daimoi flow through the current graph projection.
 
 ## API contract sketch
 
-### Seed search remains OpenPlanner-owned
+### Consumer query remains one action
+
+From the consumer perspective, there is no separate "seed" action and no
+separate "fill" action. The caller makes a graph-memory query; OpenPlanner
+embeds the query, finds seed nodes, emits query daimoi from those nodes carrying
+the query string, and returns the filled graph region.
 
 ```http
-POST /v1/graph/query/seeds
+POST /v1/graph/memory
 ```
 
 Input:
@@ -252,8 +257,9 @@ Input:
 {
   "q": "where did semantic gravity come from?",
   "k": 12,
-  "tenant_id": "default",
-  "project": "openplanner"
+  "maxNodes": 60,
+  "lakes": ["devel", "web"],
+  "nodeTypes": ["file", "url"]
 }
 ```
 
@@ -261,62 +267,48 @@ Output:
 
 ```json
 {
-  "query_id": "query_...",
-  "embedding_model": "...",
-  "seeds": [
-    { "node_id": "...", "score": 0.82, "source": "vector" }
-  ]
-}
-```
-
-### Daimoi fill query
-
-```http
-POST /v1/graph/query/fill
-```
-
-Input:
-
-```json
-{
-  "query_id": "query_...",
-  "seed_node_ids": ["node:a", "node:b"],
-  "budget": {
-    "max_daimoi": 256,
-    "max_steps": 64,
-    "max_wall_ms": 1200
-  },
-  "policy": {
-    "edge_views": ["active_claims", "structural", "provenance"],
-    "semantic_gravity": true,
-    "allow_exploration": true
+  "query": "where did semantic gravity come from?",
+  "clusters": [],
+  "nodes": [
+    {
+      "id": "node:a",
+      "score": 0.91,
+      "isSeed": true,
+      "daimoiId": "daimoi:...",
+      "daimoiActivation": 0.91
+    }
+  ],
+  "edges": [
+    {
+      "source": "node:a",
+      "target": "node:c",
+      "edgeKind": "semantic_force",
+      "charge": 0.83,
+      "compatibilityKind": "semantic_force_sample"
+    }
+  ],
+  "daimoi": [
+    {
+      "id": "daimoi:...",
+      "query": "where did semantic gravity come from?",
+      "originNodeId": "node:a",
+      "currentNodeId": "node:c",
+      "trail": ["node:a", "node:c"],
+      "activation": 0.44
+    }
+  ],
+  "stats": {
+    "mode": "query_daimoi_fill",
+    "seeds": 12,
+    "daimoi": 28,
+    "forceSamples": 441,
+    "edgeClaims": 19
   }
 }
 ```
 
-Output:
-
-```json
-{
-  "query_id": "query_...",
-  "viewgraph_version": "view_...",
-  "filled_nodes": [
-    { "node_id": "node:a", "activation": 0.91, "reasons": ["seed", "trail"] }
-  ],
-  "filled_edges": [
-    { "source": "node:a", "target": "node:c", "activation": 0.44, "claim_id": "claim_..." }
-  ],
-  "trails": [
-    { "daimoi_id": "d_...", "nodes": ["node:a", "node:c"], "weight": 0.33 }
-  ],
-  "explanation": {
-    "seed_count": 2,
-    "daimoi_emitted": 64,
-    "edge_claims_used": 19,
-    "semantic_force_samples": 441
-  }
-}
-```
+Implementation may expose internal debug/admin endpoints for seed resolution or
+fill replay later, but they are not the product contract.
 
 ### Edge claim lifecycle
 
@@ -369,8 +361,10 @@ accelerate semantic gravity and charge calculations.
 
 ### Phase 3 — Query daimoi runtime
 
-- Implement `/v1/graph/query/seeds` using current vector search.
-- Implement a bounded in-process fill runtime over a small ViewGraph.
+- Keep `/v1/graph/memory` as the consumer-facing query action.
+- Inside that query, use current vector search to find seed nodes.
+- Emit bounded daimoi from those seed nodes carrying the query string.
+- Return nodes, edges, daimoi trails, activation scores, and explanation stats.
 - Emit query fill telemetry as append-only observations.
 
 ### Phase 4 — Presence integration
@@ -411,7 +405,7 @@ accelerate semantic gravity and charge calculations.
 
 - OpenPlanner docs no longer present semantic edges as canonical graph truth.
 - Edge claim lifecycle exists with support/refute/withdraw/expire semantics.
-- Query seed search and query fill are separate concepts.
+- Query seed search and query fill are internal phases of one consumer query.
 - A bounded daimoi fill over a seed neighborhood returns nodes, edges, trails,
   activations, and explanations.
 - Legacy semantic-edge storage is either renamed, wrapped, or explicitly marked

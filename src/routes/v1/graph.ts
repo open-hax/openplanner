@@ -2831,48 +2831,135 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
-    const semanticEdgeFilters: Array<Record<string, unknown>> = [
-      { similarity: { $gte: minSimilarity } },
-      {
-        $or: [
-          { source_node_id: { $in: seedNodeIds } },
-          { target_node_id: { $in: seedNodeIds } },
+    const seedBoundaryFilter = {
+      $or: [
+        { source_node_id: { $in: seedNodeIds } },
+        { target_node_id: { $in: seedNodeIds } },
+      ],
+    };
+
+    const [forceSamples, activeClaimRows] = await Promise.all([
+      app.mongo.graphSemanticForceSamples.find({
+        $and: [
+          seedBoundaryFilter,
+          { charge: { $gte: semanticChargeFromSimilarity(minSimilarity) } },
         ],
-      },
-    ];
+      }).toArray(),
+      app.mongo.graphEdgeClaims.find({
+        $and: [
+          seedBoundaryFilter,
+          { status: { $in: [...EDGE_CLAIM_ACTIVE_PROJECTABLE_STATUSES] } },
+        ],
+      }).toArray(),
+    ]);
 
-    const semanticEdges = await app.mongo.graphSemanticEdges.find({ $and: semanticEdgeFilters }).toArray();
+    const legacySemanticEdges = forceSamples.length === 0
+      ? await app.mongo.graphSemanticEdges.find({
+          $and: [
+            seedBoundaryFilter,
+            { similarity: { $gte: minSimilarity } },
+          ],
+        }).toArray()
+      : [];
 
-    const adjacency = new Map<string, Array<{ neighbor: string; similarity: number; cost: number }>>();
-    for (const edge of semanticEdges) {
-      const sourceId = edge.source_node_id;
-      const targetId = edge.target_node_id;
+    type DaimoiEdge = {
+      neighbor: string;
+      cost: number;
+      edgeKind: string;
+      similarity?: number;
+      charge?: number;
+      confidence?: number;
+      claimId?: string;
+      compatibilityKind?: string;
+    };
+
+    const adjacency = new Map<string, DaimoiEdge[]>();
+    const addDaimoiEdge = (sourceId: string, targetId: string, edge: Omit<DaimoiEdge, "neighbor">) => {
       if (lakeRegexes.length > 0) {
         const sourceAllowed = lakeRegexes.some((pattern: RegExp) => pattern.test(sourceId));
         const targetAllowed = lakeRegexes.some((pattern: RegExp) => pattern.test(targetId));
-        if (!sourceAllowed || !targetAllowed) continue;
+        if (!sourceAllowed || !targetAllowed) return;
       }
-      const sim = edge.similarity;
-      const cost = 1 - sim;
 
       const sn = adjacency.get(sourceId) ?? [];
-      sn.push({ neighbor: targetId, similarity: sim, cost });
+      sn.push({ neighbor: targetId, ...edge });
       adjacency.set(sourceId, sn);
 
       const tn = adjacency.get(targetId) ?? [];
-      tn.push({ neighbor: sourceId, similarity: sim, cost });
+      tn.push({ neighbor: sourceId, ...edge });
       adjacency.set(targetId, tn);
+    };
+
+    for (const sample of forceSamples) {
+      const sourceId = sample.source_node_id;
+      const targetId = sample.target_node_id;
+      const charge = Number(sample.charge ?? semanticChargeFromSimilarity(sample.similarity));
+      if (charge <= 0) continue;
+      addDaimoiEdge(sourceId, targetId, {
+        cost: Math.max(0.001, 1 - Math.min(1, charge)),
+        edgeKind: "semantic_force",
+        similarity: sample.similarity,
+        charge,
+        compatibilityKind: "semantic_force_sample",
+      });
+    }
+
+    for (const edge of legacySemanticEdges) {
+      const sourceId = edge.source_node_id;
+      const targetId = edge.target_node_id;
+      const sim = edge.similarity;
+      addDaimoiEdge(sourceId, targetId, {
+        cost: 1 - sim,
+        edgeKind: "semantic_force_legacy",
+        similarity: sim,
+        charge: semanticChargeFromSimilarity(sim),
+        compatibilityKind: "semantic_force_legacy",
+      });
+    }
+
+    for (const claim of activeClaimRows) {
+      const sourceId = claim.source_node_id;
+      const targetId = claim.target_node_id;
+      const confidence = clampConfidence(claim.confidence, 0.5);
+      addDaimoiEdge(sourceId, targetId, {
+        cost: Math.max(0.001, 1 - confidence),
+        edgeKind: `claim:${claim.relation_kind}`,
+        confidence,
+        claimId: claim.claim_id,
+        compatibilityKind: "edge_claim",
+      });
     }
 
     const distances = new Map<string, number>();
-    const predecessors = new Map<string, { from: string; edge: { similarity: number } }>();
+    const predecessors = new Map<string, { from: string; edge: DaimoiEdge }>();
     const visited = new Set<string>();
     const pq: Array<{ nodeId: string; cost: number }> = [];
+    const daimoiByNode = new Map<string, {
+      id: string;
+      query: string;
+      originNodeId: string;
+      currentNodeId: string;
+      trail: string[];
+      activation: number;
+      traversalCost: number;
+      status: "seed" | "moved";
+    }>();
 
-    for (const nodeId of seedNodeIds) {
+    for (const [index, nodeId] of seedNodeIds.entries()) {
       const sim = seedScoresMap.get(nodeId) ?? 0.5;
+      const id = `daimoi:${createHash("sha256").update(`${q}\n${nodeId}\n${index}`).digest("hex").slice(0, 24)}`;
       distances.set(nodeId, 0);
       pq.push({ nodeId, cost: 0 });
+      daimoiByNode.set(nodeId, {
+        id,
+        query: q,
+        originNodeId: nodeId,
+        currentNodeId: nodeId,
+        trail: [nodeId],
+        activation: sim,
+        traversalCost: 0,
+        status: "seed",
+      });
     }
 
     while (pq.length > 0 && visited.size < maxNodes) {
@@ -2883,22 +2970,45 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       visited.add(current.nodeId);
 
       const neighbors = adjacency.get(current.nodeId) ?? [];
-      for (const { neighbor, similarity, cost } of neighbors) {
+      for (const edge of neighbors) {
+        const { neighbor, cost } = edge;
         if (visited.has(neighbor)) continue;
         const newDist = current.cost + cost;
         if (newDist > maxCost) continue;
         const existingDist = distances.get(neighbor);
         if (existingDist === undefined || newDist < existingDist) {
           distances.set(neighbor, newDist);
-          predecessors.set(neighbor, { from: current.nodeId, edge: { similarity } });
+          predecessors.set(neighbor, { from: current.nodeId, edge });
+          const parentDaimoi = daimoiByNode.get(current.nodeId);
+          const parentActivation = parentDaimoi?.activation ?? 0.5;
+          const edgeGain = edge.charge ?? edge.similarity ?? edge.confidence ?? 0.5;
+          daimoiByNode.set(neighbor, {
+            id: parentDaimoi?.id ?? `daimoi:${createHash("sha256").update(`${q}\n${neighbor}`).digest("hex").slice(0, 24)}`,
+            query: q,
+            originNodeId: parentDaimoi?.originNodeId ?? current.nodeId,
+            currentNodeId: neighbor,
+            trail: [...(parentDaimoi?.trail ?? [current.nodeId]), neighbor],
+            activation: Math.max(0, Math.min(1, parentActivation * Math.max(0.05, edgeGain) * (1 / (1 + newDist)))),
+            traversalCost: newDist,
+            status: "moved",
+          });
           pq.push({ nodeId: neighbor, cost: newDist });
         }
       }
     }
 
-    const traversedEdges: Array<{ source: string; target: string; similarity: number }> = [];
+    const traversedEdges: Array<Record<string, unknown>> = [];
     for (const [nodeId, pred] of predecessors) {
-      traversedEdges.push({ source: pred.from, target: nodeId, similarity: pred.edge.similarity });
+      traversedEdges.push({
+        source: pred.from,
+        target: nodeId,
+        edgeKind: pred.edge.edgeKind,
+        similarity: pred.edge.similarity,
+        charge: pred.edge.charge,
+        confidence: pred.edge.confidence,
+        claimId: pred.edge.claimId,
+        compatibilityKind: pred.edge.compatibilityKind,
+      });
     }
 
     const lakeCluster = (id: string): string => {
@@ -2917,16 +3027,33 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const resultNodes = [...visited].map(id => {
       const traversalCost = distances.get(id) ?? 0;
       const vectorScore = seedScoresMap.get(id) ?? 0;
-      const score = vectorScore > 0 ? vectorScore : 1 / (1 + traversalCost);
+      const daimoi = daimoiByNode.get(id);
+      const score = vectorScore > 0 ? vectorScore : (daimoi?.activation ?? 1 / (1 + traversalCost));
       return {
         id,
         score,
         traversalCost,
         isSeed: seedScoresMap.has(id),
+        daimoiId: daimoi?.id ?? null,
+        daimoiActivation: daimoi?.activation ?? 0,
         lake: lakeCluster(id),
         nodeType: nodeTypeOf(id),
       };
     }).sort((a, b) => b.score - a.score).slice(0, maxNodes);
+
+    const emittedDaimoi = resultNodes
+      .map((node) => daimoiByNode.get(node.id))
+      .filter((row): row is NonNullable<typeof row> => Boolean(row))
+      .map((row) => ({
+        id: row.id,
+        query: row.query,
+        originNodeId: row.originNodeId,
+        currentNodeId: row.currentNodeId,
+        trail: row.trail,
+        activation: row.activation,
+        traversalCost: row.traversalCost,
+        status: row.status,
+      }));
 
     for (const node of resultNodes) {
       const clusterKey = node.lake;
@@ -2967,12 +3094,18 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         text: textMap?.get(n.id) ?? null,
       })),
       edges: traversedEdges,
+      daimoi: emittedDaimoi,
       stats: {
         vectorHits: vectorHitCount,
         seeds: seedNodeIds.length,
+        daimoi: emittedDaimoi.length,
         visited: visited.size,
         edges: traversedEdges.length,
+        forceSamples: forceSamples.length,
+        edgeClaims: activeClaimRows.length,
+        legacySemanticEdges: legacySemanticEdges.length,
         clusters: clusters.length,
+        mode: "query_daimoi_fill",
       },
     };
   });
