@@ -14,4 +14,5 @@
     (openplanner-migration-tools :path "packages/stores/migrations/openplanner-migration-tools" :commit "a0c7919" :branch "main" :tag "Π/openplanner-migration-tools-recursive-2026-04-30")
     (vexx :path "packages/vexx" :commit "8696d57" :branch "main" :tag "Π/vexx-openplanner-recursive-2026-04-30" :note "clean but behind origin/main by 1; exact checked-out SHA preserved"))
   (concurrent-dirt "none; all observed root dirty paths were in requested openplanner scope")
-  (destructive-cleanup-used false))
+  (destructive-cleanup-used false)
+  (push-ledger :path ".ημ/Π_PUSH.md" :final-tag "Π/openplanner-recursive-2026-04-30-push-ledger"))

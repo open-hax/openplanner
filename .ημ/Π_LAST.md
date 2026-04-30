@@ -32,3 +32,8 @@
 - All observed root dirty paths were treated as in-scope for the requested OpenPlanner recursive fork tax.
 - `packages/vexx` was clean but behind `origin/main` by 1; it was tagged at the checked-out submodule SHA to preserve the exact OpenPlanner state, not fast-forwarded.
 - No repo-wide reset/restore/clean was used.
+
+## Push ledger
+
+- Push outcome details are recorded in `.ημ/Π_PUSH.md`.
+- Final push-ledger tag: `Π/openplanner-recursive-2026-04-30-push-ledger`.
