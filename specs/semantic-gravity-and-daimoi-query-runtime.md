@@ -431,6 +431,7 @@ fill replay later, but they are not the product contract.
 GET  /v1/graph/view/compact?node_id=...
 POST /v1/graph/view/compact
 POST /v1/graph/view/compact/:view_node_id/state
+POST /v1/graph/view/compact/run
 ```
 
 `POST /v1/graph/view/compact` stores a compacted ViewGraph node with an averaged
@@ -442,6 +443,12 @@ seed true nodes represented by active, non-saturated compacted cells are replace
 by those view nodes before daimoi traversal. The response stats report
 `truthSeeds`, `compactViewSeeds`, `compactedSeedMembers`, and
 `expandedCompactViewSeeds`.
+
+`POST /v1/graph/view/compact/run` executes one bounded compaction tick. It derives
+`compactionScalar` from host resource pressure plus optional queue/render/graph
+size pressure inputs, selects low-saturation candidate truth nodes, groups them
+by project/model/dimensions, and creates compact view nodes. `dryRun` returns the
+candidate groups without writing.
 
 ### Edge claim lifecycle
 

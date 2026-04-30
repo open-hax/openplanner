@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { createHash } from "node:crypto";
+import os from "node:os";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphSemanticForceSamples, upsertGraphEdges } from "../../lib/mongodb.js";
 import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus, GraphViewNodeDocument, GraphViewNodeSourceMetadata } from "../../lib/mongodb.js";
 import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
@@ -345,6 +346,25 @@ function graphViewNodeToApi(row: GraphViewNodeDocument): Record<string, unknown>
     updated_at: row.updated_at,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+function hostResourcePressureScalar(): { scalar: number; components: Record<string, number> } {
+  const totalMem = Math.max(1, os.totalmem());
+  const freeMem = Math.max(0, os.freemem());
+  const memoryPressure = clamp01(1 - (freeMem / totalMem), 0);
+  const cpuCount = Math.max(1, os.cpus().length);
+  const loadPressure = clamp01((os.loadavg()[0] ?? 0) / cpuCount, 0);
+  const heap = process.memoryUsage();
+  const heapPressure = clamp01(heap.heapTotal > 0 ? heap.heapUsed / heap.heapTotal : 0, 0);
+  const scalar = clamp01((memoryPressure * 0.45) + (loadPressure * 0.35) + (heapPressure * 0.2), 0);
+  return {
+    scalar,
+    components: {
+      memoryPressure,
+      loadPressure,
+      heapPressure,
+    },
   };
 }
 
@@ -1826,6 +1846,170 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
     const result = await app.mongo.graphViewNodes.updateOne({ view_node_id: viewNodeId }, { $set: patch });
     return { ok: result.matchedCount > 0, matched: result.matchedCount, modified: result.modifiedCount };
+  });
+
+  app.post("/graph/view/compact/run", async (req: any) => {
+    const project = typeof req.body?.project === "string" ? req.body.project.trim() : "";
+    const dryRun = req.body?.dryRun === true;
+    const groupSize = Math.max(2, Math.min(256, Math.floor(Number(req.body?.groupSize ?? 12))));
+    const minGroupSize = Math.max(2, Math.min(groupSize, Math.floor(Number(req.body?.minGroupSize ?? 3))));
+    const maxGroups = Math.max(1, Math.min(256, Math.floor(Number(req.body?.maxGroups ?? 8))));
+    const maxCandidates = Math.max(groupSize, Math.min(50000, Math.floor(Number(req.body?.maxCandidates ?? 5000))));
+    const lookbackSeconds = Math.max(60, Math.min(7 * 24 * 60 * 60, Math.floor(Number(req.body?.lookbackSeconds ?? 6 * 60 * 60))));
+    const minCompactionScalar = clamp01(req.body?.minCompactionScalar, 0.2);
+    const maxAverageSaturation = clamp01(req.body?.maxAverageSaturation, 0.25);
+    const expansionThreshold = clamp01(req.body?.expansionThreshold, 0.82);
+
+    const hostPressure = hostResourcePressureScalar();
+    const resourcePressure = req.body?.resourcePressure === undefined
+      ? hostPressure.scalar
+      : clamp01(req.body.resourcePressure, hostPressure.scalar);
+    const queuePressure = clamp01(req.body?.queuePressure, 0);
+    const renderPressure = clamp01(req.body?.renderPressure, 0);
+    const graphSizePressure = clamp01(req.body?.graphSizePressure, 0);
+    const compactionScalar = clamp01(
+      (resourcePressure * 0.55) + (queuePressure * 0.15) + (renderPressure * 0.15) + (graphSizePressure * 0.15),
+      resourcePressure,
+    );
+
+    if (compactionScalar < minCompactionScalar) {
+      return {
+        ok: true,
+        dryRun,
+        compacted: 0,
+        skipped: "below_min_compaction_scalar",
+        compactionScalar,
+        resourcePressure,
+        hostPressure,
+      };
+    }
+
+    const activeViewRows = await app.mongo.graphViewNodes.find({ status: { $ne: "archived" } }, {
+      projection: { child_node_ids: 1 },
+    }).toArray() as Array<{ child_node_ids?: string[] }>;
+    const alreadyCompacted = new Set(activeViewRows.flatMap((row) => Array.isArray(row.child_node_ids) ? row.child_node_ids : []));
+
+    const candidateFilter: Record<string, unknown> = {
+      node_id: { $not: /^view:compact:/ },
+      embedding: { $exists: true },
+    };
+    if (project) candidateFilter.project = project;
+
+    const candidateRows = await app.mongo.graphNodeEmbeddings.find(candidateFilter, {
+      projection: { node_id: 1, project: 1, embedding_model: 1, embedding_dimensions: 1, updated_at: 1 },
+    }).sort({ updated_at: 1 }).limit(maxCandidates).toArray() as Array<{
+      node_id: string;
+      project?: string | null;
+      embedding_model?: string | null;
+      embedding_dimensions?: number | null;
+      updated_at?: Date;
+    }>;
+
+    const candidateIds = candidateRows
+      .map((row) => String(row.node_id ?? ""))
+      .filter((nodeId) => nodeId && !alreadyCompacted.has(nodeId));
+
+    const trailSince = new Date(Date.now() - (lookbackSeconds * 1000));
+    const trailRows = candidateIds.length > 0
+      ? await app.mongo.graphDaimoiTrails.find({ node_ids: { $in: candidateIds }, emitted_at: { $gte: trailSince } })
+        .limit(10000)
+        .toArray()
+      : [];
+    const saturationByNode = new Map<string, number>();
+    const now = new Date();
+    for (const trail of trailRows) {
+      const influence = decayedTrailInfluence({
+        activation: Number(trail.activation ?? 0),
+        emittedAt: trail.emitted_at instanceof Date ? trail.emitted_at : new Date(trail.emitted_at),
+        now,
+        halfLifeSeconds: Number(trail.decay_half_life_seconds ?? lookbackSeconds),
+      });
+      for (const nodeId of Array.isArray(trail.node_ids) ? trail.node_ids : []) {
+        saturationByNode.set(nodeId, clamp01((saturationByNode.get(nodeId) ?? 0) + influence, 0));
+      }
+    }
+
+    const candidates = candidateRows
+      .filter((row) => candidateIds.includes(String(row.node_id ?? "")))
+      .map((row) => ({
+        ...row,
+        saturation: saturationByNode.get(String(row.node_id)) ?? 0,
+        bucket: `${row.project ?? ""}::${row.embedding_model ?? ""}::${row.embedding_dimensions ?? 0}`,
+      }))
+      .filter((row) => row.saturation <= maxAverageSaturation)
+      .sort((a, b) => a.saturation - b.saturation || String(a.node_id).localeCompare(String(b.node_id)));
+
+    const buckets = new Map<string, typeof candidates>();
+    for (const candidate of candidates) {
+      const rows = buckets.get(candidate.bucket) ?? [];
+      rows.push(candidate);
+      buckets.set(candidate.bucket, rows);
+    }
+
+    const groups: Array<{ nodeIds: string[]; averageSaturation: number; bucket: string }> = [];
+    for (const [bucket, rows] of [...buckets.entries()].sort((a, b) => b[1].length - a[1].length)) {
+      for (let offset = 0; offset < rows.length && groups.length < maxGroups; offset += groupSize) {
+        const slice = rows.slice(offset, offset + groupSize);
+        if (slice.length < minGroupSize) continue;
+        const averageSaturation = slice.reduce((sum, row) => sum + row.saturation, 0) / slice.length;
+        groups.push({ nodeIds: slice.map((row) => row.node_id), averageSaturation, bucket });
+      }
+      if (groups.length >= maxGroups) break;
+    }
+
+    if (dryRun) {
+      return {
+        ok: true,
+        dryRun: true,
+        compacted: 0,
+        candidateCount: candidates.length,
+        groups,
+        compactionScalar,
+        resourcePressure,
+        hostPressure,
+      };
+    }
+
+    const compacted: unknown[] = [];
+    const failures: unknown[] = [];
+    for (const group of groups) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/graph/view/compact",
+        headers: {
+          ...(typeof req.headers?.authorization === "string" ? { authorization: req.headers.authorization } : {}),
+          "content-type": "application/json",
+        },
+        payload: {
+          nodeIds: group.nodeIds,
+          project: project || null,
+          saturation: group.averageSaturation,
+          averageChildSaturation: group.averageSaturation,
+          expansionThreshold,
+          compactionScalar,
+          resourcePressure,
+          source: "compact-view-scheduler",
+        },
+      });
+      const payload = (() => {
+        try { return JSON.parse(response.body); } catch { return { raw: response.body }; }
+      })();
+      if (response.statusCode >= 200 && response.statusCode < 300) compacted.push(payload);
+      else failures.push({ statusCode: response.statusCode, payload, group });
+    }
+
+    return {
+      ok: failures.length === 0,
+      dryRun: false,
+      compacted: compacted.length,
+      failures,
+      candidateCount: candidates.length,
+      groupCount: groups.length,
+      compactionScalar,
+      resourcePressure,
+      hostPressure,
+      viewNodes: compacted.map((row: any) => row?.view_node).filter(Boolean),
+    };
   });
 
   // ============================================================
