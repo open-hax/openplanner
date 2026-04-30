@@ -165,6 +165,35 @@
            :valid-until-ms (parse-ms (or (jget input "validUntil")
                                          (jget input "valid_until"))))))
 
+(defn- edge-claim-from-js-soft
+  [input]
+  (let [key (edge-claim-key-from-js input)
+        [source-node-id target-node-id] (claims/canonical-endpoints key)
+        canonical-key (assoc key
+                             :source-node-id source-node-id
+                             :target-node-id target-node-id)
+        claim-id (or (nonblank (or (jget input "claimId") (jget input "claim_id")))
+                     (when (claims/valid-claim-key? canonical-key)
+                       (str "edge_claim:" (sha256-hex-24 (claims/claim-id-material canonical-key)))))]
+    (assoc canonical-key
+           :claim-id claim-id
+           :status (normalize-edge-claim-status (jget input "status") :proposed)
+           :confidence (clamp-confidence (jget input "confidence") 0.5)
+           :valid-until-ms (parse-ms (or (jget input "validUntil")
+                                         (jget input "valid_until"))))))
+
+(defn- edge-claim->wire-js
+  [claim]
+  #js {:claim_id (:claim-id claim)
+       :source_node_id (:source-node-id claim)
+       :target_node_id (:target-node-id claim)
+       :relation_kind (:relation-kind claim)
+       :direction (name (:direction claim))
+       :scope (clj->js (or (:scope claim) {}))
+       :status (wire-status-name (:status claim))
+       :confidence (:confidence claim)
+       :valid_until_ms (:valid-until-ms claim)})
+
 (defn- projected-edge->js
   [edge]
   (clj->js {:source (:source edge)
@@ -193,6 +222,10 @@
   [input]
   (build-edge-claim-id input))
 
+(defn normalize-edge-claim-input-js
+  [input]
+  (edge-claim->wire-js (edge-claim-from-js-soft input)))
+
 (defn claim-projectable-js
   ([claim] (claim-projectable-js claim #js {}))
   ([claim opts]
@@ -217,7 +250,7 @@
 
 (defn explain-edge-claim-js
   [claim]
-  (clj->js (schema/explain-edge-claim (edge-claim-from-js claim))))
+  (clj->js (schema/explain-edge-claim (edge-claim-from-js-soft claim))))
 
 (defn- decision->js
   [decision]
@@ -227,4 +260,4 @@
 
 (defn evaluate-edge-claim-js
   [claim]
-  (decision->js (policy/evaluate-claim (edge-claim-from-js claim))))
+  (decision->js (policy/evaluate-claim (edge-claim-from-js-soft claim))))

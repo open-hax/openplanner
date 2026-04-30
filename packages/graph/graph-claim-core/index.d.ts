@@ -33,6 +33,18 @@ export type EdgeClaimProjectionInput = EdgeClaimIdInput & {
   valid_until?: unknown;
 };
 
+export type NormalizedEdgeClaimInput = {
+  claim_id?: string;
+  source_node_id?: string;
+  target_node_id?: string;
+  relation_kind: string;
+  direction: EdgeClaimDirection;
+  scope: Record<string, unknown>;
+  status: EdgeClaimStatus;
+  confidence: number;
+  valid_until_ms?: number;
+};
+
 export type EdgeClaimProjectionOptions = {
   statuses?: unknown[];
   includeExpired?: boolean;
@@ -67,6 +79,7 @@ export function normalizeEdgeClaimStatus(value: unknown, fallback?: EdgeClaimSta
 export function normalizeEdgeClaimDirection(value: unknown): EdgeClaimDirection;
 export function normalizeEdgeClaimScope(value: unknown): Record<string, unknown> | null;
 export function buildEdgeClaimId(input: EdgeClaimIdInput): string;
+export function normalizeEdgeClaimInput(input: EdgeClaimProjectionInput): NormalizedEdgeClaimInput;
 export function claimProjectable(claim: EdgeClaimProjectionInput, options?: EdgeClaimProjectionOptions): boolean;
 export function projectEdgeClaim(claim: EdgeClaimProjectionInput, options?: EdgeClaimProjectionOptions): ProjectedEdgeClaim | null;
 export function projectEdgeClaims(claims: EdgeClaimProjectionInput[], options?: EdgeClaimProjectionOptions): {

@@ -10,6 +10,7 @@
                                :normalizeEdgeClaimDirection openplanner.graph.claims.boundary/normalize-edge-claim-direction-js
                                :normalizeEdgeClaimScope openplanner.graph.claims.boundary/normalize-edge-claim-scope-js
                                :buildEdgeClaimId openplanner.graph.claims.boundary/build-edge-claim-id-js
+                               :normalizeEdgeClaimInput openplanner.graph.claims.boundary/normalize-edge-claim-input-js
                                :claimProjectable openplanner.graph.claims.boundary/claim-projectable-js
                                :projectEdgeClaim openplanner.graph.claims.boundary/project-edge-claim-js
                                :projectEdgeClaims openplanner.graph.claims.boundary/project-edge-claims-js

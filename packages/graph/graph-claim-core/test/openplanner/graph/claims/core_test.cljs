@@ -111,6 +111,21 @@
     (is (= 1 (aget (aget result "stats") "edges")))
     (is (= "edge_claim:row" (aget (aget edges 0) "claim_id")))))
 
+(deftest boundary-normalizes-create-input-with-canonical-undirected-storage
+  (let [normalized (boundary/normalize-edge-claim-input-js
+                     #js {:source_node_id "node:b"
+                          :target_node_id "node:a"
+                          :relation_kind "supports"
+                          :direction "undirected"
+                          :status "supported"
+                          :confidence "0.8"
+                          :scope #js {:project "devel"}})]
+    (is (= "node:a" (aget normalized "source_node_id")))
+    (is (= "node:b" (aget normalized "target_node_id")))
+    (is (= "supported" (aget normalized "status")))
+    (is (= 0.8 (aget normalized "confidence")))
+    (is (re-matches #"edge_claim:[a-f0-9]{24}" (aget normalized "claim_id")))))
+
 (deftest boundary-exposes-validation-and-policy-decisions
   (let [claim #js {:claim_id "edge_claim:three"
                    :source_node_id "node:a"

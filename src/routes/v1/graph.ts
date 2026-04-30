@@ -6,6 +6,7 @@ import {
   normalizeEdgeClaimDirection as normalizeEdgeClaimDirectionFromCore,
   normalizeEdgeClaimScope as normalizeEdgeClaimScopeFromCore,
   normalizeEdgeClaimStatus as normalizeEdgeClaimStatusFromCore,
+  normalizeEdgeClaimInput,
   projectMongoEdgeClaims,
 } from "@open-hax/openplanner-graph-claim-core";
 import { createHash } from "node:crypto";
@@ -2582,21 +2583,6 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/graph/edge-claims", async (req: any, reply) => {
     const body = isPlainRecord(req.body) ? req.body : {};
-    let sourceNodeId = String(body.source_node_id ?? body.source ?? "").trim();
-    let targetNodeId = String(body.target_node_id ?? body.target ?? "").trim();
-    const relationKind = String(body.relation_kind ?? body.kind ?? "related_to").trim() || "related_to";
-    const direction = normalizeEdgeClaimDirection(body.direction);
-
-    if (!sourceNodeId || !targetNodeId) {
-      return reply.status(400).send({ error: "source_node_id and target_node_id required" });
-    }
-    if (sourceNodeId === targetNodeId) {
-      return reply.status(400).send({ error: "edge claim source and target must differ" });
-    }
-    if (direction === "undirected" && targetNodeId < sourceNodeId) {
-      [sourceNodeId, targetNodeId] = [targetNodeId, sourceNodeId];
-    }
-
     const inferredScope = normalizeEdgeClaimScope({
       tenant_id: body.tenant_id,
       org_id: body.org_id,
@@ -2604,35 +2590,26 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       lake: body.lake,
       graph_version: body.graph_version,
     });
-    const scope = normalizeEdgeClaimScope(body.scope) ?? inferredScope;
-    const claimId = String(body.claim_id ?? "").trim() || buildEdgeClaimId({
-      sourceNodeId,
-      targetNodeId,
-      relationKind,
-      direction,
-      scope,
+    const normalizedClaim = normalizeEdgeClaimInput({
+      ...body,
+      scope: normalizeEdgeClaimScope(body.scope) ?? inferredScope ?? undefined,
     });
-    const now = new Date();
-    const validFrom = parseOptionalDate(body.valid_from) ?? now;
-    const validUntil = parseOptionalDate(body.valid_until);
-    const status = normalizeEdgeClaimStatus(body.status);
-    const confidence = clampConfidence(body.confidence);
-    const normalizedClaim = {
-      claim_id: claimId,
-      source_node_id: sourceNodeId,
-      target_node_id: targetNodeId,
-      relation_kind: relationKind,
-      direction,
-      scope: scope ?? {},
-      status,
-      confidence,
-      valid_until: validUntil,
-    };
     const claimExplanation = explainEdgeClaim(normalizedClaim) as { "valid?"?: boolean; errors?: unknown[] };
     if (claimExplanation["valid?"] === false) {
       return reply.status(400).send({ error: "invalid_edge_claim", details: claimExplanation.errors ?? [] });
     }
     const claimDecision = evaluateEdgeClaim(normalizedClaim);
+    const sourceNodeId = String(normalizedClaim.source_node_id ?? "");
+    const targetNodeId = String(normalizedClaim.target_node_id ?? "");
+    const relationKind = normalizedClaim.relation_kind;
+    const direction = normalizedClaim.direction;
+    const scope = normalizedClaim.scope;
+    const claimId = String(normalizedClaim.claim_id ?? "");
+    const status = normalizedClaim.status;
+    const confidence = normalizedClaim.confidence;
+    const now = new Date();
+    const validFrom = parseOptionalDate(body.valid_from) ?? now;
+    const validUntil = parseOptionalDate(body.valid_until);
 
     await app.mongo.graphEdgeClaims.updateOne(
       { _id: claimId },

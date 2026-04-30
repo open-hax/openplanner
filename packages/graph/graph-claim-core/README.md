@@ -37,6 +37,7 @@ small domain seam: explicit strategy functions can return `:accept`, `:reject`,
 - `normalizeEdgeClaimDirection(value)`
 - `normalizeEdgeClaimScope(value)`
 - `buildEdgeClaimId(input)`
+- `normalizeEdgeClaimInput(input)`
 - `claimProjectable(claim, options?)`
 - `projectEdgeClaim(claim, options?)`
 - `projectEdgeClaims(claims, options?)`
