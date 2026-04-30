@@ -3,6 +3,7 @@
             [openplanner.graph.claims.adapters.mongo :as mongo]
             [openplanner.graph.claims.boundary :as boundary]
             [openplanner.graph.claims.core :as claims]
+            [openplanner.graph.claims.lifecycle :as lifecycle]
             [openplanner.graph.claims.policy :as policy]
             [openplanner.graph.claims.schema :as schema]))
 
@@ -139,6 +140,21 @@
     (is (true? (aget explanation "valid?")))
     (is (= "accept" (aget decision "kind")))
     (is (= "projectable-status" (aget decision "reason")))))
+
+(deftest lifecycle-plans-route-transition-updates
+  (let [support (lifecycle/transition-plan-js "support" #js {:status "active"
+                                                             :confidence "0.9"
+                                                             :event_ids #js ["event:1" "event:1" "event:2"]})
+        refute (lifecycle/transition-plan-js "refute" #js {:eventIds #js ["event:3"]})
+        withdraw (lifecycle/transition-plan-js "withdraw" #js {})]
+    (is (= "active" (aget support "status")))
+    (is (= 0.9 (aget support "confidence")))
+    (is (= "support_event_ids" (aget support "eventField")))
+    (is (= 2 (.-length (aget support "eventIds"))))
+    (is (= "refuted" (aget refute "status")))
+    (is (= "refute_event_ids" (aget refute "eventField")))
+    (is (= "withdrawn" (aget withdraw "status")))
+    (is (nil? (aget withdraw "eventField")))))
 
 (defn -main []
   (let [result (run-tests 'openplanner.graph.claims.core-test)]

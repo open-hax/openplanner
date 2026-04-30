@@ -7,6 +7,7 @@ import {
   normalizeEdgeClaimScope as normalizeEdgeClaimScopeFromCore,
   normalizeEdgeClaimStatus as normalizeEdgeClaimStatusFromCore,
   normalizeEdgeClaimInput,
+  planEdgeClaimTransition,
   projectMongoEdgeClaims,
 } from "@open-hax/openplanner-graph-claim-core";
 import { createHash } from "node:crypto";
@@ -2665,58 +2666,58 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
   app.post("/graph/edge-claims/:claim_id/support", async (req: any, reply) => {
     const claimId = String(req.params?.claim_id ?? "").trim();
     const body = isPlainRecord(req.body) ? req.body : {};
-    const eventIds = uniqueStrings(body.event_ids ?? body.eventIds ?? body.support_event_ids);
-    const status = normalizeEdgeClaimStatus(body.status, "supported");
+    const plan = planEdgeClaimTransition("support", body);
     const now = new Date();
 
     const result = await app.mongo.graphEdgeClaims.updateOne(
       { _id: claimId },
       {
         $set: {
-          status: status === "active" ? "active" : "supported",
-          confidence: clampConfidence(body.confidence, 0.75),
+          status: plan.status,
+          confidence: plan.confidence ?? 0.75,
           updatedAt: now,
         },
-        $addToSet: { support_event_ids: { $each: eventIds } },
+        $addToSet: { support_event_ids: { $each: plan.eventIds } },
       },
     );
     if (result.matchedCount === 0) return reply.status(404).send({ error: "edge_claim_not_found" });
     const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
-    return { ok: true, claim: row ? edgeClaimToApi(row) : null };
+    return { ok: true, claim: row ? edgeClaimToApi(row) : null, transition: plan };
   });
 
   app.post("/graph/edge-claims/:claim_id/refute", async (req: any, reply) => {
     const claimId = String(req.params?.claim_id ?? "").trim();
     const body = isPlainRecord(req.body) ? req.body : {};
-    const eventIds = uniqueStrings(body.event_ids ?? body.eventIds ?? body.refute_event_ids);
+    const plan = planEdgeClaimTransition("refute", body);
     const now = new Date();
 
     const result = await app.mongo.graphEdgeClaims.updateOne(
       { _id: claimId },
       {
         $set: {
-          status: "refuted",
-          confidence: clampConfidence(body.confidence, 0),
+          status: plan.status,
+          confidence: plan.confidence ?? 0,
           updatedAt: now,
         },
-        $addToSet: { refute_event_ids: { $each: eventIds } },
+        $addToSet: { refute_event_ids: { $each: plan.eventIds } },
       },
     );
     if (result.matchedCount === 0) return reply.status(404).send({ error: "edge_claim_not_found" });
     const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
-    return { ok: true, claim: row ? edgeClaimToApi(row) : null };
+    return { ok: true, claim: row ? edgeClaimToApi(row) : null, transition: plan };
   });
 
   app.post("/graph/edge-claims/:claim_id/withdraw", async (req: any, reply) => {
     const claimId = String(req.params?.claim_id ?? "").trim();
+    const plan = planEdgeClaimTransition("withdraw", isPlainRecord(req.body) ? req.body : {});
     const now = new Date();
     const result = await app.mongo.graphEdgeClaims.updateOne(
       { _id: claimId },
-      { $set: { status: "withdrawn", updatedAt: now } },
+      { $set: { status: plan.status, updatedAt: now } },
     );
     if (result.matchedCount === 0) return reply.status(404).send({ error: "edge_claim_not_found" });
     const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
-    return { ok: true, claim: row ? edgeClaimToApi(row) : null };
+    return { ok: true, claim: row ? edgeClaimToApi(row) : null, transition: plan };
   });
 
   app.post("/graph/edge-claims/project", async (req: any) => {

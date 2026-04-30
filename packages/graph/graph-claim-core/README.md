@@ -44,6 +44,7 @@ small domain seam: explicit strategy functions can return `:accept`, `:reject`,
 - `projectMongoEdgeClaims(claims, options?)`
 - `explainEdgeClaim(claim)
 - `evaluateEdgeClaim(claim)`
+- `planEdgeClaimTransition(action, body?)`
 
 ## Build
 

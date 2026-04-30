@@ -64,6 +64,16 @@ export type EdgeClaimDecision = {
   data: Record<string, unknown>;
 };
 
+export type EdgeClaimLifecycleAction = "support" | "refute" | "withdraw";
+
+export type EdgeClaimTransitionPlan = {
+  action: EdgeClaimLifecycleAction;
+  status: EdgeClaimStatus;
+  confidence?: number | null;
+  eventField?: "support_event_ids" | "refute_event_ids" | null;
+  eventIds: string[];
+};
+
 export type ProjectedEdgeClaim = {
   source: string;
   target: string;
@@ -92,3 +102,4 @@ export function projectMongoEdgeClaims(claims: EdgeClaimProjectionInput[], optio
 };
 export function explainEdgeClaim(claim: EdgeClaimProjectionInput): EdgeClaimExplainResult;
 export function evaluateEdgeClaim(claim: EdgeClaimProjectionInput): EdgeClaimDecision;
+export function planEdgeClaimTransition(action: EdgeClaimLifecycleAction, body?: Record<string, unknown>): EdgeClaimTransitionPlan;
