@@ -287,6 +287,25 @@ export interface GraphEdgeClaimDocument {
   updatedAt: Date;
 }
 
+export interface GraphDaimoiTrailDocument {
+  _id: string;
+  query_hash: string;
+  query_text: string;
+  daimoi_id: string;
+  origin_node_id: string;
+  current_node_id: string;
+  node_ids: string[];
+  edge_keys: string[];
+  trail: string[];
+  activation: number;
+  traversal_cost: number;
+  field_adjustments: Array<{ node_id: string; delta: number }>;
+  decay_half_life_seconds: number;
+  emitted_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GraphClusterMembershipDocument {
   _id: string; // `${clustering_version}::${node_id}`
   node_id: string;
@@ -381,6 +400,7 @@ export interface MongoConnection {
   graphSemanticForceSamples: Collection<GraphSemanticForceSampleDocument>;
   graphEdges: Collection<GraphEdgeDocument>;
   graphEdgeClaims: Collection<GraphEdgeClaimDocument>;
+  graphDaimoiTrails: Collection<GraphDaimoiTrailDocument>;
   graphClusterMemberships: Collection<GraphClusterMembershipDocument>;
   semanticGraphRuns: Collection<SemanticGraphRunDocument>;
   migrationJobs: Collection<MigrationJobDocument>;
@@ -412,6 +432,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphSemanticForceSamples = db.collection<GraphSemanticForceSampleDocument>("graph_semantic_force_samples");
   const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
   const graphEdgeClaims = db.collection<GraphEdgeClaimDocument>("graph_edge_claims");
+  const graphDaimoiTrails = db.collection<GraphDaimoiTrailDocument>("graph_daimoi_trails");
   const graphClusterMemberships = db.collection<GraphClusterMembershipDocument>("graph_cluster_memberships");
   const semanticGraphRuns = db.collection<SemanticGraphRunDocument>("semantic_graph_runs");
   const migrationJobs = db.collection<MigrationJobDocument>("migration_jobs");
@@ -502,6 +523,12 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphEdgeClaims.createIndex({ "scope.project": 1, status: 1, updatedAt: -1 as IndexDirection });
   await graphEdgeClaims.createIndex({ valid_until: 1, status: 1 });
 
+  // Query-born daimoi trails. These decay into a trail field and influence later queries.
+  await graphDaimoiTrails.createIndex({ query_hash: 1, emitted_at: -1 as IndexDirection });
+  await graphDaimoiTrails.createIndex({ node_ids: 1, emitted_at: -1 as IndexDirection });
+  await graphDaimoiTrails.createIndex({ current_node_id: 1, emitted_at: -1 as IndexDirection });
+  await graphDaimoiTrails.createIndex({ emitted_at: -1 as IndexDirection });
+
   // Cluster memberships
   await graphClusterMemberships.createIndex({ node_id: 1 });
   await graphClusterMemberships.createIndex({ graph_version: 1, cluster_id: 1 });
@@ -588,6 +615,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphSemanticForceSamples,
     graphEdges,
     graphEdgeClaims,
+    graphDaimoiTrails,
     graphClusterMemberships,
     semanticGraphRuns,
     migrationJobs,

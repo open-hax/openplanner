@@ -275,6 +275,49 @@ function semanticForceSampleToApi(row: any): Record<string, unknown> {
   };
 }
 
+function hashHex(value: string, length = 24): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, length);
+}
+
+function stableUnitInterval(value: string): number {
+  const hex = hashHex(value, 12);
+  return Number.parseInt(hex, 16) / 0xffffffffffff;
+}
+
+function fadeNoise(t: number): number {
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function lerp(left: number, right: number, t: number): number {
+  return left + ((right - left) * t);
+}
+
+export function simplexTrailNoise(seed: string, timeSeconds: number, scaleSeconds = 90): number {
+  const scaled = Math.max(0, timeSeconds / Math.max(1, scaleSeconds));
+  const cell = Math.floor(scaled);
+  const local = scaled - cell;
+  const grad0 = stableUnitInterval(`${seed}:${cell}`) < 0.5 ? -1 : 1;
+  const grad1 = stableUnitInterval(`${seed}:${cell + 1}`) < 0.5 ? -1 : 1;
+  const n0 = grad0 * local;
+  const n1 = grad1 * (local - 1);
+  return Math.max(-1, Math.min(1, lerp(n0, n1, fadeNoise(local)) * 2));
+}
+
+export function decayedTrailInfluence(params: {
+  activation: number;
+  emittedAt: Date;
+  now: Date;
+  halfLifeSeconds: number;
+}): number {
+  const ageSeconds = Math.max(0, (params.now.getTime() - params.emittedAt.getTime()) / 1000);
+  const halfLife = Math.max(1, params.halfLifeSeconds);
+  return clampConfidence(params.activation, 0) * Math.pow(0.5, ageSeconds / halfLife);
+}
+
+function undirectedEdgeKey(sourceId: string, targetId: string): string {
+  return sourceId < targetId ? `${sourceId}||${targetId}` : `${targetId}||${sourceId}`;
+}
+
 function sortGraphMemorySeedScores(rows: GraphMemorySeedScore[]): GraphMemorySeedScore[] {
   return rows.sort((a, b) => b.score - a.score);
 }
@@ -2749,6 +2792,12 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const minVectorSimilarity = Number(req.body?.minVectorSimilarity ?? 0.35);
     const maxCandidates = Number(req.body?.maxCandidates ?? 10000);
     const includeText = req.body?.includeText !== false;
+    const persistDaimoiTrails = req.body?.persistDaimoiTrails !== false;
+    const trailHalfLifeSeconds = Math.max(30, Number(req.body?.trailHalfLifeSeconds ?? 900));
+    const trailLookbackSeconds = Math.max(trailHalfLifeSeconds, Number(req.body?.trailLookbackSeconds ?? 7200));
+    const trailFieldGain = Math.max(0, Math.min(1, Number(req.body?.trailFieldGain ?? 0.35)));
+    const simplexNoiseGain = Math.max(0, Math.min(0.5, Number(req.body?.simplexNoiseGain ?? 0.08)));
+    const simplexNoiseScaleSeconds = Math.max(5, Number(req.body?.simplexNoiseScaleSeconds ?? 90));
 
     if (!q || typeof q !== "string") {
       return reply.status(400).send({ error: "q is required" });
@@ -2838,7 +2887,8 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       ],
     };
 
-    const [forceSamples, activeClaimRows] = await Promise.all([
+    const trailSince = new Date(Date.now() - (trailLookbackSeconds * 1000));
+    const [forceSamples, activeClaimRows, priorTrailRows] = await Promise.all([
       app.mongo.graphSemanticForceSamples.find({
         $and: [
           seedBoundaryFilter,
@@ -2851,7 +2901,38 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           { status: { $in: [...EDGE_CLAIM_ACTIVE_PROJECTABLE_STATUSES] } },
         ],
       }).toArray(),
+      app.mongo.graphDaimoiTrails.find({
+        node_ids: { $in: seedNodeIds },
+        emitted_at: { $gte: trailSince },
+      }).limit(5000).toArray(),
     ]);
+
+    const trailNodeInfluence = new Map<string, number>();
+    const trailEdgeInfluence = new Map<string, number>();
+    const nowForTrailField = new Date();
+    for (const trail of priorTrailRows) {
+      const influence = decayedTrailInfluence({
+        activation: Number(trail.activation ?? 0),
+        emittedAt: trail.emitted_at instanceof Date ? trail.emitted_at : new Date(trail.emitted_at),
+        now: nowForTrailField,
+        halfLifeSeconds: Number(trail.decay_half_life_seconds ?? trailHalfLifeSeconds),
+      });
+      if (influence <= 0) continue;
+      const adjustments = Array.isArray(trail.field_adjustments) && trail.field_adjustments.length > 0
+        ? trail.field_adjustments
+        : (Array.isArray(trail.node_ids) ? trail.node_ids.map((node_id: string) => ({ node_id, delta: 1 / Math.max(1, trail.node_ids.length) })) : []);
+      for (const adjustment of adjustments) {
+        const nodeId = String(adjustment.node_id ?? "").trim();
+        if (!nodeId) continue;
+        const delta = Number(adjustment.delta ?? 0) * influence;
+        trailNodeInfluence.set(nodeId, (trailNodeInfluence.get(nodeId) ?? 0) + delta);
+      }
+      for (const edgeKey of Array.isArray(trail.edge_keys) ? trail.edge_keys : []) {
+        const key = String(edgeKey ?? "").trim();
+        if (!key) continue;
+        trailEdgeInfluence.set(key, (trailEdgeInfluence.get(key) ?? 0) + influence);
+      }
+    }
 
     const legacySemanticEdges = forceSamples.length === 0
       ? await app.mongo.graphSemanticEdges.find({
@@ -2871,6 +2952,8 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       confidence?: number;
       claimId?: string;
       compatibilityKind?: string;
+      trailInfluence?: number;
+      noise?: number;
     };
 
     const adjacency = new Map<string, DaimoiEdge[]>();
@@ -2881,12 +2964,28 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         if (!sourceAllowed || !targetAllowed) return;
       }
 
+      const edgeKey = undirectedEdgeKey(sourceId, targetId);
+      const trailInfluence = Math.max(
+        trailEdgeInfluence.get(edgeKey) ?? 0,
+        trailNodeInfluence.get(targetId) ?? 0,
+        trailNodeInfluence.get(sourceId) ?? 0,
+      );
+      const noise = simplexTrailNoise(`${q}:${edgeKey}`, Date.now() / 1000, simplexNoiseScaleSeconds);
+      const trailDiscount = Math.min(0.65, trailInfluence * trailFieldGain);
+      const noiseMultiplier = Math.max(0.35, 1 + (noise * simplexNoiseGain));
+      const adjustedEdge = {
+        ...edge,
+        cost: Math.max(0.001, edge.cost * (1 - trailDiscount) * noiseMultiplier),
+        trailInfluence,
+        noise,
+      };
+
       const sn = adjacency.get(sourceId) ?? [];
-      sn.push({ neighbor: targetId, ...edge });
+      sn.push({ neighbor: targetId, ...adjustedEdge });
       adjacency.set(sourceId, sn);
 
       const tn = adjacency.get(targetId) ?? [];
-      tn.push({ neighbor: sourceId, ...edge });
+      tn.push({ neighbor: sourceId, ...adjustedEdge });
       adjacency.set(targetId, tn);
     };
 
@@ -3008,6 +3107,8 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         confidence: pred.edge.confidence,
         claimId: pred.edge.claimId,
         compatibilityKind: pred.edge.compatibilityKind,
+        trailInfluence: pred.edge.trailInfluence,
+        noise: pred.edge.noise,
       });
     }
 
@@ -3054,6 +3155,53 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         traversalCost: row.traversalCost,
         status: row.status,
       }));
+
+    let persistedTrailCount = 0;
+    if (persistDaimoiTrails && emittedDaimoi.length > 0 && app.mongo.graphDaimoiTrails) {
+      const emittedAt = new Date();
+      const queryHash = hashHex(q, 64);
+      const operations = emittedDaimoi.map((row) => {
+        const edgeKeys = row.trail.slice(1).map((nodeId, index) => undirectedEdgeKey(row.trail[index]!, nodeId));
+        const fieldAdjustments = row.trail.map((nodeId, index) => ({
+          node_id: nodeId,
+          delta: row.activation / Math.max(1, index + 1),
+        }));
+        const trailHash = hashHex(`${row.id}:${row.currentNodeId}:${row.trail.join("->")}:${emittedAt.toISOString()}`, 24);
+        const doc = {
+          _id: `daimoi-trail:${trailHash}`,
+          query_hash: queryHash,
+          query_text: q,
+          daimoi_id: row.id,
+          origin_node_id: row.originNodeId,
+          current_node_id: row.currentNodeId,
+          node_ids: [...new Set(row.trail)],
+          edge_keys: edgeKeys,
+          trail: row.trail,
+          activation: row.activation,
+          traversal_cost: row.traversalCost,
+          field_adjustments: fieldAdjustments,
+          decay_half_life_seconds: trailHalfLifeSeconds,
+          emitted_at: emittedAt,
+          createdAt: emittedAt,
+          updatedAt: emittedAt,
+        };
+        return {
+          updateOne: {
+            filter: { _id: doc._id },
+            update: { $setOnInsert: doc },
+            upsert: true,
+          },
+        };
+      });
+      try {
+        if (operations.length > 0) {
+          const result = await app.mongo.graphDaimoiTrails.bulkWrite(operations, { ordered: false });
+          persistedTrailCount = result.upsertedCount ?? 0;
+        }
+      } catch (error) {
+        req.log.warn({ error }, "failed to persist daimoi trail observations");
+      }
+    }
 
     for (const node of resultNodes) {
       const clusterKey = node.lake;
@@ -3104,6 +3252,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         forceSamples: forceSamples.length,
         edgeClaims: activeClaimRows.length,
         legacySemanticEdges: legacySemanticEdges.length,
+        trailSamples: priorTrailRows.length,
+        trailInfluenceNodes: trailNodeInfluence.size,
+        persistedDaimoiTrails: persistedTrailCount,
         clusters: clusters.length,
         mode: "query_daimoi_fill",
       },

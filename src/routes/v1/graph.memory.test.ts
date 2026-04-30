@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   buildEdgeClaimId,
+  decayedTrailInfluence,
   edgeClaimToApi,
   normalizeEdgeClaimDirection,
   normalizeEdgeClaimStatus,
   resolveGraphMemorySeedNodes,
   semanticChargeFromSimilarity,
+  simplexTrailNoise,
 } from "./graph.js";
 
 describe("resolveGraphMemorySeedNodes", () => {
@@ -64,6 +66,22 @@ describe("semantic force helpers", () => {
     expect(semanticChargeFromSimilarity(1)).toBeGreaterThan(0.9);
     expect(semanticChargeFromSimilarity(-1)).toBeLessThan(-0.9);
     expect(semanticChargeFromSimilarity(0)).toBe(0);
+  });
+});
+
+describe("daimoi trail field helpers", () => {
+  it("decays trail influence by half-life", () => {
+    const emittedAt = new Date("2026-04-30T00:00:00.000Z");
+    const now = new Date("2026-04-30T00:15:00.000Z");
+    expect(decayedTrailInfluence({ activation: 0.8, emittedAt, now, halfLifeSeconds: 900 })).toBeCloseTo(0.4);
+  });
+
+  it("produces deterministic bounded simplex-like noise samples", () => {
+    const first = simplexTrailNoise("query:node-a||node-b", 120, 90);
+    const second = simplexTrailNoise("query:node-a||node-b", 120, 90);
+    expect(first).toBe(second);
+    expect(first).toBeGreaterThanOrEqual(-1);
+    expect(first).toBeLessThanOrEqual(1);
   });
 });
 

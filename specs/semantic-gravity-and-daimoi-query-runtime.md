@@ -216,11 +216,60 @@ Daimoi move through the ViewGraph by combining:
 3. semantic gravity,
 4. presence wells,
 5. pressure/congestion,
-6. random exploration,
-7. policy constraints.
+6. decaying trail-field influence from previous query-born trails,
+7. an evolving simplex-noise field for bounded exploratory motion,
+8. random exploration,
+9. policy constraints.
 
 Daimoi trails are observations. They may support future claims only through an
 explicit claim/evidence promotion step.
+
+### 7. DaimoiTrailField
+
+Query-born daimoi deposit sparse trail adjustments while traversing. These
+adjustments are persisted as observations, not relation claims. Later queries
+sample the trail field around their vector seed nodes and apply an exponential
+half-life decay before trail influence affects movement cost.
+
+Suggested record shape:
+
+```ts
+type DaimoiTrailObservation = {
+  id: string;
+  query_hash: string;
+  query_text: string;
+  daimoi_id: string;
+  origin_node_id: string;
+  current_node_id: string;
+  node_ids: string[];
+  edge_keys: string[];
+  trail: string[];
+  activation: number;
+  traversal_cost: number;
+  field_adjustments: Array<{ node_id: string; delta: number }>;
+  decay_half_life_seconds: number;
+  emitted_at: string;
+};
+```
+
+Trail decay uses half-life semantics:
+
+```text
+effective_influence = activation * 0.5 ^ (age_seconds / decay_half_life_seconds)
+```
+
+The movement cost of a candidate step combines semantic/claim cost, decayed
+trail attraction/repulsion, and a deterministic evolving simplex-noise sample:
+
+```text
+cost' = semantic_or_claim_cost
+      * (1 - clamp(trail_influence * trail_gain, 0, 0.65))
+      * max(0.35, 1 + simplex_noise(query, edge, time) * noise_gain)
+```
+
+This makes trails a living field: useful paths become easier for a while, stale
+paths fade, and the noise field prevents the runtime from calcifying into only
+the most recent path.
 
 ## Query flow
 
@@ -259,7 +308,13 @@ Input:
   "k": 12,
   "maxNodes": 60,
   "lakes": ["devel", "web"],
-  "nodeTypes": ["file", "url"]
+  "nodeTypes": ["file", "url"],
+  "persistDaimoiTrails": true,
+  "trailHalfLifeSeconds": 900,
+  "trailLookbackSeconds": 7200,
+  "trailFieldGain": 0.35,
+  "simplexNoiseGain": 0.08,
+  "simplexNoiseScaleSeconds": 90
 }
 ```
 
@@ -284,6 +339,8 @@ Output:
       "target": "node:c",
       "edgeKind": "semantic_force",
       "charge": 0.83,
+      "trailInfluence": 0.12,
+      "noise": -0.04,
       "compatibilityKind": "semantic_force_sample"
     }
   ],
@@ -302,7 +359,9 @@ Output:
     "seeds": 12,
     "daimoi": 28,
     "forceSamples": 441,
-    "edgeClaims": 19
+    "edgeClaims": 19,
+    "trailSamples": 7,
+    "persistedDaimoiTrails": 28
   }
 }
 ```
@@ -365,7 +424,10 @@ accelerate semantic gravity and charge calculations.
 - Inside that query, use current vector search to find seed nodes.
 - Emit bounded daimoi from those seed nodes carrying the query string.
 - Return nodes, edges, daimoi trails, activation scores, and explanation stats.
-- Emit query fill telemetry as append-only observations.
+- Emit query fill telemetry as append-only trail observations in the sparse trail
+  field; do not promote those observations into edge claims automatically.
+- Use semantic force, active edge claims, decayed trail influence, and an
+  evolving simplex-noise field when scoring daimoi movement.
 
 ### Phase 4 — Presence integration
 
@@ -398,6 +460,10 @@ accelerate semantic gravity and charge calculations.
 - A query can return a filled subgraph whose top nodes are not only the initial
   vector nearest neighbors.
 - Daimoi trail observations are persisted separately from edge claims.
+- Trail influence decays by configured half-life and affects later movement cost
+  without changing relation truth.
+- The evolving noise field perturbs movement cost but remains bounded and
+  deterministic for a query/edge/time sample.
 - Vexx can be used to score selected active ViewGraph pairs without persisting
   those scores as relation edges.
 
@@ -408,6 +474,8 @@ accelerate semantic gravity and charge calculations.
 - Query seed search and query fill are internal phases of one consumer query.
 - A bounded daimoi fill over a seed neighborhood returns nodes, edges, trails,
   activations, and explanations.
+- Daimoi trail observations persist into a decaying trail field that can
+  influence later daimoi movement alongside semantic gravity and simplex noise.
 - Legacy semantic-edge storage is either renamed, wrapped, or explicitly marked
   as force-cache compatibility.
 
