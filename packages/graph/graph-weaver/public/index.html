@@ -67,6 +67,25 @@
           </div>
           <div id="daimoiSummary" class="auditSummary">snapshots hidden</div>
           <div id="daimoiList" class="auditList"></div>
+          <hr class="auditDivider" />
+          <label class="check"><input id="showSemanticField" type="checkbox" /> show semantic field cells</label>
+          <div class="row compact">
+            <label>field profile</label>
+            <input id="semanticFieldProfile" type="search" placeholder="latest profile" />
+          </div>
+          <div class="row compact">
+            <label>cell limit <span class="v" id="v-semanticFieldCellLimit"></span></label>
+            <input id="semanticFieldCellLimit" type="range" min="50" max="5000" step="50" />
+          </div>
+          <div class="row compact">
+            <label>force sample limit <span class="v" id="v-semanticFieldSampleLimit"></span></label>
+            <input id="semanticFieldSampleLimit" type="range" min="50" max="20000" step="50" />
+          </div>
+          <div class="buttons">
+            <button id="refreshSemanticField">refresh field</button>
+          </div>
+          <div id="semanticFieldSummary" class="auditSummary">field hidden</div>
+          <div id="semanticFieldList" class="auditList"></div>
         </div>
 
         <h2 class="mt">filters</h2>

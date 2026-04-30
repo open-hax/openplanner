@@ -13,6 +13,7 @@ import type { WeaverEvent } from "@workspace/graph-weaver-aco";
 import type { GraphEdge, GraphNode, GraphSnapshot } from "./graph.js";
 import { applyConfigPatch, defaultConfigFromEnv, type ConfigPatch, type RuntimeConfig } from "./config.js";
 import { createGraphQLHandler } from "./graphql.js";
+import type { SemanticFieldCell, SemanticFieldSample } from "./graphql.js";
 import { repoRootFromGit } from "./git.js";
 import { layoutGraph } from "./layout.js";
 import { rebuildLakeGraph } from "./lakes.js";
@@ -1477,6 +1478,15 @@ async function main(): Promise<void> {
     return await daimoiAuditMongo.listDaimoiTrailSnapshots(filter);
   };
 
+  const listSemanticFieldOverlay = async (filter: {
+    fieldProfile?: string;
+    project?: string;
+    cellLimit: number;
+    sampleLimit: number;
+  }): Promise<{ cells: SemanticFieldCell[]; samples: SemanticFieldSample[] }> => {
+    return await daimoiAuditMongo.listSemanticFieldOverlay(filter);
+  };
+
   const updateConfig = async (patch: ConfigPatch) => {
     const prev = config;
     config = applyConfigPatch(config, patch);
@@ -1513,6 +1523,7 @@ async function main(): Promise<void> {
     listPresenceNodes,
     listSemanticEdges,
     listDaimoiSnapshots,
+    listSemanticFieldOverlay,
     nodePreview,
     rescanNow,
     seedUrls,

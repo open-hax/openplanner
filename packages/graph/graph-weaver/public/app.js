@@ -9,12 +9,15 @@ const legendEl = document.getElementById("legend");
 const filtersEl = document.getElementById("filters");
 const daimoiSummaryEl = document.getElementById("daimoiSummary");
 const daimoiListEl = document.getElementById("daimoiList");
+const semanticFieldSummaryEl = document.getElementById("semanticFieldSummary");
+const semanticFieldListEl = document.getElementById("semanticFieldList");
 
 const fitBtn = document.getElementById("fit");
 const reloadBtn = document.getElementById("reload");
 const applyBtn = document.getElementById("apply");
 const rescanNowBtn = document.getElementById("rescanNow");
 const refreshDaimoiBtn = document.getElementById("refreshDaimoi");
+const refreshSemanticFieldBtn = document.getElementById("refreshSemanticField");
 
 const ui = {
   renderNodes: /** @type {HTMLInputElement} */ (document.getElementById("renderNodes")),
@@ -30,6 +33,10 @@ const ui = {
   daimoiActivation: /** @type {HTMLInputElement} */ (document.getElementById("daimoiActivation")),
   daimoiLookback: /** @type {HTMLInputElement} */ (document.getElementById("daimoiLookback")),
   daimoiQuery: /** @type {HTMLInputElement} */ (document.getElementById("daimoiQuery")),
+  showSemanticField: /** @type {HTMLInputElement} */ (document.getElementById("showSemanticField")),
+  semanticFieldProfile: /** @type {HTMLInputElement} */ (document.getElementById("semanticFieldProfile")),
+  semanticFieldCellLimit: /** @type {HTMLInputElement} */ (document.getElementById("semanticFieldCellLimit")),
+  semanticFieldSampleLimit: /** @type {HTMLInputElement} */ (document.getElementById("semanticFieldSampleLimit")),
 
   vRenderNodes: document.getElementById("v-renderNodes"),
   vRenderEdges: document.getElementById("v-renderEdges"),
@@ -42,6 +49,8 @@ const ui = {
   vDaimoiLimit: document.getElementById("v-daimoiLimit"),
   vDaimoiActivation: document.getElementById("v-daimoiActivation"),
   vDaimoiLookback: document.getElementById("v-daimoiLookback"),
+  vSemanticFieldCellLimit: document.getElementById("v-semanticFieldCellLimit"),
+  vSemanticFieldSampleLimit: document.getElementById("v-semanticFieldSampleLimit"),
 };
 
 const LAYER_COLORS = {
@@ -52,6 +61,7 @@ const LAYER_COLORS = {
   presence: [1.0, 0.92, 0.36, 0.96],
   transient: [0.98, 0.72, 1.0, 0.88],
   daimoi: [0.58, 0.48, 1.0, 0.94],
+  field: [0.34, 1.0, 0.88, 0.9],
   unknown: [0.68, 0.78, 0.92, 0.88],
 };
 
@@ -65,6 +75,7 @@ const NODE_STYLES = {
   transient: { sizePx: 9.5, color: [0.98, 0.72, 1.0, 0.96] },
   daimoi: { sizePx: 14.5, color: [0.64, 0.52, 1.0, 1.0] },
   daimoi_anchor: { sizePx: 6.8, color: [0.58, 0.74, 1.0, 0.9] },
+  semantic_field_cell: { sizePx: 10.5, color: [0.34, 1.0, 0.88, 0.96] },
   default: { sizePx: 6.1, color: [0.68, 0.9, 0.98, 0.95] },
 };
 
@@ -82,6 +93,8 @@ const EDGE_COLORS = {
   daimoi_origin: [0.88, 0.72, 1.0, 0.5],
   daimoi_current: [0.62, 0.52, 1.0, 0.74],
   daimoi_trail: [0.48, 0.72, 1.0, 0.44],
+  semantic_field_child: [0.34, 1.0, 0.88, 0.26],
+  semantic_field_multipole: [0.32, 1.0, 0.78, 0.36],
   code_dependency: [0.52, 0.82, 1.0, 0.28],
   local_markdown_link: [0.6, 0.96, 0.84, 0.22],
   external_web_link: [1.0, 0.68, 0.46, 0.24],
@@ -98,6 +111,7 @@ let fullGraph = null;
 let renderedGraph = { nodes: [], edges: [] };
 let baseGraph = null;
 let daimoiSnapshots = [];
+let semanticFieldOverlay = { cells: [], samples: [] };
 
 function escapeHtml(input) {
   return String(input)
@@ -449,6 +463,30 @@ function renderDaimoiAuditPanel() {
   }).join("\n");
 }
 
+function renderSemanticFieldAuditPanel() {
+  if (!semanticFieldSummaryEl || !semanticFieldListEl) return;
+  if (!ui.showSemanticField.checked) {
+    semanticFieldSummaryEl.textContent = "field hidden";
+    semanticFieldListEl.innerHTML = "";
+    return;
+  }
+
+  const cells = semanticFieldOverlay.cells || [];
+  const samples = semanticFieldOverlay.samples || [];
+  const totalMass = cells.reduce((sum, row) => sum + Number(row.mass || row.nodeCount || 0), 0);
+  const profile = cells[0]?.fieldProfile || samples[0]?.fieldProfile || String(ui.semanticFieldProfile.value || "latest").trim() || "latest";
+  semanticFieldSummaryEl.textContent = `${cells.length.toLocaleString()} cells · ${samples.length.toLocaleString()} multipoles · mass ${totalMass.toLocaleString()} · ${profile}`;
+  semanticFieldListEl.innerHTML = cells.slice(0, 48).map((cell) => {
+    const time = cell.updatedAt ? new Date(cell.updatedAt).toLocaleTimeString() : "unknown time";
+    return `
+      <button class="auditItem" data-node-id="${escapeAttr(cell.id)}">
+        <span class="auditTitle">${escapeHtml(shortNode(cell.id))}</span>
+        <span class="auditMeta">level ${Number(cell.level || 0)} · nodes ${Number(cell.nodeCount || 0).toLocaleString()} · charge ${Number(cell.charge || 0).toFixed(3)} · ${escapeHtml(time)}</span>
+      </button>
+    `;
+  }).join("\n");
+}
+
 function overlayDaimoiSnapshots(graph, snapshots) {
   if (!ui.showDaimoi.checked || snapshots.length === 0) return graph;
 
@@ -532,6 +570,86 @@ function overlayDaimoiSnapshots(graph, snapshots) {
   };
 }
 
+function overlaySemanticField(graph, overlay) {
+  if (!ui.showSemanticField.checked || !overlay || !Array.isArray(overlay.cells) || overlay.cells.length === 0) return graph;
+
+  const nodes = [...graph.nodes];
+  const edges = [...graph.edges];
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const addNode = (node) => {
+    if (nodesById.has(node.id)) return nodesById.get(node.id);
+    nodes.push(node);
+    nodesById.set(node.id, node);
+    return node;
+  };
+
+  const cells = overlay.cells || [];
+  cells.forEach((cell) => {
+    const mass = Math.max(1, Number(cell.mass || cell.nodeCount || 1));
+    addNode({
+      id: cell.id,
+      kind: "semantic_field_cell",
+      label: `field L${Number(cell.level || 0)} · ${Number(cell.nodeCount || 0)} nodes`,
+      x: Number(cell.centerX || 0),
+      y: Number(cell.centerY || 0),
+      external: false,
+      loadedByDefault: true,
+      layer: "field",
+      data: {
+        layer: "field",
+        cell,
+        field_profile: cell.fieldProfile,
+        mass,
+        node_count: cell.nodeCount,
+        charge: cell.charge,
+        half_extent: cell.halfExtent,
+      },
+    });
+  });
+
+  const cellIds = new Set(cells.map((cell) => cell.id));
+  cells.forEach((cell) => {
+    (cell.childCellIds || []).forEach((childId) => {
+      if (cellIds.has(childId)) {
+        edges.push({
+          source: cell.id,
+          target: childId,
+          kind: "semantic_field_child",
+          layer: "field",
+          data: { field_profile: cell.fieldProfile, parent_level: cell.level },
+        });
+      }
+    });
+  });
+
+  (overlay.samples || []).forEach((sample) => {
+    if (!cellIds.has(sample.source) || !cellIds.has(sample.target)) return;
+    edges.push({
+      source: sample.source,
+      target: sample.target,
+      kind: "semantic_field_multipole",
+      layer: "field",
+      data: {
+        similarity: sample.similarity,
+        charge: sample.charge,
+        field_profile: sample.fieldProfile,
+        force_kind: sample.forceKind,
+        updated_at: sample.updatedAt,
+      },
+    });
+  });
+
+  return {
+    nodes,
+    edges,
+    meta: {
+      ...graph.meta,
+      totalNodes: Number(graph.meta?.totalNodes ?? graph.nodes.length) + (nodes.length - graph.nodes.length),
+      totalEdges: Number(graph.meta?.totalEdges ?? graph.edges.length) + (edges.length - graph.edges.length),
+    },
+  };
+}
+
 async function loadDaimoiSnapshots() {
   if (!ui.showDaimoi.checked) {
     daimoiSnapshots = [];
@@ -558,10 +676,44 @@ async function loadDaimoiSnapshots() {
   renderDaimoiAuditPanel();
 }
 
+async function loadSemanticFieldOverlay() {
+  if (!ui.showSemanticField.checked) {
+    semanticFieldOverlay = { cells: [], samples: [] };
+    renderSemanticFieldAuditPanel();
+    return;
+  }
+  const profile = String(ui.semanticFieldProfile.value || "").trim();
+  const data = await gql(
+    `query SemanticFieldOverlay($fieldProfile: String, $cellLimit: Int, $sampleLimit: Int) {
+      semanticFieldOverlay(fieldProfile: $fieldProfile, cellLimit: $cellLimit, sampleLimit: $sampleLimit) {
+        cells { id fieldProfile project embeddingModel embeddingDimensions level ix iy centerX centerY halfExtent mass nodeCount nodeIds childCellIds charge updatedAt dataJson }
+        samples { source target similarity charge forceKind fieldProfile project embeddingModel embeddingDimensions sourceSystem updatedAt dataJson }
+      }
+    }`,
+    {
+      fieldProfile: profile || null,
+      cellLimit: Number(ui.semanticFieldCellLimit.value || 500),
+      sampleLimit: Number(ui.semanticFieldSampleLimit.value || 1000),
+    },
+  );
+  semanticFieldOverlay = {
+    cells: (data.semanticFieldOverlay?.cells || []).map((cell) => ({
+      ...cell,
+      data: parseDataJson(cell.dataJson) ?? {},
+    })),
+    samples: (data.semanticFieldOverlay?.samples || []).map((sample) => ({
+      ...sample,
+      data: parseDataJson(sample.dataJson) ?? {},
+    })),
+  };
+  renderSemanticFieldAuditPanel();
+}
+
 async function renderGraphWithDaimoiOverlay() {
   if (!baseGraph) return;
   await loadDaimoiSnapshots();
-  fullGraph = overlayDaimoiSnapshots(baseGraph, daimoiSnapshots);
+  await loadSemanticFieldOverlay();
+  fullGraph = overlaySemanticField(overlayDaimoiSnapshots(baseGraph, daimoiSnapshots), semanticFieldOverlay);
   renderLegend(fullGraph);
   renderFilters(fullGraph);
   applyGraphFilters();
@@ -774,6 +926,10 @@ async function loadConfigIntoControls() {
   ui.daimoiLimit.value = "100";
   ui.daimoiActivation.value = "0";
   ui.daimoiLookback.value = "240";
+  ui.showSemanticField.checked = false;
+  ui.semanticFieldProfile.value = "";
+  ui.semanticFieldCellLimit.value = "500";
+  ui.semanticFieldSampleLimit.value = "1000";
 
   bindRange(ui.renderNodes, ui.vRenderNodes, (v) => v.toLocaleString());
   bindRange(ui.renderEdges, ui.vRenderEdges, (v) => v.toLocaleString());
@@ -786,7 +942,10 @@ async function loadConfigIntoControls() {
   bindRange(ui.daimoiLimit, ui.vDaimoiLimit, (v) => v.toLocaleString());
   bindRange(ui.daimoiActivation, ui.vDaimoiActivation, (v) => v.toFixed(2));
   bindRange(ui.daimoiLookback, ui.vDaimoiLookback, (v) => `${v}m`);
+  bindRange(ui.semanticFieldCellLimit, ui.vSemanticFieldCellLimit, (v) => v.toLocaleString());
+  bindRange(ui.semanticFieldSampleLimit, ui.vSemanticFieldSampleLimit, (v) => v.toLocaleString());
   renderDaimoiAuditPanel();
+  renderSemanticFieldAuditPanel();
 }
 
 async function applyControls() {
@@ -992,7 +1151,7 @@ async function loadNodePane(id) {
 
 function localNodePane(id) {
   const node = fullGraph?.nodes?.find((row) => row.id === id);
-  if (!node || (node.kind !== "daimoi" && node.kind !== "daimoi_anchor")) return null;
+  if (!node || (node.kind !== "daimoi" && node.kind !== "daimoi_anchor" && node.kind !== "semantic_field_cell")) return null;
   return {
     node: {
       id: node.id,
@@ -1082,30 +1241,44 @@ rescanNowBtn.addEventListener("click", async () => {
   }
 });
 
-async function refreshDaimoiOverlay() {
-  refreshDaimoiBtn.disabled = true;
+async function refreshAuditOverlays(button = null) {
+  if (button) button.disabled = true;
   try {
     await renderGraphWithDaimoiOverlay();
     await loadStatus();
     if (selectedNodeId) void selectNodeById(selectedNodeId);
   } finally {
-    refreshDaimoiBtn.disabled = false;
+    if (button) button.disabled = false;
   }
 }
 
 refreshDaimoiBtn?.addEventListener("click", () => {
-  void refreshDaimoiOverlay();
+  void refreshAuditOverlays(refreshDaimoiBtn);
+});
+refreshSemanticFieldBtn?.addEventListener("click", () => {
+  void refreshAuditOverlays(refreshSemanticFieldBtn);
 });
 ui.showDaimoi?.addEventListener("change", () => {
-  void refreshDaimoiOverlay();
+  void refreshAuditOverlays();
 });
-[ui.daimoiLimit, ui.daimoiActivation, ui.daimoiLookback].forEach((input) => {
-  input?.addEventListener("change", () => void refreshDaimoiOverlay());
+ui.showSemanticField?.addEventListener("change", () => {
+  void refreshAuditOverlays();
+});
+[ui.daimoiLimit, ui.daimoiActivation, ui.daimoiLookback, ui.semanticFieldCellLimit, ui.semanticFieldSampleLimit].forEach((input) => {
+  input?.addEventListener("change", () => void refreshAuditOverlays());
 });
 ui.daimoiQuery?.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") void refreshDaimoiOverlay();
+  if (event.key === "Enter") void refreshAuditOverlays();
+});
+ui.semanticFieldProfile?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") void refreshAuditOverlays();
 });
 daimoiListEl?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-id]") : null;
+  const id = button?.getAttribute("data-node-id");
+  if (id) void selectNodeById(id);
+});
+semanticFieldListEl?.addEventListener("click", (event) => {
   const button = event.target instanceof Element ? event.target.closest("[data-node-id]") : null;
   const id = button?.getAttribute("data-node-id");
   if (id) void selectNodeById(id);

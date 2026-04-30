@@ -32,6 +32,42 @@ export type DaimoiTrailSnapshot = {
   data: Record<string, unknown>;
 };
 
+export type SemanticFieldCellSnapshot = {
+  id: string;
+  fieldProfile: string;
+  project: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  level: number;
+  ix: number;
+  iy: number;
+  centerX: number;
+  centerY: number;
+  halfExtent: number;
+  mass: number;
+  nodeCount: number;
+  nodeIds: string[];
+  childCellIds: string[];
+  charge: number;
+  updatedAt: string | null;
+  data: Record<string, unknown>;
+};
+
+export type SemanticFieldSampleSnapshot = {
+  source: string;
+  target: string;
+  similarity: number;
+  charge: number;
+  forceKind: string;
+  fieldProfile: string;
+  project: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  sourceSystem: string | null;
+  updatedAt: string | null;
+  data: Record<string, unknown>;
+};
+
 type DaimoiTrailDocument = Document & {
   _id?: unknown;
   query_hash?: string;
@@ -46,6 +82,42 @@ type DaimoiTrailDocument = Document & {
   traversal_cost?: number;
   emitted_at?: Date | string;
   decay_half_life_seconds?: number;
+};
+
+type SemanticFieldCellDocument = Document & {
+  _id?: unknown;
+  cell_id?: string;
+  field_profile?: string;
+  project?: string | null;
+  embedding_model?: string | null;
+  embedding_dimensions?: number | null;
+  level?: number;
+  ix?: number;
+  iy?: number;
+  center_x?: number;
+  center_y?: number;
+  half_extent?: number;
+  mass?: number;
+  node_count?: number;
+  node_ids?: string[];
+  child_cell_ids?: string[];
+  charge?: number;
+  updated_at?: Date | string;
+};
+
+type SemanticForceSampleDocument = Document & {
+  _id?: unknown;
+  source_node_id?: string;
+  target_node_id?: string;
+  similarity?: number;
+  charge?: number;
+  force_kind?: string;
+  field_profile?: string;
+  project?: string | null;
+  embedding_model?: string | null;
+  embedding_dimensions?: number | null;
+  source?: string | null;
+  updated_at?: Date | string;
 };
 
 function sleep(ms: number): Promise<void> {
@@ -273,5 +345,88 @@ export class MongoGraphStore {
         data: stripMongoId(row as WithId<DaimoiTrailDocument>) as Record<string, unknown>,
       };
     });
+  }
+
+  async listSemanticFieldOverlay(filter: {
+    fieldProfile?: string;
+    project?: string;
+    cellLimit: number;
+    sampleLimit: number;
+  }): Promise<{ cells: SemanticFieldCellSnapshot[]; samples: SemanticFieldSampleSnapshot[] }> {
+    const fieldProfile = String(filter.fieldProfile ?? "").trim();
+    const project = String(filter.project ?? "").trim();
+    const cellFilter: Record<string, unknown> = {};
+    const sampleFilter: Record<string, unknown> = { force_kind: "semantic_field_multipole" };
+    if (fieldProfile) {
+      cellFilter.field_profile = fieldProfile;
+      sampleFilter.field_profile = fieldProfile;
+    }
+    if (project) {
+      cellFilter.project = project;
+      sampleFilter.project = project;
+    }
+
+    const cellRows = await this.getDb()
+      .collection<SemanticFieldCellDocument>("graph_semantic_field_cells")
+      .find(cellFilter)
+      .sort({ updated_at: -1, level: 1, node_count: -1 })
+      .limit(Math.max(1, Math.min(10000, Math.floor(filter.cellLimit))))
+      .toArray();
+
+    const effectiveProfile = fieldProfile || String(cellRows[0]?.field_profile ?? "").trim();
+    if (effectiveProfile && !fieldProfile) sampleFilter.field_profile = effectiveProfile;
+
+    const sampleRows = await this.getDb()
+      .collection<SemanticForceSampleDocument>("graph_semantic_force_samples")
+      .find(sampleFilter)
+      .sort({ updated_at: -1, charge: -1 })
+      .limit(Math.max(1, Math.min(50000, Math.floor(filter.sampleLimit))))
+      .toArray();
+
+    const cells = cellRows
+      .filter((row) => !effectiveProfile || row.field_profile === effectiveProfile)
+      .map((row) => {
+        const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : (row.updated_at ? String(row.updated_at) : null);
+        return {
+          id: String(row.cell_id ?? row._id ?? ""),
+          fieldProfile: String(row.field_profile ?? ""),
+          project: typeof row.project === "string" ? row.project : null,
+          embeddingModel: typeof row.embedding_model === "string" ? row.embedding_model : null,
+          embeddingDimensions: typeof row.embedding_dimensions === "number" ? row.embedding_dimensions : null,
+          level: Number(row.level ?? 0),
+          ix: Number(row.ix ?? 0),
+          iy: Number(row.iy ?? 0),
+          centerX: Number(row.center_x ?? 0),
+          centerY: Number(row.center_y ?? 0),
+          halfExtent: Number(row.half_extent ?? 0),
+          mass: Number(row.mass ?? row.node_count ?? 0),
+          nodeCount: Number(row.node_count ?? 0),
+          nodeIds: asStringArray(row.node_ids),
+          childCellIds: asStringArray(row.child_cell_ids),
+          charge: Number(row.charge ?? 0),
+          updatedAt,
+          data: stripMongoId(row as WithId<SemanticFieldCellDocument>) as Record<string, unknown>,
+        };
+      });
+
+    const samples = sampleRows.map((row) => {
+      const updatedAt = row.updated_at instanceof Date ? row.updated_at.toISOString() : (row.updated_at ? String(row.updated_at) : null);
+      return {
+        source: String(row.source_node_id ?? ""),
+        target: String(row.target_node_id ?? ""),
+        similarity: Number(row.similarity ?? 0),
+        charge: Number(row.charge ?? 0),
+        forceKind: String(row.force_kind ?? "semantic_field_multipole"),
+        fieldProfile: String(row.field_profile ?? effectiveProfile),
+        project: typeof row.project === "string" ? row.project : null,
+        embeddingModel: typeof row.embedding_model === "string" ? row.embedding_model : null,
+        embeddingDimensions: typeof row.embedding_dimensions === "number" ? row.embedding_dimensions : null,
+        sourceSystem: typeof row.source === "string" ? row.source : null,
+        updatedAt,
+        data: stripMongoId(row as WithId<SemanticForceSampleDocument>) as Record<string, unknown>,
+      };
+    }).filter((row) => row.source && row.target);
+
+    return { cells, samples };
   }
 }

@@ -1,4 +1,4 @@
-export type GraphLayer = "local" | "web" | "user" | "semantic" | "presence" | "transient";
+export type GraphLayer = "local" | "web" | "user" | "semantic" | "presence" | "transient" | "field" | "daimoi";
 
 export type GraphNode = {
   id: string;

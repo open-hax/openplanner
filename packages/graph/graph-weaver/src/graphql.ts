@@ -7,6 +7,42 @@ export type GraphQLContext = {
   headers: http.IncomingHttpHeaders;
 };
 
+export type SemanticFieldCell = {
+  id: string;
+  fieldProfile: string;
+  project: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  level: number;
+  ix: number;
+  iy: number;
+  centerX: number;
+  centerY: number;
+  halfExtent: number;
+  mass: number;
+  nodeCount: number;
+  nodeIds: string[];
+  childCellIds: string[];
+  charge: number;
+  updatedAt: string | null;
+  data: Record<string, unknown>;
+};
+
+export type SemanticFieldSample = {
+  source: string;
+  target: string;
+  similarity: number;
+  charge: number;
+  forceKind: string;
+  fieldProfile: string;
+  project: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  sourceSystem: string | null;
+  updatedAt: string | null;
+  data: Record<string, unknown>;
+};
+
 export type GraphQLState = {
   adminToken: string | null;
 
@@ -149,6 +185,13 @@ export type GraphQLState = {
     query?: string;
     lookbackSeconds?: number;
   }) => Promise<DaimoiTrailSnapshot[]> | DaimoiTrailSnapshot[];
+
+  listSemanticFieldOverlay: (filter: {
+    fieldProfile?: string;
+    project?: string;
+    cellLimit: number;
+    sampleLimit: number;
+  }) => Promise<{ cells: SemanticFieldCell[]; samples: SemanticFieldSample[] }> | { cells: SemanticFieldCell[]; samples: SemanticFieldSample[] };
 
   listPresenceNodes: (filter: { class?: string; includeArchived: boolean; limit: number }) => Array<{
     id: string;
@@ -347,6 +390,9 @@ const schema = buildSchema(`
 
     """Recent daimoi trail observations, exposed as snapshots for simulation-state audit views."""
     daimoiSnapshots(query: String, minActivation: Float, lookbackSeconds: Int, limit: Int = 200): [DaimoiSnapshot!]!
+
+    """Semantic field cells plus multipole force samples for Barnes-Hut/quadtree audit overlays."""
+    semanticFieldOverlay(fieldProfile: String, project: String, cellLimit: Int = 1000, sampleLimit: Int = 5000): SemanticFieldOverlay!
   }
 
   type Mutation {
@@ -554,6 +600,47 @@ const schema = buildSchema(`
     dataJson: String
   }
 
+  type SemanticFieldCell {
+    id: ID!
+    fieldProfile: String!
+    project: String
+    embeddingModel: String
+    embeddingDimensions: Int
+    level: Int!
+    ix: Int!
+    iy: Int!
+    centerX: Float!
+    centerY: Float!
+    halfExtent: Float!
+    mass: Float!
+    nodeCount: Int!
+    nodeIds: [ID!]!
+    childCellIds: [ID!]!
+    charge: Float!
+    updatedAt: String
+    dataJson: String
+  }
+
+  type SemanticFieldSample {
+    source: ID!
+    target: ID!
+    similarity: Float!
+    charge: Float!
+    forceKind: String!
+    fieldProfile: String!
+    project: String
+    embeddingModel: String
+    embeddingDimensions: Int
+    sourceSystem: String
+    updatedAt: String
+    dataJson: String
+  }
+
+  type SemanticFieldOverlay {
+    cells: [SemanticFieldCell!]!
+    samples: [SemanticFieldSample!]!
+  }
+
   type NodePreview {
     id: ID!
     kind: String!
@@ -732,6 +819,20 @@ function toDaimoiSnapshotApi(snapshot: DaimoiTrailSnapshot) {
     emittedAt: snapshot.emittedAt,
     decayHalfLifeSeconds: snapshot.decayHalfLifeSeconds,
     dataJson: toDataJson(snapshot.data),
+  };
+}
+
+function toSemanticFieldCellApi(cell: SemanticFieldCell) {
+  return {
+    ...cell,
+    dataJson: toDataJson(cell.data),
+  };
+}
+
+function toSemanticFieldSampleApi(sample: SemanticFieldSample) {
+  return {
+    ...sample,
+    dataJson: toDataJson(sample.data),
   };
 }
 
@@ -933,6 +1034,22 @@ export function createGraphQLHandler(state: GraphQLState) {
         limit: Math.max(1, Math.min(2000, Number(args.limit ?? 200))),
       });
       return rows.map(toDaimoiSnapshotApi);
+    },
+
+    semanticFieldOverlay: async (
+      args: { fieldProfile?: string | null; project?: string | null; cellLimit?: number | null; sampleLimit?: number | null },
+      _ctx: GraphQLContext,
+    ) => {
+      const overlay = await state.listSemanticFieldOverlay({
+        fieldProfile: args.fieldProfile ?? undefined,
+        project: args.project ?? undefined,
+        cellLimit: Math.max(1, Math.min(10000, Number(args.cellLimit ?? 1000))),
+        sampleLimit: Math.max(1, Math.min(50000, Number(args.sampleLimit ?? 5000))),
+      });
+      return {
+        cells: overlay.cells.map(toSemanticFieldCellApi),
+        samples: overlay.samples.map(toSemanticFieldSampleApi),
+      };
     },
 
     // --- mutations
