@@ -439,6 +439,17 @@ async function main(): Promise<void> {
     await mongoGraph.connect();
   }
 
+  const daimoiAuditMongo = mongoGraph ?? new MongoGraphStore({
+    uri: String(process.env.MONGODB_URI || "mongodb://mongodb:27017").trim(),
+    dbName: String(process.env.MONGODB_DB || "devel_graph_weaver").trim(),
+    nodeCollectionName: String(process.env.MONGODB_NODE_COLLECTION || "graph_weaver_nodes").trim(),
+    edgeCollectionName: String(process.env.MONGODB_EDGE_COLLECTION || "graph_weaver_edges").trim(),
+    appName: "devel-graph-weaver-daimoi-audit",
+  });
+  if (!mongoGraph) {
+    await daimoiAuditMongo.connect();
+  }
+
   // --- config
   let config: RuntimeConfig = defaultConfigFromEnv(process.env);
   const storedConfig = await readJsonIfExists<ConfigPatch>(configPath);
@@ -1454,6 +1465,15 @@ async function main(): Promise<void> {
     markDirty();
   };
 
+  const listDaimoiSnapshots = async (filter: {
+    limit: number;
+    minActivation?: number;
+    query?: string;
+    lookbackSeconds?: number;
+  }) => {
+    return await daimoiAuditMongo.listDaimoiTrailSnapshots(filter);
+  };
+
   const updateConfig = async (patch: ConfigPatch) => {
     const prev = config;
     config = applyConfigPatch(config, patch);
@@ -1489,6 +1509,7 @@ async function main(): Promise<void> {
     searchNodes,
     listPresenceNodes,
     listSemanticEdges,
+    listDaimoiSnapshots,
     nodePreview,
     rescanNow,
     seedUrls,
@@ -1616,6 +1637,8 @@ async function main(): Promise<void> {
     }
     if (mongoGraph) {
       void mongoGraph.close().catch(() => {});
+    } else {
+      void daimoiAuditMongo.close().catch(() => {});
     }
     if (rescanTimer) clearInterval(rescanTimer);
     try {

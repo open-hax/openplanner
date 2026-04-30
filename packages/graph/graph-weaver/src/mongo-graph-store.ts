@@ -15,6 +15,39 @@ export type MongoGraphStoreConfig = {
 type StoredNode = GraphNode & { store: string };
 type StoredEdge = GraphEdge & { store: string };
 
+export type DaimoiTrailSnapshot = {
+  id: string;
+  queryHash: string;
+  queryText: string;
+  daimoiId: string;
+  originNodeId: string;
+  currentNodeId: string;
+  nodeIds: string[];
+  edgeKeys: string[];
+  trail: string[];
+  activation: number;
+  traversalCost: number;
+  emittedAt: string;
+  decayHalfLifeSeconds: number;
+  data: Record<string, unknown>;
+};
+
+type DaimoiTrailDocument = Document & {
+  _id?: unknown;
+  query_hash?: string;
+  query_text?: string;
+  daimoi_id?: string;
+  origin_node_id?: string;
+  current_node_id?: string;
+  node_ids?: string[];
+  edge_keys?: string[];
+  trail?: string[];
+  activation?: number;
+  traversal_cost?: number;
+  emitted_at?: Date | string;
+  decay_half_life_seconds?: number;
+};
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -22,6 +55,14 @@ function sleep(ms: number): Promise<void> {
 function stripMongoId<T extends Document>(doc: WithId<T>): Omit<T, "_id"> {
   const { _id: _ignored, ...rest } = doc;
   return rest as Omit<T, "_id">;
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((row) => String(row || "")).filter(Boolean) : [];
 }
 
 export class MongoGraphStore {
@@ -90,6 +131,11 @@ export class MongoGraphStore {
   private getEdges(): Collection<StoredEdge> {
     if (!this.edges) throw new Error("MongoGraphStore not connected");
     return this.edges;
+  }
+
+  private getDb(): Db {
+    if (!this.db) throw new Error("MongoGraphStore not connected");
+    return this.db;
   }
 
   async loadStore(store: string): Promise<GraphSnapshot> {
@@ -181,5 +227,51 @@ export class MongoGraphStore {
 
   async removeEdge(store: string, id: string): Promise<void> {
     await this.getEdges().deleteOne({ store, id });
+  }
+
+  async listDaimoiTrailSnapshots(filter: {
+    limit: number;
+    minActivation?: number;
+    query?: string;
+    lookbackSeconds?: number;
+  }): Promise<DaimoiTrailSnapshot[]> {
+    const mongoFilter: Record<string, unknown> = {};
+    if (typeof filter.minActivation === "number") {
+      mongoFilter.activation = { $gte: filter.minActivation };
+    }
+    if (typeof filter.lookbackSeconds === "number" && filter.lookbackSeconds > 0) {
+      mongoFilter.emitted_at = { $gte: new Date(Date.now() - (filter.lookbackSeconds * 1000)) };
+    }
+    const query = String(filter.query ?? "").trim();
+    if (query) {
+      mongoFilter.query_text = { $regex: escapeRegex(query), $options: "i" };
+    }
+
+    const rows = await this.getDb()
+      .collection<DaimoiTrailDocument>("graph_daimoi_trails")
+      .find(mongoFilter)
+      .sort({ emitted_at: -1 })
+      .limit(Math.max(1, Math.min(2000, Math.floor(filter.limit))))
+      .toArray();
+
+    return rows.map((row) => {
+      const emittedAt = row.emitted_at instanceof Date ? row.emitted_at.toISOString() : String(row.emitted_at ?? "");
+      return {
+        id: String(row._id ?? ""),
+        queryHash: String(row.query_hash ?? ""),
+        queryText: String(row.query_text ?? ""),
+        daimoiId: String(row.daimoi_id ?? ""),
+        originNodeId: String(row.origin_node_id ?? ""),
+        currentNodeId: String(row.current_node_id ?? ""),
+        nodeIds: asStringArray(row.node_ids),
+        edgeKeys: asStringArray(row.edge_keys),
+        trail: asStringArray(row.trail),
+        activation: Number(row.activation ?? 0),
+        traversalCost: Number(row.traversal_cost ?? 0),
+        emittedAt,
+        decayHalfLifeSeconds: Number(row.decay_half_life_seconds ?? 0),
+        data: stripMongoId(row as WithId<DaimoiTrailDocument>) as Record<string, unknown>,
+      };
+    });
   }
 }

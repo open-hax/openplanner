@@ -1,6 +1,7 @@
 import type http from "node:http";
 import { buildSchema, graphql } from "graphql";
 import type { ConfigPatch, RuntimeConfig } from "./config.js";
+import type { DaimoiTrailSnapshot } from "./mongo-graph-store.js";
 
 export type GraphQLContext = {
   headers: http.IncomingHttpHeaders;
@@ -141,6 +142,13 @@ export type GraphQLState = {
     layer?: string;
     data?: unknown;
   }>;
+
+  listDaimoiSnapshots: (filter: {
+    limit: number;
+    minActivation?: number;
+    query?: string;
+    lookbackSeconds?: number;
+  }) => Promise<DaimoiTrailSnapshot[]> | DaimoiTrailSnapshot[];
 
   listPresenceNodes: (filter: { class?: string; includeArchived: boolean; limit: number }) => Array<{
     id: string;
@@ -336,6 +344,9 @@ const schema = buildSchema(`
 
     """Transient semantic-circuit edges, each carrying a required cosine similarity score."""
     semanticEdges(status: String, minSimilarity: Float, limit: Int = 500): [SemanticEdge!]!
+
+    """Recent daimoi trail observations, exposed as snapshots for simulation-state audit views."""
+    daimoiSnapshots(query: String, minActivation: Float, lookbackSeconds: Int, limit: Int = 200): [DaimoiSnapshot!]!
   }
 
   type Mutation {
@@ -526,6 +537,23 @@ const schema = buildSchema(`
     pruned: Int!
   }
 
+  type DaimoiSnapshot {
+    id: ID!
+    queryHash: String!
+    queryText: String!
+    daimoiId: ID!
+    originNodeId: ID!
+    currentNodeId: ID!
+    nodeIds: [ID!]!
+    edgeKeys: [String!]!
+    trail: [ID!]!
+    activation: Float!
+    traversalCost: Float!
+    emittedAt: String!
+    decayHalfLifeSeconds: Float!
+    dataJson: String
+  }
+
   type NodePreview {
     id: ID!
     kind: String!
@@ -685,6 +713,25 @@ function toSemanticEdgeApi(edge: {
     lastReinforcedAt: String(data.last_reinforced_at ?? data.created_at ?? new Date(0).toISOString()),
     decayHalfLifeMs: Math.max(1, Math.floor(numberOr(data.decay_half_life_ms, 60 * 60 * 1000))),
     dataJson: toDataJson(data),
+  };
+}
+
+function toDaimoiSnapshotApi(snapshot: DaimoiTrailSnapshot) {
+  return {
+    id: snapshot.id,
+    queryHash: snapshot.queryHash,
+    queryText: snapshot.queryText,
+    daimoiId: snapshot.daimoiId,
+    originNodeId: snapshot.originNodeId,
+    currentNodeId: snapshot.currentNodeId,
+    nodeIds: snapshot.nodeIds,
+    edgeKeys: snapshot.edgeKeys,
+    trail: snapshot.trail,
+    activation: snapshot.activation,
+    traversalCost: snapshot.traversalCost,
+    emittedAt: snapshot.emittedAt,
+    decayHalfLifeSeconds: snapshot.decayHalfLifeSeconds,
+    dataJson: toDataJson(snapshot.data),
   };
 }
 
@@ -873,6 +920,19 @@ export function createGraphQLHandler(state: GraphQLState) {
         limit: Math.max(1, Math.min(5000, Number(args.limit ?? 500))),
       });
       return rows.map(toSemanticEdgeApi);
+    },
+
+    daimoiSnapshots: async (
+      args: { query?: string | null; minActivation?: number | null; lookbackSeconds?: number | null; limit?: number },
+      _ctx: GraphQLContext,
+    ) => {
+      const rows = await state.listDaimoiSnapshots({
+        query: args.query ?? undefined,
+        minActivation: args.minActivation ?? undefined,
+        lookbackSeconds: args.lookbackSeconds ?? undefined,
+        limit: Math.max(1, Math.min(2000, Number(args.limit ?? 200))),
+      });
+      return rows.map(toDaimoiSnapshotApi);
     },
 
     // --- mutations

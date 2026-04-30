@@ -7,11 +7,14 @@ const statusEl = document.getElementById("status");
 const nodeEl = document.getElementById("node");
 const legendEl = document.getElementById("legend");
 const filtersEl = document.getElementById("filters");
+const daimoiSummaryEl = document.getElementById("daimoiSummary");
+const daimoiListEl = document.getElementById("daimoiList");
 
 const fitBtn = document.getElementById("fit");
 const reloadBtn = document.getElementById("reload");
 const applyBtn = document.getElementById("apply");
 const rescanNowBtn = document.getElementById("rescanNow");
+const refreshDaimoiBtn = document.getElementById("refreshDaimoi");
 
 const ui = {
   renderNodes: /** @type {HTMLInputElement} */ (document.getElementById("renderNodes")),
@@ -22,6 +25,11 @@ const ui = {
   perHost: /** @type {HTMLInputElement} */ (document.getElementById("perHost")),
   revisit: /** @type {HTMLInputElement} */ (document.getElementById("revisit")),
   rescan: /** @type {HTMLInputElement} */ (document.getElementById("rescan")),
+  showDaimoi: /** @type {HTMLInputElement} */ (document.getElementById("showDaimoi")),
+  daimoiLimit: /** @type {HTMLInputElement} */ (document.getElementById("daimoiLimit")),
+  daimoiActivation: /** @type {HTMLInputElement} */ (document.getElementById("daimoiActivation")),
+  daimoiLookback: /** @type {HTMLInputElement} */ (document.getElementById("daimoiLookback")),
+  daimoiQuery: /** @type {HTMLInputElement} */ (document.getElementById("daimoiQuery")),
 
   vRenderNodes: document.getElementById("v-renderNodes"),
   vRenderEdges: document.getElementById("v-renderEdges"),
@@ -31,6 +39,9 @@ const ui = {
   vPerHost: document.getElementById("v-perHost"),
   vRevisit: document.getElementById("v-revisit"),
   vRescan: document.getElementById("v-rescan"),
+  vDaimoiLimit: document.getElementById("v-daimoiLimit"),
+  vDaimoiActivation: document.getElementById("v-daimoiActivation"),
+  vDaimoiLookback: document.getElementById("v-daimoiLookback"),
 };
 
 const LAYER_COLORS = {
@@ -40,6 +51,7 @@ const LAYER_COLORS = {
   semantic: [1.0, 0.38, 0.9, 0.9],
   presence: [1.0, 0.92, 0.36, 0.96],
   transient: [0.98, 0.72, 1.0, 0.88],
+  daimoi: [0.58, 0.48, 1.0, 0.94],
   unknown: [0.68, 0.78, 0.92, 0.88],
 };
 
@@ -51,6 +63,8 @@ const NODE_STYLES = {
   resource: { sizePx: 11.5, color: [0.36, 1.0, 0.72, 1.0] },
   muse: { sizePx: 13.5, color: [1.0, 0.46, 1.0, 1.0] },
   transient: { sizePx: 9.5, color: [0.98, 0.72, 1.0, 0.96] },
+  daimoi: { sizePx: 14.5, color: [0.64, 0.52, 1.0, 1.0] },
+  daimoi_anchor: { sizePx: 6.8, color: [0.58, 0.74, 1.0, 0.9] },
   default: { sizePx: 6.1, color: [0.68, 0.9, 0.98, 0.95] },
 };
 
@@ -65,6 +79,9 @@ const EDGE_COLORS = {
   semantic_knn: [1.0, 0.38, 0.9, 0.18],
   semantic_similarity: [1.0, 0.38, 0.9, 0.32],
   semantic_transient: [1.0, 0.72, 0.28, 0.38],
+  daimoi_origin: [0.88, 0.72, 1.0, 0.5],
+  daimoi_current: [0.62, 0.52, 1.0, 0.74],
+  daimoi_trail: [0.48, 0.72, 1.0, 0.44],
   code_dependency: [0.52, 0.82, 1.0, 0.28],
   local_markdown_link: [0.6, 0.96, 0.84, 0.22],
   external_web_link: [1.0, 0.68, 0.46, 0.24],
@@ -79,6 +96,8 @@ const filterState = {
 
 let fullGraph = null;
 let renderedGraph = { nodes: [], edges: [] };
+let baseGraph = null;
+let daimoiSnapshots = [];
 
 function escapeHtml(input) {
   return String(input)
@@ -385,6 +404,169 @@ function renderFilters(graph) {
   `;
 }
 
+function stableUnit(id) {
+  let h = 2166136261;
+  for (let i = 0; i < String(id).length; i += 1) {
+    h ^= String(id).charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967295;
+}
+
+function vectorNear(base, id, radius = 72) {
+  const a = stableUnit(`${id}:a`) * Math.PI * 2;
+  const r = radius * (0.35 + stableUnit(`${id}:r`) * 0.65);
+  return { x: Number(base?.x ?? 0) + Math.cos(a) * r, y: Number(base?.y ?? 0) + Math.sin(a) * r };
+}
+
+function snapshotLabel(snapshot) {
+  const query = String(snapshot.queryText || "").trim();
+  if (query) return query.length > 52 ? `${query.slice(0, 49)}…` : query;
+  return snapshot.daimoiId || snapshot.id;
+}
+
+function renderDaimoiAuditPanel() {
+  if (!daimoiSummaryEl || !daimoiListEl) return;
+  if (!ui.showDaimoi.checked) {
+    daimoiSummaryEl.textContent = "snapshots hidden";
+    daimoiListEl.innerHTML = "";
+    return;
+  }
+
+  const avgActivation = daimoiSnapshots.length
+    ? daimoiSnapshots.reduce((sum, row) => sum + Number(row.activation || 0), 0) / daimoiSnapshots.length
+    : 0;
+  daimoiSummaryEl.textContent = `${daimoiSnapshots.length.toLocaleString()} snapshots · avg activation ${avgActivation.toFixed(3)}`;
+  daimoiListEl.innerHTML = daimoiSnapshots.slice(0, 40).map((snapshot) => {
+    const id = `daimoi-snapshot:${snapshot.id}`;
+    const time = snapshot.emittedAt ? new Date(snapshot.emittedAt).toLocaleTimeString() : "unknown time";
+    return `
+      <button class="auditItem" data-node-id="${escapeAttr(id)}">
+        <span class="auditTitle">${escapeHtml(snapshotLabel(snapshot))}</span>
+        <span class="auditMeta">act ${Number(snapshot.activation || 0).toFixed(3)} · cost ${Number(snapshot.traversalCost || 0).toFixed(3)} · ${escapeHtml(time)}</span>
+      </button>
+    `;
+  }).join("\n");
+}
+
+function overlayDaimoiSnapshots(graph, snapshots) {
+  if (!ui.showDaimoi.checked || snapshots.length === 0) return graph;
+
+  const nodes = [...graph.nodes];
+  const edges = [...graph.edges];
+  const nodesById = new Map(nodes.map((node) => [node.id, node]));
+  const addNode = (node) => {
+    if (nodesById.has(node.id)) return nodesById.get(node.id);
+    nodes.push(node);
+    nodesById.set(node.id, node);
+    return node;
+  };
+  const addAnchor = (id, near, role) => {
+    if (!id) return null;
+    const existing = nodesById.get(id);
+    if (existing) return existing;
+    const pos = vectorNear(near || { x: 0, y: 0 }, `${id}:${role}`, 96);
+    return addNode({
+      id,
+      kind: "daimoi_anchor",
+      label: shortNode(id),
+      x: pos.x,
+      y: pos.y,
+      external: true,
+      loadedByDefault: false,
+      layer: "daimoi",
+      data: { layer: "daimoi", role, unresolved_anchor: true },
+    });
+  };
+
+  snapshots.forEach((snapshot, index) => {
+    const origin = addAnchor(snapshot.originNodeId, null, "origin");
+    const current = addAnchor(snapshot.currentNodeId, origin, "current");
+    const base = current || origin || { x: 0, y: 0 };
+    const pos = vectorNear(base, `${snapshot.id}:${index}`, 58);
+    const snapshotId = `daimoi-snapshot:${snapshot.id}`;
+    const snapshotNode = addNode({
+      id: snapshotId,
+      kind: "daimoi",
+      label: snapshotLabel(snapshot),
+      x: pos.x,
+      y: pos.y,
+      external: false,
+      loadedByDefault: true,
+      layer: "daimoi",
+      data: {
+        layer: "daimoi",
+        snapshot,
+        query_text: snapshot.queryText,
+        daimoi_id: snapshot.daimoiId,
+        activation: snapshot.activation,
+        traversal_cost: snapshot.traversalCost,
+        emitted_at: snapshot.emittedAt,
+      },
+    });
+    if (origin) {
+      edges.push({ source: origin.id, target: snapshotNode.id, kind: "daimoi_origin", layer: "daimoi", data: { snapshot_id: snapshot.id } });
+    }
+    if (current) {
+      edges.push({ source: snapshotNode.id, target: current.id, kind: "daimoi_current", layer: "daimoi", data: { snapshot_id: snapshot.id, activation: snapshot.activation } });
+    }
+
+    const trail = Array.isArray(snapshot.trail) && snapshot.trail.length > 0 ? snapshot.trail : snapshot.nodeIds;
+    for (let i = 0; i < trail.length - 1; i += 1) {
+      const a = addAnchor(trail[i], snapshotNode, "trail");
+      const b = addAnchor(trail[i + 1], a || snapshotNode, "trail");
+      if (a && b) {
+        edges.push({ source: a.id, target: b.id, kind: "daimoi_trail", layer: "daimoi", data: { snapshot_id: snapshot.id, step: i } });
+      }
+    }
+  });
+
+  return {
+    nodes,
+    edges,
+    meta: {
+      ...graph.meta,
+      totalNodes: Number(graph.meta?.totalNodes ?? graph.nodes.length) + (nodes.length - graph.nodes.length),
+      totalEdges: Number(graph.meta?.totalEdges ?? graph.edges.length) + (edges.length - graph.edges.length),
+    },
+  };
+}
+
+async function loadDaimoiSnapshots() {
+  if (!ui.showDaimoi.checked) {
+    daimoiSnapshots = [];
+    renderDaimoiAuditPanel();
+    return;
+  }
+  const data = await gql(
+    `query DaimoiSnapshots($limit: Int, $minActivation: Float, $lookbackSeconds: Int, $query: String) {
+      daimoiSnapshots(limit: $limit, minActivation: $minActivation, lookbackSeconds: $lookbackSeconds, query: $query) {
+        id queryHash queryText daimoiId originNodeId currentNodeId nodeIds edgeKeys trail activation traversalCost emittedAt decayHalfLifeSeconds dataJson
+      }
+    }`,
+    {
+      limit: Number(ui.daimoiLimit.value || 100),
+      minActivation: Number(ui.daimoiActivation.value || 0),
+      lookbackSeconds: Math.max(60, Number(ui.daimoiLookback.value || 60) * 60),
+      query: String(ui.daimoiQuery.value || "").trim() || null,
+    },
+  );
+  daimoiSnapshots = (data.daimoiSnapshots || []).map((snapshot) => ({
+    ...snapshot,
+    data: parseDataJson(snapshot.dataJson) ?? {},
+  }));
+  renderDaimoiAuditPanel();
+}
+
+async function renderGraphWithDaimoiOverlay() {
+  if (!baseGraph) return;
+  await loadDaimoiSnapshots();
+  fullGraph = overlayDaimoiSnapshots(baseGraph, daimoiSnapshots);
+  renderLegend(fullGraph);
+  renderFilters(fullGraph);
+  applyGraphFilters();
+}
+
 function applyGraphFilters() {
   if (!fullGraph) return;
 
@@ -505,7 +687,7 @@ async function loadGraph() {
 
   const g = data.graphView;
   lastMeta = g.meta || null;
-  fullGraph = {
+  baseGraph = {
     nodes: g.nodes.map((n) => ({
       id: n.id,
       kind: n.kind,
@@ -527,9 +709,7 @@ async function loadGraph() {
     meta: g.meta,
   };
 
-  renderLegend(fullGraph);
-  renderFilters(fullGraph);
-  applyGraphFilters();
+  await renderGraphWithDaimoiOverlay();
 }
 
 async function loadStatus() {
@@ -590,6 +770,11 @@ async function loadConfigIntoControls() {
 
   ui.rescan.value = String(Math.round(cfg.scan.rescanIntervalMs / (1000 * 60)));
 
+  ui.showDaimoi.checked = false;
+  ui.daimoiLimit.value = "100";
+  ui.daimoiActivation.value = "0";
+  ui.daimoiLookback.value = "240";
+
   bindRange(ui.renderNodes, ui.vRenderNodes, (v) => v.toLocaleString());
   bindRange(ui.renderEdges, ui.vRenderEdges, (v) => v.toLocaleString());
   bindRange(ui.ants, ui.vAnts);
@@ -598,6 +783,10 @@ async function loadConfigIntoControls() {
   bindRange(ui.perHost, ui.vPerHost, (v) => `${v}s`);
   bindRange(ui.revisit, ui.vRevisit, (v) => `${v}h`);
   bindRange(ui.rescan, ui.vRescan, (v) => `${v}m`);
+  bindRange(ui.daimoiLimit, ui.vDaimoiLimit, (v) => v.toLocaleString());
+  bindRange(ui.daimoiActivation, ui.vDaimoiActivation, (v) => v.toFixed(2));
+  bindRange(ui.daimoiLookback, ui.vDaimoiLookback, (v) => `${v}m`);
+  renderDaimoiAuditPanel();
 }
 
 async function applyControls() {
@@ -801,6 +990,33 @@ async function loadNodePane(id) {
   );
 }
 
+function localNodePane(id) {
+  const node = fullGraph?.nodes?.find((row) => row.id === id);
+  if (!node || (node.kind !== "daimoi" && node.kind !== "daimoi_anchor")) return null;
+  return {
+    node: {
+      id: node.id,
+      kind: node.kind,
+      label: node.label,
+      external: node.external,
+      loadedByDefault: node.loadedByDefault,
+      layer: node.layer,
+      dataJson: safeJson(node.data ?? {}),
+    },
+    edges: (fullGraph.edges || [])
+      .filter((edge) => edge.source === id)
+      .slice(0, 800)
+      .map((edge) => ({
+        id: `${edge.source}->${edge.target}:${edge.kind}`,
+        kind: edge.kind,
+        target: edge.target,
+        layer: edge.layer,
+        dataJson: safeJson(edge.data ?? {}),
+      })),
+    nodePreview: null,
+  };
+}
+
 async function selectNodeById(id) {
   selectedNodeId = id;
   view.setSelectedNode(id);
@@ -809,6 +1025,11 @@ async function selectNodeById(id) {
   renderNodeLoading(id);
 
   try {
+    const localPane = localNodePane(id);
+    if (localPane) {
+      renderNodePane(localPane);
+      return;
+    }
     let pane = nodePaneCache.get(id);
     if (!pane) {
       pane = await loadNodePane(id);
@@ -859,6 +1080,35 @@ rescanNowBtn.addEventListener("click", async () => {
   } finally {
     rescanNowBtn.disabled = false;
   }
+});
+
+async function refreshDaimoiOverlay() {
+  refreshDaimoiBtn.disabled = true;
+  try {
+    await renderGraphWithDaimoiOverlay();
+    await loadStatus();
+    if (selectedNodeId) void selectNodeById(selectedNodeId);
+  } finally {
+    refreshDaimoiBtn.disabled = false;
+  }
+}
+
+refreshDaimoiBtn?.addEventListener("click", () => {
+  void refreshDaimoiOverlay();
+});
+ui.showDaimoi?.addEventListener("change", () => {
+  void refreshDaimoiOverlay();
+});
+[ui.daimoiLimit, ui.daimoiActivation, ui.daimoiLookback].forEach((input) => {
+  input?.addEventListener("change", () => void refreshDaimoiOverlay());
+});
+ui.daimoiQuery?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") void refreshDaimoiOverlay();
+});
+daimoiListEl?.addEventListener("click", (event) => {
+  const button = event.target instanceof Element ? event.target.closest("[data-node-id]") : null;
+  const id = button?.getAttribute("data-node-id");
+  if (id) void selectNodeById(id);
 });
 
 await loadConfigIntoControls();
