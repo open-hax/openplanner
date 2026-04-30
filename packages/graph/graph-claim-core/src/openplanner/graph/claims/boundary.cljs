@@ -6,7 +6,9 @@
   CLJS maps only."
   (:require [clojure.string :as str]
             [goog.crypt :as crypt]
-            [openplanner.graph.claims.core :as claims])
+            [openplanner.graph.claims.core :as claims]
+            [openplanner.graph.claims.policy :as policy]
+            [openplanner.graph.claims.schema :as schema])
   (:import [goog.crypt Sha256]))
 
 (defn- js-object?
@@ -212,3 +214,17 @@
          result (claims/project-claims claims (projection-options-from-js opts))]
      #js {:edges (clj->js (mapv #(js->clj (projected-edge->js %) :keywordize-keys true) (:edges result)))
           :stats (clj->js (:stats result))})))
+
+(defn explain-edge-claim-js
+  [claim]
+  (clj->js (schema/explain-edge-claim (edge-claim-from-js claim))))
+
+(defn- decision->js
+  [decision]
+  #js {:kind (name (:decision/kind decision))
+       :reason (name (:decision/reason decision))
+       :data (clj->js (:decision/data decision))})
+
+(defn evaluate-edge-claim-js
+  [claim]
+  (decision->js (policy/evaluate-claim (edge-claim-from-js claim))))

@@ -39,6 +39,19 @@ export type EdgeClaimProjectionOptions = {
   now?: unknown;
 };
 
+export type EdgeClaimDecisionKind = "accept" | "reject" | "defer" | "supersede";
+
+export type EdgeClaimExplainResult = {
+  "valid?": boolean;
+  errors: Array<{ path: unknown[]; error: string; value?: unknown }>;
+};
+
+export type EdgeClaimDecision = {
+  kind: EdgeClaimDecisionKind;
+  reason: string;
+  data: Record<string, unknown>;
+};
+
 export type ProjectedEdgeClaim = {
   source: string;
   target: string;
@@ -60,3 +73,5 @@ export function projectEdgeClaims(claims: EdgeClaimProjectionInput[], options?: 
   edges: ProjectedEdgeClaim[];
   stats: { claims: number; edges: number };
 };
+export function explainEdgeClaim(claim: EdgeClaimProjectionInput): EdgeClaimExplainResult;
+export function evaluateEdgeClaim(claim: EdgeClaimProjectionInput): EdgeClaimDecision;

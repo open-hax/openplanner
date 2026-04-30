@@ -11,7 +11,9 @@
                                :buildEdgeClaimId openplanner.graph.claims.boundary/build-edge-claim-id-js
                                :claimProjectable openplanner.graph.claims.boundary/claim-projectable-js
                                :projectEdgeClaim openplanner.graph.claims.boundary/project-edge-claim-js
-                               :projectEdgeClaims openplanner.graph.claims.boundary/project-edge-claims-js}}}
+                               :projectEdgeClaims openplanner.graph.claims.boundary/project-edge-claims-js
+                               :explainEdgeClaim openplanner.graph.claims.boundary/explain-edge-claim-js
+                               :evaluateEdgeClaim openplanner.graph.claims.boundary/evaluate-edge-claim-js}}}
    :compiler-options {:output-feature-set :es-next}}
 
   :test

@@ -1,7 +1,9 @@
 (ns openplanner.graph.claims.core-test
   (:require [cljs.test :refer [deftest is run-tests]]
             [openplanner.graph.claims.boundary :as boundary]
-            [openplanner.graph.claims.core :as claims]))
+            [openplanner.graph.claims.core :as claims]
+            [openplanner.graph.claims.policy :as policy]
+            [openplanner.graph.claims.schema :as schema]))
 
 (deftest pure-projection-only-accepts-supported-or-active-non-expired-claims
   (let [base {:claim-id "edge_claim:test"
@@ -63,6 +65,48 @@
     (is (= 1 (aget stats "edges")))
     (is (= "edge_claim:one" (aget first-edge "claim_id")))
     (is (= "supported" (aget first-edge "status")))))
+
+(deftest schema-explains-invalid-normalized-claims
+  (let [claim {:claim-id "edge_claim:bad"
+               :source-node-id "node:a"
+               :target-node-id "node:a"
+               :relation-kind "supports"
+               :direction :directed
+               :scope-json "{}"
+               :status :supported
+               :confidence 2}
+        explanation (schema/explain-edge-claim claim)]
+    (is (false? (:valid? explanation)))
+    (is (= #{:self-edge-not-allowed :number-between-zero-and-one}
+           (set (map :error (:errors explanation)))))))
+
+(deftest policy-makes-data-decisions-from-normalized-claims
+  (let [base {:claim-id "edge_claim:policy"
+              :source-node-id "node:a"
+              :target-node-id "node:b"
+              :relation-kind "supports"
+              :direction :directed
+              :scope-json "{}"
+              :scope {}
+              :confidence 0.9}]
+    (is (= :accept (:decision/kind (policy/evaluate-claim (assoc base :status :supported)))))
+    (is (= :reject (:decision/kind (policy/evaluate-claim (assoc base :status :rejected)))))
+    (is (= :defer (:decision/kind (policy/evaluate-claim (assoc base :status :proposed)))))
+    (is (= :supersede (:decision/kind (policy/evaluate-claim (assoc base :status :superseded)))))))
+
+(deftest boundary-exposes-validation-and-policy-decisions
+  (let [claim #js {:claim_id "edge_claim:three"
+                   :source_node_id "node:a"
+                   :target_node_id "node:b"
+                   :relation_kind "supports"
+                   :direction "directed"
+                   :status "supported"
+                   :confidence 1}
+        explanation (boundary/explain-edge-claim-js claim)
+        decision (boundary/evaluate-edge-claim-js claim)]
+    (is (true? (aget explanation "valid?")))
+    (is (= "accept" (aget decision "kind")))
+    (is (= "projectable-status" (aget decision "reason")))))
 
 (defn -main []
   (let [result (run-tests 'openplanner.graph.claims.core-test)]
