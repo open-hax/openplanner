@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
+import { createHash } from "node:crypto";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphEdges } from "../../lib/mongodb.js";
+import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus } from "../../lib/mongodb.js";
 import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import { extractTieredVectorHits } from "../../lib/vector-search.js";
 import { formatEmbeddingQueryText, formatEmbeddingPassageText } from "../../lib/embedding-text.js";
@@ -152,6 +154,102 @@ type GraphNodeEmbeddingCandidate = {
   score?: number;
   embedding?: number[];
 };
+
+const EDGE_CLAIM_STATUSES = [
+  "proposed",
+  "supported",
+  "active",
+  "refuted",
+  "rejected",
+  "superseded",
+  "expired",
+  "withdrawn",
+] as const satisfies readonly GraphEdgeClaimStatus[];
+
+const EDGE_CLAIM_ACTIVE_PROJECTABLE_STATUSES = ["supported", "active"] as const;
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function uniqueStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item ?? "").trim()).filter(Boolean))];
+}
+
+function clampConfidence(value: unknown, fallback = 0.5): number {
+  const numeric = Number(value ?? fallback);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(1, numeric));
+}
+
+export function normalizeEdgeClaimStatus(value: unknown, fallback: GraphEdgeClaimStatus = "proposed"): GraphEdgeClaimStatus {
+  const normalized = String(value ?? "").trim().toLowerCase().replace(/-/g, "_");
+  return EDGE_CLAIM_STATUSES.includes(normalized as GraphEdgeClaimStatus)
+    ? normalized as GraphEdgeClaimStatus
+    : fallback;
+}
+
+export function normalizeEdgeClaimDirection(value: unknown): GraphEdgeClaimDirection {
+  return String(value ?? "").trim().toLowerCase() === "undirected" ? "undirected" : "directed";
+}
+
+export function buildEdgeClaimId(params: {
+  sourceNodeId: string;
+  targetNodeId: string;
+  relationKind: string;
+  direction: GraphEdgeClaimDirection;
+  scope: Record<string, unknown> | null;
+}): string {
+  const left = params.direction === "undirected" && params.targetNodeId < params.sourceNodeId
+    ? params.targetNodeId
+    : params.sourceNodeId;
+  const right = params.direction === "undirected" && params.targetNodeId < params.sourceNodeId
+    ? params.sourceNodeId
+    : params.targetNodeId;
+  const scopeJson = JSON.stringify(params.scope ?? {}, Object.keys(params.scope ?? {}).sort());
+  const digest = createHash("sha256")
+    .update(`${left}\n${right}\n${params.relationKind}\n${params.direction}\n${scopeJson}`)
+    .digest("hex")
+    .slice(0, 24);
+  return `edge_claim:${digest}`;
+}
+
+function normalizeEdgeClaimScope(value: unknown): Record<string, unknown> | null {
+  if (!isPlainRecord(value)) return null;
+  const entries = Object.entries(value)
+    .filter(([, entryValue]) => entryValue !== undefined && entryValue !== null && String(entryValue).trim() !== "")
+    .map(([key, entryValue]) => [key, entryValue] as const);
+  if (entries.length === 0) return null;
+  return Object.fromEntries(entries);
+}
+
+function parseOptionalDate(value: unknown): Date | null {
+  if (value === undefined || value === null || value === "") return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function edgeClaimToApi(row: GraphEdgeClaimDocument): Record<string, unknown> {
+  return {
+    claim_id: row.claim_id,
+    source_node_id: row.source_node_id,
+    target_node_id: row.target_node_id,
+    relation_kind: row.relation_kind,
+    direction: row.direction,
+    scope: row.scope ?? {},
+    status: row.status,
+    confidence: row.confidence,
+    support_event_ids: row.support_event_ids ?? [],
+    refute_event_ids: row.refute_event_ids ?? [],
+    supersedes_claim_ids: row.supersedes_claim_ids ?? [],
+    valid_from: row.valid_from,
+    valid_until: row.valid_until,
+    decay_policy: row.decay_policy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
 
 function sortGraphMemorySeedScores(rows: GraphMemorySeedScore[]): GraphMemorySeedScore[] {
   return rows.sort((a, b) => b.score - a.score);
@@ -1223,6 +1321,203 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }));
 
     return { edges };
+  });
+
+  // ============================================================
+  // Evidence-backed Edge Claims (relation truth candidates)
+  // ============================================================
+
+  app.post("/graph/edge-claims", async (req: any, reply) => {
+    const body = isPlainRecord(req.body) ? req.body : {};
+    let sourceNodeId = String(body.source_node_id ?? body.source ?? "").trim();
+    let targetNodeId = String(body.target_node_id ?? body.target ?? "").trim();
+    const relationKind = String(body.relation_kind ?? body.kind ?? "related_to").trim() || "related_to";
+    const direction = normalizeEdgeClaimDirection(body.direction);
+
+    if (!sourceNodeId || !targetNodeId) {
+      return reply.status(400).send({ error: "source_node_id and target_node_id required" });
+    }
+    if (sourceNodeId === targetNodeId) {
+      return reply.status(400).send({ error: "edge claim source and target must differ" });
+    }
+    if (direction === "undirected" && targetNodeId < sourceNodeId) {
+      [sourceNodeId, targetNodeId] = [targetNodeId, sourceNodeId];
+    }
+
+    const inferredScope = normalizeEdgeClaimScope({
+      tenant_id: body.tenant_id,
+      org_id: body.org_id,
+      project: body.project,
+      lake: body.lake,
+      graph_version: body.graph_version,
+    });
+    const scope = normalizeEdgeClaimScope(body.scope) ?? inferredScope;
+    const claimId = String(body.claim_id ?? "").trim() || buildEdgeClaimId({
+      sourceNodeId,
+      targetNodeId,
+      relationKind,
+      direction,
+      scope,
+    });
+    const now = new Date();
+    const validFrom = parseOptionalDate(body.valid_from) ?? now;
+    const validUntil = parseOptionalDate(body.valid_until);
+    const status = normalizeEdgeClaimStatus(body.status);
+
+    await app.mongo.graphEdgeClaims.updateOne(
+      { _id: claimId },
+      {
+        $set: {
+          claim_id: claimId,
+          source_node_id: sourceNodeId,
+          target_node_id: targetNodeId,
+          relation_kind: relationKind,
+          direction,
+          scope,
+          status,
+          confidence: clampConfidence(body.confidence),
+          support_event_ids: uniqueStrings(body.support_event_ids ?? body.supportEventIds),
+          refute_event_ids: uniqueStrings(body.refute_event_ids ?? body.refuteEventIds),
+          supersedes_claim_ids: uniqueStrings(body.supersedes_claim_ids ?? body.supersedesClaimIds),
+          valid_from: validFrom,
+          valid_until: validUntil,
+          decay_policy: body.decay_policy == null ? null : String(body.decay_policy),
+          updatedAt: now,
+        },
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true },
+    );
+
+    const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
+    return { ok: true, claim: row ? edgeClaimToApi(row) : { claim_id: claimId } };
+  });
+
+  app.get("/graph/edge-claims", async (req: any) => {
+    const nodeId = typeof req.query?.node_id === "string" ? req.query.node_id.trim() : "";
+    const project = typeof req.query?.project === "string" ? req.query.project.trim() : "";
+    const relationKind = typeof req.query?.relation_kind === "string" ? req.query.relation_kind.trim() : "";
+    const statusParam = typeof req.query?.status === "string" ? req.query.status.trim() : "";
+    const statuses = statusParam
+      ? statusParam.split(",").map((value: string) => normalizeEdgeClaimStatus(value)).filter(Boolean)
+      : [];
+    const limit = Math.max(1, Math.min(10000, Number(req.query?.limit ?? 1000)));
+
+    const filter: Record<string, unknown> = {};
+    if (nodeId) {
+      filter.$or = [{ source_node_id: nodeId }, { target_node_id: nodeId }];
+    }
+    if (project) filter["scope.project"] = project;
+    if (relationKind) filter.relation_kind = relationKind;
+    if (statuses.length > 0) filter.status = { $in: statuses };
+
+    const rows = await app.mongo.graphEdgeClaims.find(filter).sort({ updatedAt: -1 }).limit(limit).toArray();
+    return { ok: true, claims: rows.map(edgeClaimToApi) };
+  });
+
+  app.post("/graph/edge-claims/:claim_id/support", async (req: any, reply) => {
+    const claimId = String(req.params?.claim_id ?? "").trim();
+    const body = isPlainRecord(req.body) ? req.body : {};
+    const eventIds = uniqueStrings(body.event_ids ?? body.eventIds ?? body.support_event_ids);
+    const status = normalizeEdgeClaimStatus(body.status, "supported");
+    const now = new Date();
+
+    const result = await app.mongo.graphEdgeClaims.updateOne(
+      { _id: claimId },
+      {
+        $set: {
+          status: status === "active" ? "active" : "supported",
+          confidence: clampConfidence(body.confidence, 0.75),
+          updatedAt: now,
+        },
+        $addToSet: { support_event_ids: { $each: eventIds } },
+      },
+    );
+    if (result.matchedCount === 0) return reply.status(404).send({ error: "edge_claim_not_found" });
+    const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
+    return { ok: true, claim: row ? edgeClaimToApi(row) : null };
+  });
+
+  app.post("/graph/edge-claims/:claim_id/refute", async (req: any, reply) => {
+    const claimId = String(req.params?.claim_id ?? "").trim();
+    const body = isPlainRecord(req.body) ? req.body : {};
+    const eventIds = uniqueStrings(body.event_ids ?? body.eventIds ?? body.refute_event_ids);
+    const now = new Date();
+
+    const result = await app.mongo.graphEdgeClaims.updateOne(
+      { _id: claimId },
+      {
+        $set: {
+          status: "refuted",
+          confidence: clampConfidence(body.confidence, 0),
+          updatedAt: now,
+        },
+        $addToSet: { refute_event_ids: { $each: eventIds } },
+      },
+    );
+    if (result.matchedCount === 0) return reply.status(404).send({ error: "edge_claim_not_found" });
+    const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
+    return { ok: true, claim: row ? edgeClaimToApi(row) : null };
+  });
+
+  app.post("/graph/edge-claims/:claim_id/withdraw", async (req: any, reply) => {
+    const claimId = String(req.params?.claim_id ?? "").trim();
+    const now = new Date();
+    const result = await app.mongo.graphEdgeClaims.updateOne(
+      { _id: claimId },
+      { $set: { status: "withdrawn", updatedAt: now } },
+    );
+    if (result.matchedCount === 0) return reply.status(404).send({ error: "edge_claim_not_found" });
+    const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
+    return { ok: true, claim: row ? edgeClaimToApi(row) : null };
+  });
+
+  app.post("/graph/edge-claims/project", async (req: any) => {
+    const body = isPlainRecord(req.body) ? req.body : {};
+    const nodeIds = uniqueStrings(body.node_ids ?? body.nodeIds);
+    const statuses = uniqueStrings(body.statuses).length > 0
+      ? uniqueStrings(body.statuses).map((value) => normalizeEdgeClaimStatus(value))
+      : [...EDGE_CLAIM_ACTIVE_PROJECTABLE_STATUSES];
+    const relationKinds = uniqueStrings(body.relation_kinds ?? body.relationKinds);
+    const project = String(body.project ?? "").trim();
+    const includeExpired = body.include_expired === true || body.includeExpired === true;
+    const limit = Math.max(1, Math.min(50000, Number(body.limit ?? 10000)));
+    const now = new Date();
+
+    const filter: Record<string, unknown> = { status: { $in: statuses } };
+    if (nodeIds.length > 0) {
+      filter.$or = [
+        { source_node_id: { $in: nodeIds } },
+        { target_node_id: { $in: nodeIds } },
+      ];
+    }
+    if (relationKinds.length > 0) filter.relation_kind = { $in: relationKinds };
+    if (project) filter["scope.project"] = project;
+    if (!includeExpired) {
+      filter.$and = [
+        {
+          $or: [
+            { valid_until: null },
+            { valid_until: { $exists: false } },
+            { valid_until: { $gt: now } },
+          ],
+        },
+      ];
+    }
+
+    const rows = await app.mongo.graphEdgeClaims.find(filter).sort({ confidence: -1, updatedAt: -1 }).limit(limit).toArray();
+    const edges = rows.map((row: GraphEdgeClaimDocument) => ({
+      source: row.source_node_id,
+      target: row.target_node_id,
+      kind: row.relation_kind,
+      claim_id: row.claim_id,
+      confidence: row.confidence,
+      direction: row.direction,
+      scope: row.scope ?? {},
+      status: row.status,
+    }));
+
+    return { ok: true, edges, claims: rows.map(edgeClaimToApi), stats: { claims: rows.length, edges: edges.length } };
   });
 
   // ============================================================

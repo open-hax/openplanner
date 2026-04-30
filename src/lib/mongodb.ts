@@ -238,6 +238,38 @@ export interface GraphEdgeDocument {
   updatedAt: Date;
 }
 
+export type GraphEdgeClaimStatus =
+  | "proposed"
+  | "supported"
+  | "active"
+  | "refuted"
+  | "rejected"
+  | "superseded"
+  | "expired"
+  | "withdrawn";
+
+export type GraphEdgeClaimDirection = "directed" | "undirected";
+
+export interface GraphEdgeClaimDocument {
+  _id: string;
+  claim_id: string;
+  source_node_id: string;
+  target_node_id: string;
+  relation_kind: string;
+  direction: GraphEdgeClaimDirection;
+  scope: Record<string, unknown> | null;
+  status: GraphEdgeClaimStatus;
+  confidence: number;
+  support_event_ids: string[];
+  refute_event_ids: string[];
+  supersedes_claim_ids: string[];
+  valid_from: Date;
+  valid_until: Date | null;
+  decay_policy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GraphClusterMembershipDocument {
   _id: string; // `${clustering_version}::${node_id}`
   node_id: string;
@@ -330,6 +362,7 @@ export interface MongoConnection {
   graphNodeEmbeddings: Collection<GraphNodeEmbeddingDocument>;
   graphSemanticEdges: Collection<GraphSemanticEdgeDocument>;
   graphEdges: Collection<GraphEdgeDocument>;
+  graphEdgeClaims: Collection<GraphEdgeClaimDocument>;
   graphClusterMemberships: Collection<GraphClusterMembershipDocument>;
   semanticGraphRuns: Collection<SemanticGraphRunDocument>;
   migrationJobs: Collection<MigrationJobDocument>;
@@ -359,6 +392,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphNodeEmbeddings = db.collection<GraphNodeEmbeddingDocument>(config.graphNodeEmbeddingCollection);
   const graphSemanticEdges = db.collection<GraphSemanticEdgeDocument>("graph_semantic_edges");
   const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
+  const graphEdgeClaims = db.collection<GraphEdgeClaimDocument>("graph_edge_claims");
   const graphClusterMemberships = db.collection<GraphClusterMembershipDocument>("graph_cluster_memberships");
   const semanticGraphRuns = db.collection<SemanticGraphRunDocument>("semantic_graph_runs");
   const migrationJobs = db.collection<MigrationJobDocument>("migration_jobs");
@@ -432,6 +466,15 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphEdges.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
   await graphEdges.createIndex({ edge_kind: 1, updated_at: -1 as IndexDirection });
   await graphEdges.createIndex({ project: 1, updated_at: -1 as IndexDirection });
+
+  // Evidence-backed edge claims. These are graph truth candidates; semantic
+  // force samples must not be promoted here without explicit evidence.
+  await graphEdgeClaims.createIndex({ claim_id: 1 }, { unique: true });
+  await graphEdgeClaims.createIndex({ source_node_id: 1, status: 1, updatedAt: -1 as IndexDirection });
+  await graphEdgeClaims.createIndex({ target_node_id: 1, status: 1, updatedAt: -1 as IndexDirection });
+  await graphEdgeClaims.createIndex({ relation_kind: 1, status: 1, updatedAt: -1 as IndexDirection });
+  await graphEdgeClaims.createIndex({ "scope.project": 1, status: 1, updatedAt: -1 as IndexDirection });
+  await graphEdgeClaims.createIndex({ valid_until: 1, status: 1 });
 
   // Cluster memberships
   await graphClusterMemberships.createIndex({ node_id: 1 });
@@ -517,6 +560,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphNodeEmbeddings,
     graphSemanticEdges,
     graphEdges,
+    graphEdgeClaims,
     graphClusterMemberships,
     semanticGraphRuns,
     migrationJobs,
