@@ -1,4 +1,6 @@
 import http from "node:http";
+import { createHash } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -114,6 +116,17 @@ function downsampleSnapshot(
     edges = sampleByStride([...edges].sort((a, b) => a.id.localeCompare(b.id)), opts.maxEdges);
   }
 
+  if (edges.length === 0) {
+    return {
+      nodes: sampleByStride(snapshot.nodes, opts.maxNodes),
+      edges,
+      sampledNodes: snapshot.nodes.length > opts.maxNodes,
+      sampledEdges,
+      totalNodes,
+      totalEdges,
+    };
+  }
+
   const computeKeep = (rows: Array<{ source: string; target: string }>) => {
     const keep = new Set<string>();
     for (const e of rows) {
@@ -134,6 +147,11 @@ function downsampleSnapshot(
 
   let nodes = snapshot.nodes.filter((n) => keep.has(n.id));
   let sampledNodes = nodes.length < totalNodes;
+
+  if (nodes.length === 0 && snapshot.nodes.length > 0) {
+    nodes = sampleByStride(snapshot.nodes, opts.maxNodes);
+    sampledNodes = snapshot.nodes.length > opts.maxNodes;
+  }
 
   // IMPORTANT: Do NOT fill up to maxNodes with nodes that have no retained edges.
   // Those degree-0 nodes will render as visually-stable "rings" (repulsion + boundary)
@@ -180,6 +198,146 @@ function posFromData(data: unknown): { x: number; y: number } | null {
     return { x, y };
   }
   return null;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function dataObject(data: unknown): Record<string, unknown> {
+  return data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
+}
+
+function semanticEdgeId(source: string, target: string): string {
+  const ordered = source < target ? `${source}\n${target}` : `${target}\n${source}`;
+  const hash = createHash("sha256").update(ordered).digest("hex").slice(0, 24);
+  return `semantic:${hash}`;
+}
+
+function semanticConductance(similarity: number, reinforcement = 1): number {
+  return Math.max(0, clamp(similarity, -1, 1)) * Math.max(0, reinforcement);
+}
+
+function semanticEdgeDecayedData(edge: GraphEdge, now: Date): Record<string, unknown> {
+  const data = dataObject(edge.data);
+  const last = new Date(String(data.last_reinforced_at ?? data.created_at ?? now.toISOString()));
+  const halfLifeMs = Math.max(1, numberOr(data.decay_half_life_ms, 60 * 60 * 1000));
+  const ageMs = Math.max(0, now.getTime() - last.getTime());
+  const current = Math.max(0, numberOr(data.conductance, Math.max(0, numberOr(data.similarity, 0))));
+  return {
+    ...data,
+    conductance: current * Math.pow(0.5, ageMs / halfLifeMs),
+    decayed_at: now.toISOString(),
+  };
+}
+
+function buildHostResourcePresenceSnapshot(): GraphSnapshot {
+  const now = new Date().toISOString();
+  const hostId = `presence:resource:host:${os.hostname()}`;
+  const nodes: GraphNode[] = [
+    {
+      id: hostId,
+      kind: "presence",
+      label: `host:${os.hostname()}`,
+      external: false,
+      loadedByDefault: true,
+      layer: "presence",
+      data: {
+        presence_class: "resource",
+        resource_kind: "host",
+        saturation: 0,
+        emission_threshold: 1,
+        refractory_ms: 1000,
+        archived: false,
+        observed_at: now,
+      },
+    },
+    {
+      id: "presence:resource:ram",
+      kind: "presence",
+      label: "RAM",
+      external: false,
+      loadedByDefault: true,
+      layer: "presence",
+      data: {
+        presence_class: "resource",
+        resource_kind: "ram",
+        saturation: 1 - (os.freemem() / Math.max(1, os.totalmem())),
+        emission_threshold: 0.85,
+        refractory_ms: 2500,
+        total_bytes: os.totalmem(),
+        free_bytes: os.freemem(),
+        archived: false,
+        observed_at: now,
+      },
+    },
+  ];
+
+  const cpuInfos = os.cpus();
+  for (const [index, cpu] of cpuInfos.entries()) {
+    nodes.push({
+      id: `presence:resource:cpu:${index}`,
+      kind: "presence",
+      label: `CPU ${index}`,
+      external: false,
+      loadedByDefault: true,
+      layer: "presence",
+      data: {
+        presence_class: "resource",
+        resource_kind: "cpu_core",
+        cpu_index: index,
+        cpu_model: cpu.model,
+        saturation: 0,
+        emission_threshold: 1,
+        refractory_ms: 1000,
+        archived: false,
+        observed_at: now,
+      },
+    });
+  }
+
+  const acceleratorKinds = String(process.env.GRAPH_WEAVER_RESOURCE_PRESENCES || "npu,gpu:0,gpu:1")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  for (const kind of acceleratorKinds) {
+    const normalized = kind.replace(/[^a-zA-Z0-9:_-]+/g, "_").toLowerCase();
+    nodes.push({
+      id: `presence:resource:${normalized}`,
+      kind: "presence",
+      label: kind.toUpperCase(),
+      external: false,
+      loadedByDefault: true,
+      layer: "presence",
+      data: {
+        presence_class: "resource",
+        resource_kind: normalized.split(":")[0] || normalized,
+        saturation: 0,
+        emission_threshold: 1,
+        refractory_ms: 1500,
+        archived: false,
+        observed_at: now,
+      },
+    });
+  }
+
+  const edges: GraphEdge[] = nodes
+    .filter((node) => node.id !== hostId)
+    .map((node) => ({
+      id: `${hostId}=>${node.id}:presence_contains`,
+      source: hostId,
+      target: node.id,
+      kind: "presence_contains",
+      layer: "presence",
+      data: { observed_at: now },
+    }));
+
+  return { nodes, edges };
 }
 
 function safeResolveUnderRoot(rootDir: string, relPath: string): string | null {
@@ -284,6 +442,13 @@ async function main(): Promise<void> {
         }
       }
     }
+  }
+
+  const resourcePresenceSnapshot = buildHostResourcePresenceSnapshot();
+  loadSnapshotIntoStore(userStore, resourcePresenceSnapshot);
+  if (mongoGraph) {
+    await mongoGraph.bulkUpsertNodes("user", resourcePresenceSnapshot.nodes);
+    await mongoGraph.bulkUpsertEdges("user", resourcePresenceSnapshot.edges);
   }
 
   // --- revision + WS broadcast + combined cache
@@ -798,6 +963,40 @@ async function main(): Promise<void> {
     return getCombinedStore().searchNodes(query, limit);
   };
 
+  const listPresenceNodes = (filter: { class?: string; includeArchived: boolean; limit: number }) => {
+    const out: GraphNode[] = [];
+    const klass = String(filter.class ?? "").trim().toLowerCase();
+    for (const node of getCombinedStore().nodes()) {
+      const data = dataObject(node.data);
+      if (node.kind !== "presence" && node.layer !== "presence" && typeof data.presence_class !== "string") continue;
+      const presenceClass = String(data.presence_class ?? data.class ?? "transient").toLowerCase();
+      if (klass && presenceClass !== klass) continue;
+      if (!filter.includeArchived && data.archived === true) continue;
+      out.push(node);
+      if (out.length >= filter.limit) break;
+    }
+    return out;
+  };
+
+  const listSemanticEdges = (filter: { status?: string; minSimilarity?: number; limit: number }) => {
+    const out: GraphEdge[] = [];
+    const status = String(filter.status ?? "").trim().toLowerCase();
+    const minSimilarity = typeof filter.minSimilarity === "number" ? filter.minSimilarity : -1;
+    for (const edge of getCombinedStore().edges()) {
+      const data = dataObject(edge.data);
+      const isSemantic = edge.layer === "semantic" || edge.kind === "semantic_similarity" || edge.kind === "semantic_knn";
+      if (!isSemantic) continue;
+      const similarity = Number(data.similarity);
+      if (!Number.isFinite(similarity)) continue;
+      if (similarity < minSimilarity) continue;
+      const edgeStatus = String(data.status ?? "active").toLowerCase();
+      if (status && edgeStatus !== status) continue;
+      out.push(edge);
+      if (out.length >= filter.limit) break;
+    }
+    return out;
+  };
+
   const nodePreview = async (id: string, maxBytes: number): Promise<NodePreview | null> => {
     const node = getCombinedStore().getNode(id);
     if (!node) return null;
@@ -1010,6 +1209,170 @@ async function main(): Promise<void> {
     return userStore.getEdge(edge.id)!;
   };
 
+  const upsertPresenceNode = async (input: {
+    id: string;
+    class: string;
+    label?: string;
+    resourceKind?: string;
+    saturation?: number;
+    emissionThreshold?: number;
+    refractoryMs?: number;
+    lastEmissionAt?: string | null;
+    archived?: boolean;
+    data?: Record<string, unknown>;
+  }) => {
+    const id = String(input.id || "").trim();
+    if (!id) throw new Error("presence id is required");
+    const presenceClass = String(input.class || "transient").trim().toLowerCase();
+    if (!presenceClass) throw new Error("presence class is required");
+
+    const prev = userStore.getNode(id);
+    const prevData = dataObject(prev?.data);
+    const data = {
+      ...prevData,
+      ...(input.data ?? {}),
+      presence_class: presenceClass,
+      resource_kind: input.resourceKind ?? prevData.resource_kind ?? null,
+      saturation: clamp(numberOr(input.saturation, numberOr(prevData.saturation, 0)), 0, 1_000_000),
+      emission_threshold: Math.max(0, numberOr(input.emissionThreshold, numberOr(prevData.emission_threshold, 1))),
+      refractory_ms: Math.max(0, Math.floor(numberOr(input.refractoryMs, numberOr(prevData.refractory_ms, 1000)))),
+      last_emission_at: input.lastEmissionAt ?? prevData.last_emission_at ?? null,
+      archived: input.archived ?? prevData.archived === true,
+      updated_at: new Date().toISOString(),
+    } as Record<string, unknown>;
+
+    const node: GraphNode = {
+      id,
+      kind: "presence",
+      label: input.label ?? prev?.label ?? id,
+      external: false,
+      loadedByDefault: true,
+      layer: "presence",
+      data,
+    };
+    userStore.upsertNode(node);
+    const stored = userStore.getNode(id)!;
+    if (mongoGraph) {
+      await mongoGraph.upsertNode("user", stored);
+    }
+    markDirty();
+    return stored;
+  };
+
+  const reinforceSemanticEdge = async (input: {
+    source: string;
+    target: string;
+    similarity: number;
+    daimoiId?: string;
+    reinforcement?: number;
+    decayHalfLifeMs?: number;
+    now?: string;
+    data?: Record<string, unknown>;
+  }) => {
+    const source = String(input.source || "").trim();
+    const target = String(input.target || "").trim();
+    if (!source || !target) throw new Error("semantic edge source and target are required");
+    if (source === target) throw new Error("semantic edge endpoints must differ");
+    const similarity = Number(input.similarity);
+    if (!Number.isFinite(similarity) || similarity < -1 || similarity > 1) {
+      throw new Error("semantic edge similarity must be a cosine score in [-1, 1]");
+    }
+
+    const createdA = ensureNodeExistsForEdge(source);
+    const createdB = ensureNodeExistsForEdge(target);
+    const id = semanticEdgeId(source, target);
+    const now = input.now ? new Date(input.now) : new Date();
+    if (Number.isNaN(now.getTime())) throw new Error("semantic edge now must be an ISO timestamp");
+
+    const prev = userStore.getEdge(id) ?? getCombinedStore().getEdge(id);
+    const prevData = dataObject(prev?.data);
+    const reinforcement = Math.max(0, numberOr(input.reinforcement, 1));
+    const priorConductance = Math.max(0, numberOr(prevData.conductance, Math.max(0, numberOr(prevData.similarity, 0))));
+    const conductance = priorConductance + semanticConductance(similarity, reinforcement);
+    const data = {
+      ...prevData,
+      ...(input.data ?? {}),
+      semantic_edge_model: "transient_circuit_v1",
+      similarity,
+      conductance,
+      resistance: conductance > 0 ? 1 / conductance : 1_000_000_000,
+      status: "active",
+      transient: true,
+      daimoi_ids: [...new Set([...(Array.isArray(prevData.daimoi_ids) ? prevData.daimoi_ids.map(String) : []), ...(input.daimoiId ? [input.daimoiId] : [])])],
+      reinforcement_count: Math.max(0, Math.floor(numberOr(prevData.reinforcement_count, 0))) + 1,
+      last_reinforced_at: now.toISOString(),
+      decay_half_life_ms: Math.max(1, Math.floor(numberOr(input.decayHalfLifeMs, numberOr(prevData.decay_half_life_ms, 60 * 60 * 1000)))),
+      updated_at: now.toISOString(),
+      created_at: prevData.created_at ?? now.toISOString(),
+    } as Record<string, unknown>;
+
+    const edge: GraphEdge = {
+      id,
+      source,
+      target,
+      kind: "semantic_similarity",
+      layer: "semantic",
+      data,
+    };
+    userStore.upsertEdge(edge);
+    const writes: Promise<void>[] = [];
+    const touchedNodes = [createdA, createdB].filter((node): node is GraphNode => !!node);
+    if (mongoGraph) {
+      if (touchedNodes.length > 0) writes.push(mongoGraph.bulkUpsertNodes("user", touchedNodes));
+      writes.push(mongoGraph.upsertEdge("user", userStore.getEdge(edge.id)!));
+    }
+    await Promise.all(writes);
+    markDirty();
+    return userStore.getEdge(edge.id)!;
+  };
+
+  const decaySemanticEdges = async (input: { now?: string; breakBelow?: number; pruneBelow?: number }) => {
+    const now = input.now ? new Date(input.now) : new Date();
+    if (Number.isNaN(now.getTime())) throw new Error("semantic edge decay timestamp must be ISO");
+    const breakBelow = Math.max(0, numberOr(input.breakBelow, 0.05));
+    const pruneBelow = Math.max(0, numberOr(input.pruneBelow, 0.005));
+    let checked = 0;
+    let weakened = 0;
+    let broken = 0;
+    let pruned = 0;
+    const changedEdges: GraphEdge[] = [];
+
+    for (const edge of [...userStore.edges()]) {
+      if (edge.kind !== "semantic_similarity" && edge.layer !== "semantic") continue;
+      const data = semanticEdgeDecayedData(edge, now);
+      if (!Number.isFinite(Number(data.similarity))) continue;
+      checked += 1;
+      const conductance = Math.max(0, numberOr(data.conductance, 0));
+      if (conductance <= pruneBelow) {
+        if (userStore.removeEdge(edge.id)) {
+          pruned += 1;
+          if (mongoGraph) await mongoGraph.removeEdge("user", edge.id);
+        }
+        continue;
+      }
+      weakened += 1;
+      if (conductance <= breakBelow) {
+        data.status = "broken";
+        broken += 1;
+      }
+      const next: GraphEdge = {
+        ...edge,
+        data: {
+          ...data,
+          resistance: conductance > 0 ? 1 / conductance : 1_000_000_000,
+        },
+      };
+      userStore.upsertEdge(next);
+      changedEdges.push(userStore.getEdge(next.id)!);
+    }
+
+    if (mongoGraph && changedEdges.length > 0) {
+      await mongoGraph.bulkUpsertEdges("user", changedEdges);
+    }
+    if (weakened > 0 || pruned > 0) markDirty();
+    return { checked, weakened, broken, pruned };
+  };
+
   const removeUserNode = async (id: string): Promise<boolean> => {
     const ok = userStore.removeNode(id);
     if (ok && mongoGraph) {
@@ -1076,11 +1439,16 @@ async function main(): Promise<void> {
     listEdges,
     neighbors,
     searchNodes,
+    listPresenceNodes,
+    listSemanticEdges,
     nodePreview,
     rescanNow,
     seedUrls,
     upsertUserNode,
     upsertUserEdge,
+    upsertPresenceNode,
+    reinforceSemanticEdge,
+    decaySemanticEdges,
     removeUserNode,
     removeUserEdge,
     layoutUpsertPositions,

@@ -37,6 +37,9 @@ const LAYER_COLORS = {
   local: [0.42, 0.82, 0.98, 0.95],
   web: [0.36, 0.94, 0.72, 0.94],
   user: [0.98, 0.56, 0.42, 0.94],
+  semantic: [1.0, 0.38, 0.9, 0.9],
+  presence: [1.0, 0.92, 0.36, 0.96],
+  transient: [0.98, 0.72, 1.0, 0.88],
   unknown: [0.68, 0.78, 0.92, 0.88],
 };
 
@@ -44,6 +47,10 @@ const NODE_STYLES = {
   file: { sizePx: 6.6, color: [0.42, 0.84, 1.0, 0.98] },
   url: { sizePx: 7.6, color: [1.0, 0.46, 0.9, 0.98] },
   dep: { sizePx: 6.5, color: [1.0, 0.78, 0.36, 0.98] },
+  presence: { sizePx: 12.5, color: [1.0, 0.92, 0.26, 1.0] },
+  resource: { sizePx: 11.5, color: [0.36, 1.0, 0.72, 1.0] },
+  muse: { sizePx: 13.5, color: [1.0, 0.46, 1.0, 1.0] },
+  transient: { sizePx: 9.5, color: [0.98, 0.72, 1.0, 0.96] },
   default: { sizePx: 6.1, color: [0.68, 0.9, 0.98, 0.95] },
 };
 
@@ -56,7 +63,8 @@ const EDGE_COLORS = {
   user: [1.0, 0.56, 0.46, 0.24],
   observes: [1.0, 0.92, 0.58, 0.26],
   semantic_knn: [1.0, 0.38, 0.9, 0.18],
-  semantic_similarity: [1.0, 0.38, 0.9, 0.16],
+  semantic_similarity: [1.0, 0.38, 0.9, 0.32],
+  semantic_transient: [1.0, 0.72, 0.28, 0.38],
   code_dependency: [0.52, 0.82, 1.0, 0.28],
   local_markdown_link: [0.6, 0.96, 0.84, 0.22],
   external_web_link: [1.0, 0.68, 0.46, 0.24],
@@ -113,7 +121,9 @@ function inferLayer(item) {
 }
 
 function inferNodeKind(node) {
-  return node?.kind || "node";
+  const kind = node?.kind || "node";
+  if (kind === "presence") return node?.data?.presence_class || "presence";
+  return kind;
 }
 
 function inferEdgeKind(edge) {
@@ -124,9 +134,11 @@ function nodeStyleForKind(kind) {
   return NODE_STYLES[kind] || NODE_STYLES.default;
 }
 
-function edgeColorForKind(kind, alphaScale = 1) {
+function edgeColorForKind(kind, alphaScale = 1, edge = null) {
   const [r, g, b, a] = EDGE_COLORS[kind] || EDGE_COLORS.default;
-  return [r, g, b, a * alphaScale];
+  const conductance = Number(edge?.data?.conductance ?? edge?.data?.similarity ?? 0);
+  const semanticBoost = kind?.startsWith?.("semantic") ? Math.max(0.25, Math.min(1.6, 0.45 + conductance)) : 1;
+  return [r, g, b, Math.min(0.95, a * alphaScale * semanticBoost)];
 }
 
 function shortNode(id) {
@@ -255,7 +267,7 @@ const view = new WebGLGraphView(canvas, {
     // Auto-dim edges when you crank up render edges.
     // (Without this, 100k+ edges becomes a bright wall and hides the nodes.)
     const aMul = edgeAlphaScale;
-    const color = edgeColorForKind(inferEdgeKind(edge), aMul);
+    const color = edgeColorForKind(inferEdgeKind(edge), aMul, edge);
     return { color: rgba(...color) };
   },
 });
@@ -500,6 +512,9 @@ async function loadGraph() {
       label: n.label,
       x: n.x,
       y: n.y,
+      external: n.external,
+      loadedByDefault: n.loadedByDefault,
+      layer: n.layer,
       data: parseDataJson(n.dataJson) ?? n,
     })),
     edges: g.edges.map((e) => ({
