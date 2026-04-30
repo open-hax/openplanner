@@ -1,0 +1,428 @@
+# Semantic Gravity and Daimoi Query Runtime
+
+## Status
+
+Draft
+
+## Summary
+
+Recover the original graph-runtime intent from the `fork_tales` lineage: semantic
+similarity is a **force**, not a durable graph edge. OpenPlanner should keep
+owning durable graph truth, vector seed search, external query APIs, tenants, and
+receipts; the runtime should turn a query into bounded daimoi that fill and
+explore a projected graph through semantic gravity, structural evidence, active
+presences, and resource pressure.
+
+This spec supersedes the idea that `graph_semantic_edges` are canonical graph
+truth. Existing semantic-edge tables may remain as compatibility or force-cache
+surfaces, but they must not be treated as evidence-backed relation claims.
+
+## Problem statement
+
+OpenPlanner absorbed graph/runtime work that originally lived in `fork_tales`.
+During that migration, one concept drifted:
+
+```text
+semantic similarity -> persisted semantic edges -> graph truth / retrieval index
+```
+
+The intended model was closer to:
+
+```text
+semantic similarity -> semantic charge / gravity -> layout and daimoi motion
+structural evidence  -> edge claims         -> projected graph truth
+query vector         -> seed nodes          -> daimoi-filled active subgraph
+```
+
+The current semantic-edge path has three problems:
+
+1. **Similarity is not evidence.** A high cosine score does not prove that two
+   nodes have a relation; it only says they are near under a model.
+2. **Edges only accrete.** There is no first-class lifecycle for forgetting,
+   disconfirming, withdrawing, expiring, or superseding an edge claim.
+3. **Queries stop too early.** Initial vector search finds starting nodes, but it
+   does not yet instantiate a runtime process that occupies and illuminates the
+   graph.
+
+## Design rule
+
+An edge is a claim about relation.
+Semantic similarity is a force.
+Daimoi are query-born packets that test and illuminate the current graph
+projection.
+
+## Non-goals
+
+- Deleting legacy `graph_semantic_edges` immediately.
+- Treating daimoi trails as permanent facts by default.
+- Replacing OpenPlanner vector search; vector search remains the seed finder.
+- Making the layout engine the source of graph truth.
+- Requiring a whole-runtime rewrite before the ontology is corrected.
+
+## Core model
+
+### 1. TruthGraph
+
+OpenPlanner's append-only evidence base.
+
+Owns:
+
+- raw event envelopes,
+- document/source records,
+- immutable observations,
+- provenance edges,
+- receipts and attestations,
+- embedding records,
+- claim evidence.
+
+TruthGraph does not forget. It records later observations that may supersede,
+refute, or expire older beliefs.
+
+### 2. EdgeClaimGraph
+
+A claim layer over TruthGraph.
+
+An edge claim says that a relation should exist between two nodes under a named
+relation kind and scope.
+
+Suggested state machine:
+
+```text
+proposed -> supported -> active
+   |          |           |
+   |          |           +-> superseded
+   |          |           +-> expired
+   |          |           +-> withdrawn
+   |          +-> refuted
+   +-> rejected
+```
+
+Suggested record shape:
+
+```ts
+type EdgeClaim = {
+  claim_id: string;
+  source_node_id: string;
+  target_node_id: string;
+  relation_kind: string;
+  direction: "directed" | "undirected";
+  scope: {
+    tenant_id?: string;
+    project?: string;
+    lake?: string;
+    graph_version?: string;
+  };
+  status:
+    | "proposed"
+    | "supported"
+    | "active"
+    | "refuted"
+    | "rejected"
+    | "superseded"
+    | "expired"
+    | "withdrawn";
+  confidence: number;
+  support_event_ids: string[];
+  refute_event_ids: string[];
+  supersedes_claim_ids?: string[];
+  valid_from: string;
+  valid_until?: string | null;
+  decay_policy?: string;
+  created_at: string;
+  updated_at: string;
+};
+```
+
+### 3. ViewGraph
+
+A query/runtime projection of TruthGraph plus the active EdgeClaimGraph.
+
+Owns:
+
+- active structural/provenance edges,
+- active edge claims,
+- current graph-layout coordinates,
+- coarsened bundles and reconstruction ledgers,
+- local resource/pressure overlays,
+- active query fills.
+
+ViewGraph may forget by projection: old, refuted, low-confidence, stale, or
+out-of-scope edge claims can disappear from the active view without deleting the
+underlying evidence.
+
+### 4. SemanticGravityField
+
+A force layer derived from embeddings and active nodes.
+
+Semantic gravity is not persisted as graph truth. It may be cached as sampled
+force data or pair scores.
+
+Suggested force semantics:
+
+- high similarity attracts,
+- strong dissimilarity repels when locally close,
+- neutral similarity contributes little or no force,
+- attraction/repulsion depends on model, field profile, distance, and query
+  intent,
+- force caches are invalidated by embedding model, dimensions, node set, and
+  field version.
+
+Suggested cache names:
+
+```text
+semantic_force_samples
+semantic_charge_cache
+layout_force_cache
+```
+
+Legacy `graph_semantic_edges` may be read as `semantic_force_cache_legacy` during
+migration, but new graph truth should not depend on it.
+
+### 5. PresenceRuntime
+
+Presences are policy-bearing influences with purpose embeddings, masks, needs,
+priority, mass, budgets, and allowed actions.
+
+A presence projects gravity wells over ViewGraph nodes:
+
+```text
+Phi_p(n, k) = mass_p * need_p(k) * sim(purpose_p, embedding(n)) * locality(p, n)
+```
+
+Presences do not mutate TruthGraph directly. They emit proposals, observations,
+attestations, or bounded runtime actions according to policy.
+
+### 6. DaimoiRuntime
+
+Daimoi are probabilistic query/message packets.
+
+A daimoi carries:
+
+- owner/query id,
+- source seed node,
+- optional destination or objective,
+- affinity embedding,
+- payload or intent,
+- weight / budget,
+- randomness,
+- current graph location,
+- trail,
+- observation events.
+
+Daimoi move through the ViewGraph by combining:
+
+1. structural edge availability,
+2. active edge-claim confidence,
+3. semantic gravity,
+4. presence wells,
+5. pressure/congestion,
+6. random exploration,
+7. policy constraints.
+
+Daimoi trails are observations. They may support future claims only through an
+explicit claim/evidence promotion step.
+
+## Query flow
+
+```text
+1. Client submits graph query Q.
+2. OpenPlanner embeds Q.
+3. Vector search finds seed nodes.
+4. OpenPlanner compiles a bounded ViewGraph around the seeds.
+5. Runtime emits query daimoi at seed nodes.
+6. Daimoi traverse, collide, branch, absorb, and deposit activation.
+7. Runtime returns an active filled subgraph, trails, scores, and explanation.
+8. Optional: selected trails are promoted into observations or edge-claim support.
+```
+
+A query result is not merely a nearest-neighbor list. It is the stable illuminated
+region produced when query daimoi flow through the current graph projection.
+
+## API contract sketch
+
+### Seed search remains OpenPlanner-owned
+
+```http
+POST /v1/graph/query/seeds
+```
+
+Input:
+
+```json
+{
+  "q": "where did semantic gravity come from?",
+  "k": 12,
+  "tenant_id": "default",
+  "project": "openplanner"
+}
+```
+
+Output:
+
+```json
+{
+  "query_id": "query_...",
+  "embedding_model": "...",
+  "seeds": [
+    { "node_id": "...", "score": 0.82, "source": "vector" }
+  ]
+}
+```
+
+### Daimoi fill query
+
+```http
+POST /v1/graph/query/fill
+```
+
+Input:
+
+```json
+{
+  "query_id": "query_...",
+  "seed_node_ids": ["node:a", "node:b"],
+  "budget": {
+    "max_daimoi": 256,
+    "max_steps": 64,
+    "max_wall_ms": 1200
+  },
+  "policy": {
+    "edge_views": ["active_claims", "structural", "provenance"],
+    "semantic_gravity": true,
+    "allow_exploration": true
+  }
+}
+```
+
+Output:
+
+```json
+{
+  "query_id": "query_...",
+  "viewgraph_version": "view_...",
+  "filled_nodes": [
+    { "node_id": "node:a", "activation": 0.91, "reasons": ["seed", "trail"] }
+  ],
+  "filled_edges": [
+    { "source": "node:a", "target": "node:c", "activation": 0.44, "claim_id": "claim_..." }
+  ],
+  "trails": [
+    { "daimoi_id": "d_...", "nodes": ["node:a", "node:c"], "weight": 0.33 }
+  ],
+  "explanation": {
+    "seed_count": 2,
+    "daimoi_emitted": 64,
+    "edge_claims_used": 19,
+    "semantic_force_samples": 441
+  }
+}
+```
+
+### Edge claim lifecycle
+
+```http
+POST /v1/graph/edge-claims
+GET  /v1/graph/edge-claims?node_id=...
+POST /v1/graph/edge-claims/:claim_id/support
+POST /v1/graph/edge-claims/:claim_id/refute
+POST /v1/graph/edge-claims/:claim_id/withdraw
+POST /v1/graph/edge-claims/project
+```
+
+Projection endpoint returns the active ViewGraph edge set for a scope and policy.
+
+## Vexx role
+
+Vexx should be treated as the semantic-force fast lane.
+
+Near-term acceptable roles:
+
+- exact pairwise similarity for selected node pairs,
+- slab-backed score batches,
+- local semantic charge matrix over a bounded active ViewGraph,
+- force-cache refresh for visible/query-active nodes.
+
+Vexx should not be described as the product-level ANN search engine. OpenPlanner
+may still use vector search for seeding, but Vexx's architectural role is to
+accelerate semantic gravity and charge calculations.
+
+## Migration plan
+
+### Phase 0 — Documentation and naming
+
+- Land this spec.
+- Mark semantic edges as provisional/legacy in OpenPlanner docs.
+- Update graph-stack docs to distinguish relation edges from force samples.
+
+### Phase 1 — Edge claims
+
+- Add edge-claim records and lifecycle endpoints.
+- Stop adding new durable relation meaning to `graph_semantic_edges`.
+- Keep legacy semantic edges available as a compatibility input.
+
+### Phase 2 — Semantic force cache
+
+- Add a semantic-force cache keyed by embedding model, dimensions, node ids, and
+  field profile.
+- Teach layout code to consume force samples instead of canonical semantic edges.
+- Rename UI/API labels away from "semantic edge" where possible.
+
+### Phase 3 — Query daimoi runtime
+
+- Implement `/v1/graph/query/seeds` using current vector search.
+- Implement a bounded in-process fill runtime over a small ViewGraph.
+- Emit query fill telemetry as append-only observations.
+
+### Phase 4 — Presence integration
+
+- Add presence wells to query fill scoring.
+- Allow Knoxx/promptdb actors to propose edge-claim support/refutation using
+  observed daimoi trails and external evidence.
+
+### Phase 5 — Fork Tales absorption
+
+- Port the useful fork_tales particle/field concepts behind the new contracts.
+- Do not import narrative/lore dressing as core API names unless it names a real
+  runtime primitive.
+- Preserve source maps to fork_tales files/specs for archaeology.
+
+## Compatibility rules
+
+- Existing `graph_semantic_edges` reads may continue until the force-cache path
+  exists.
+- New relation-like graph APIs should prefer `edge_claims` and projection views.
+- If a response includes legacy semantic edges, it must mark them as
+  `kind: "semantic_force_legacy"` or equivalent.
+- No silent fallback from active edge-claim projection to legacy semantic edges.
+
+## Verification
+
+- A high-similarity pair can influence layout without creating an active relation
+  edge claim.
+- A refuted edge claim disappears from ViewGraph projection but remains in
+  TruthGraph evidence history.
+- A query can return a filled subgraph whose top nodes are not only the initial
+  vector nearest neighbors.
+- Daimoi trail observations are persisted separately from edge claims.
+- Vexx can be used to score selected active ViewGraph pairs without persisting
+  those scores as relation edges.
+
+## Definition of done
+
+- OpenPlanner docs no longer present semantic edges as canonical graph truth.
+- Edge claim lifecycle exists with support/refute/withdraw/expire semantics.
+- Query seed search and query fill are separate concepts.
+- A bounded daimoi fill over a seed neighborhood returns nodes, edges, trails,
+  activations, and explanations.
+- Legacy semantic-edge storage is either renamed, wrapped, or explicitly marked
+  as force-cache compatibility.
+
+## Related sources
+
+- `specs/2026-04-07-semantic-graph-builder-and-vexx-boundary-reduction.md`
+- `pseudo/graph-runtime/SPEC.md`
+- `pseudo/graph-runtime/specs/runtime-surfaces.md`
+- `pseudo/graph-runtime/docs/FORK_TALES_SOURCE_MAP.md`
+- `packages/graph/eros-eris-field/README.md`
+- `packages/graph/eros-eris-field/src/sim.ts`
+- `orgs/shuv/fork_tales/part64/code/world_web/particle_probabilistic.py`
