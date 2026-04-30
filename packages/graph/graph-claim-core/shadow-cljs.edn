@@ -4,7 +4,8 @@
  {:lib
   {:target :esm
    :output-dir "dist"
-   :modules {:index {:entries [openplanner.graph.claims.boundary]
+   :modules {:index {:entries [openplanner.graph.claims.boundary
+                                      openplanner.graph.claims.adapters.mongo]
                      :exports {:normalizeEdgeClaimStatus openplanner.graph.claims.boundary/normalize-edge-claim-status-js
                                :normalizeEdgeClaimDirection openplanner.graph.claims.boundary/normalize-edge-claim-direction-js
                                :normalizeEdgeClaimScope openplanner.graph.claims.boundary/normalize-edge-claim-scope-js
@@ -13,7 +14,8 @@
                                :projectEdgeClaim openplanner.graph.claims.boundary/project-edge-claim-js
                                :projectEdgeClaims openplanner.graph.claims.boundary/project-edge-claims-js
                                :explainEdgeClaim openplanner.graph.claims.boundary/explain-edge-claim-js
-                               :evaluateEdgeClaim openplanner.graph.claims.boundary/evaluate-edge-claim-js}}}
+                               :evaluateEdgeClaim openplanner.graph.claims.boundary/evaluate-edge-claim-js
+                               :projectMongoEdgeClaims openplanner.graph.claims.adapters.mongo/project-mongo-edge-claims-js}}}
    :compiler-options {:output-feature-set :es-next}}
 
   :test

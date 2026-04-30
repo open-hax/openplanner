@@ -1,5 +1,6 @@
 (ns openplanner.graph.claims.core-test
   (:require [cljs.test :refer [deftest is run-tests]]
+            [openplanner.graph.claims.adapters.mongo :as mongo]
             [openplanner.graph.claims.boundary :as boundary]
             [openplanner.graph.claims.core :as claims]
             [openplanner.graph.claims.policy :as policy]
@@ -93,6 +94,22 @@
     (is (= :reject (:decision/kind (policy/evaluate-claim (assoc base :status :rejected)))))
     (is (= :defer (:decision/kind (policy/evaluate-claim (assoc base :status :proposed)))))
     (is (= :supersede (:decision/kind (policy/evaluate-claim (assoc base :status :superseded)))))))
+
+(deftest mongo-adapter-projects-row-like-js-documents
+  (let [rows #js [#js {:_id "edge_claim:row"
+                       :claim_id "edge_claim:row"
+                       :source_node_id "node:a"
+                       :target_node_id "node:b"
+                       :relation_kind "supports"
+                       :direction "directed"
+                       :status "active"
+                       :confidence 0.7
+                       :scope #js {:project "devel"}
+                       :valid_until nil}]
+        result (mongo/project-mongo-edge-claims-js rows #js {:now "2026-01-01T00:00:00.000Z"})
+        edges (aget result "edges")]
+    (is (= 1 (aget (aget result "stats") "edges")))
+    (is (= "edge_claim:row" (aget (aget edges 0) "claim_id")))))
 
 (deftest boundary-exposes-validation-and-policy-decisions
   (let [claim #js {:claim_id "edge_claim:three"

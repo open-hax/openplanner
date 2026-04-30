@@ -73,5 +73,9 @@ export function projectEdgeClaims(claims: EdgeClaimProjectionInput[], options?: 
   edges: ProjectedEdgeClaim[];
   stats: { claims: number; edges: number };
 };
+export function projectMongoEdgeClaims(claims: EdgeClaimProjectionInput[], options?: EdgeClaimProjectionOptions): {
+  edges: ProjectedEdgeClaim[];
+  stats: { claims: number; edges: number };
+};
 export function explainEdgeClaim(claim: EdgeClaimProjectionInput): EdgeClaimExplainResult;
 export function evaluateEdgeClaim(claim: EdgeClaimProjectionInput): EdgeClaimDecision;

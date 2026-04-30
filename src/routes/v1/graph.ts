@@ -6,7 +6,7 @@ import {
   normalizeEdgeClaimDirection as normalizeEdgeClaimDirectionFromCore,
   normalizeEdgeClaimScope as normalizeEdgeClaimScopeFromCore,
   normalizeEdgeClaimStatus as normalizeEdgeClaimStatusFromCore,
-  projectEdgeClaims,
+  projectMongoEdgeClaims,
 } from "@open-hax/openplanner-graph-claim-core";
 import { createHash } from "node:crypto";
 import os from "node:os";
@@ -2776,7 +2776,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const rows = await app.mongo.graphEdgeClaims.find(filter).sort({ confidence: -1, updatedAt: -1 }).limit(limit).toArray();
-    const projection = projectEdgeClaims(rows.map(edgeClaimToApi), {
+    const projection = projectMongoEdgeClaims(rows, {
       statuses,
       includeExpired,
       now,

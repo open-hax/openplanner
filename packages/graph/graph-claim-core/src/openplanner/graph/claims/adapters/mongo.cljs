@@ -53,3 +53,13 @@
          result (claims/project-claims normalized (boundary/projection-options-from-js opts))]
      #js {:edges (clj->js (mapv #(js->clj (projected-edge->js %) :keywordize-keys true) (:edges result)))
           :stats (clj->js (:stats result))})))
+
+(defn project-mongo-edge-claims-js
+  "JS export for projecting Mongo/API edge claim rows.
+
+  Accepts an array of row-like JS objects. Field alias coercion stays inside the
+  graph-claim boundary; callers do not need to map Mongo rows into projected
+  edges themselves."
+  ([docs] (project-mongo-edge-claims-js docs #js {}))
+  ([docs opts]
+   (boundary/project-edge-claims-js docs opts)))
