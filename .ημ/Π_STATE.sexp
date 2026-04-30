@@ -1,43 +1,17 @@
 (Π-state
   (repo "openplanner")
-  (branch "main")
-  (timestamp "2026-04-17T23:50:00Z")
+  (timestamp "2026-04-30T06:23:07Z")
   (mode :recursive-fork-tax)
-  (summary
-    "Monorepo restructuring: removed all git submodules, reorganized packages into category dirs (agents/, graph/, signals/, archive/, pseudo/), updated pnpm-workspace.yaml, added new packages (agents/knoxx with full CLJS backend+TS frontend, graph/* with graph-weaver/ACO/myrmex/webgl/eros-eris-field, signals/signal-contracts/signal-radar-core/sintel), archived retired packages (embedding, event, persistence, reconstituter, semantic-graph-builder), removed .gitmodules, updated .gitignore for CLJS/Vite/LevelDB artifacts.")
-  (structure
-    (packages/agents
-      "knoxx (full stack: CLJS backend, TS frontend, discord-bot, ingestion, voice)"
-      "personality-system (CLJS)"
-      "circuits-octave (CLJS)")
-    (packages/graph
-      "graph-weaver (TS)"
-      "graph-weaver-aco (TS)"
-      "myrmex (TS)"
-      "webgl-graph-view (TS)"
-      "eros-eris-field (TS)"
-      "eros-eris-field-app (TS)")
-    (packages/signals
-      "signal-contracts (CJS)"
-      "signal-radar-core (CJS)"
-      "sintel (TS)")
-    (packages/vexx "submodule - still active")
-    (archive "retired: embedding, event, persistence, reconstituter, semantic-graph-builder")
-    (pseudo "experimental: workbench, clients, graph-runtime, janus, mcp-fs-oauth, openplanner-cljs-client, opencode-openplanner-plugin-cljs"))
-  (deleted-submodules
-    "packages/cephalon -> packages/agents/cephalon (embedded)"
-    "packages/clients -> pseudo/clients (embedded)"
-    "packages/eros-eris-field -> packages/graph/eros-eris-field (embedded)"
-    "packages/eros-eris-field-app -> packages/graph/eros-eris-field-app (embedded)"
-    "packages/graph-runtime -> pseudo/graph-runtime (embedded)"
-    "packages/graph-weaver -> packages/graph/graph-weaver (embedded)"
-    "packages/graph-weaver-aco -> packages/graph/graph-weaver-aco (embedded)"
-    "packages/janus -> pseudo/janus (embedded)"
-    "packages/knoxx -> packages/agents/knoxx (embedded)"
-    "packages/mcp-fs-oauth -> pseudo/mcp-fs-oauth (embedded)"
-    "packages/myrmex -> packages/graph/myrmex (embedded)"
-    "packages/opencode-openplanner-plugin-cljs -> pseudo/opencode-openplanner-plugin-cljs (embedded)"
-    "packages/openplanner-cljs-client -> pseudo/openplanner-cljs-client (embedded)"
-    "packages/reconstituter -> archive/reconstituter (embedded)"
-    "packages/workbench -> pseudo/workbench (embedded)")
-  (concurrent-dirt "none observed"))
+  (branch "tests/sentance-chunker")
+  (head-before "b67067d")
+  (tag "Π/openplanner-recursive-2026-04-30")
+  (verification
+    (root-pnpm-build :exit 0 :log ".ημ/verification/openplanner-root-build-20260430T000000Z.txt")
+    (root-filter-build :exit 0 :note "no projects matched" :log ".ημ/verification/openplanner-build-20260430T000000Z.txt")
+    (knoxx-backend-pnpm-test :exit 0 :log "packages/agents/knoxx/.ημ/verification/knoxx-backend-test-20260430T000000Z.txt"))
+  (submodules
+    (knoxx :path "packages/agents/knoxx" :commit "6bf9e72d" :branch "feat/discord-attachments" :tag "Π/knoxx-openplanner-recursive-2026-04-30")
+    (openplanner-migration-tools :path "packages/stores/migrations/openplanner-migration-tools" :commit "a0c7919" :branch "main" :tag "Π/openplanner-migration-tools-recursive-2026-04-30")
+    (vexx :path "packages/vexx" :commit "8696d57" :branch "main" :tag "Π/vexx-openplanner-recursive-2026-04-30" :note "clean but behind origin/main by 1; exact checked-out SHA preserved"))
+  (concurrent-dirt "none; all observed root dirty paths were in requested openplanner scope")
+  (destructive-cleanup-used false))

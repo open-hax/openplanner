@@ -1,47 +1,34 @@
-# Π Last — openplanner
+# Π Last — OpenPlanner recursive snapshot
 
-**Date:** 2026-04-17
-**Branch:** main
-**Mode:** recursive fork tax
+**Timestamp:** 2026-04-30T06:23:07Z
+**Branch:** tests/sentance-chunker
+**Head before snapshot:** b67067d
+**Tag:** Π/openplanner-recursive-2026-04-30
+**Mode:** recursive fork tax for OpenPlanner and submodules
 
-## What Changed
+## What was preserved
 
-- **Removed all git submodules** — `.gitmodules` deleted; packages reorganized into embedded repos under category dirs
-- **Reorganized monorepo layout:**
-  - `packages/agents/` — knoxx (full stack), personality-system, circuits-octave
-  - `packages/graph/` — graph-weaver, graph-weaver-aco, myrmex, webgl-graph-view, eros-eris-field, eros-eris-field-app
-  - `packages/signals/` — signal-contracts, signal-radar-core, sintel
-  - `archive/` — retired packages (embedding, event, persistence, reconstituter, semantic-graph-builder)
-  - `pseudo/` — experimental/in-progress (workbench, clients, graph-runtime, janus, mcp-fs-oauth, openplanner-cljs-client, opencode-openplanner-plugin-cljs)
-- **Updated `.gitignore`** — added .lsp/, target/, .vite/, .vite-vitest/, .reconstitute/, *.bak, *.backup, .projectile, package-lock.json, *.tsbuildinfo.*
-- **Updated `pnpm-workspace.yaml`** — simplified to glob patterns (`packages/**`, `archive/**`, `pseudo/**`)
-- **Updated `src/routes/v1/graph.ts`** — degree-0 node filtering, connected-component fill
-- **Updated `.env`** — added embedding provider comments
+- Root workspace dependency policy update in `pnpm-workspace.yaml`.
+- New OpenPlanner architecture/operations notes under `docs/notes/`.
+- Migration pitfalls note under `packages/stores/migrations/migration_pitfalls.md`.
+- Knoxx submodule pointer advanced to the newly committed recursive handoff snapshot.
+- Root verification logs under `.ημ/verification/`.
+- Recursive submodule tags prepared for Knoxx, migration tools, and Vexx.
 
-## Submodule Migration Map
+## Submodule state
 
-| Old Path | New Location |
-|----------|-------------|
-| `packages/knoxx` | `packages/agents/knoxx` (embedded) |
-| `packages/cephalon` | `packages/agents/cephalon` (embedded) |
-| `packages/graph-weaver` | `packages/graph/graph-weaver` (embedded) |
-| `packages/graph-weaver-aco` | `packages/graph/graph-weaver-aco` (embedded) |
-| `packages/myrmex` | `packages/graph/myrmex` (embedded) |
-| `packages/eros-eris-field` | `packages/graph/eros-eris-field` (embedded) |
-| `packages/eros-eris-field-app` | `packages/graph/eros-eris-field-app` (embedded) |
-| `packages/workbench` | `pseudo/workbench` (embedded) |
-| `packages/clients` | `pseudo/clients` (embedded) |
-| `packages/janus` | `pseudo/janus` (embedded) |
-| `packages/graph-runtime` | `pseudo/graph-runtime` (embedded) |
-| `packages/mcp-fs-oauth` | `pseudo/mcp-fs-oauth` (embedded) |
-| `packages/openplanner-cljs-client` | `pseudo/openplanner-cljs-client` (embedded) |
-| `packages/opencode-openplanner-plugin-cljs` | `pseudo/opencode-openplanner-plugin-cljs` (embedded) |
-| `packages/reconstituter` | `archive/reconstituter` (embedded) |
+- `packages/agents/knoxx`: `6bf9e72d` on `feat/discord-attachments` (## feat/discord-attachments...origin/feat/discord-attachments [ahead 3])
+- `packages/stores/migrations/openplanner-migration-tools`: `a0c7919` on `main` (## main...origin/main [ahead 6])
+- `packages/vexx`: `8696d57` on `main` (## main...origin/main [behind 1])
 
-## Only Remaining Submodule
+## Verification
 
-- `packages/vexx` — still a proper git submodule pointing to `open-hax/vexx`
+- `pnpm build` at the OpenPlanner root exited 0. Output captured at `.ημ/verification/openplanner-root-build-20260430T000000Z.txt`.
+- `pnpm --filter @open-hax/openplanner build` exited 0 but matched no projects; output preserved at `.ημ/verification/openplanner-build-20260430T000000Z.txt`.
+- Knoxx backend test passed in the submodule; see `packages/agents/knoxx/.ημ/verification/knoxx-backend-test-20260430T000000Z.txt`.
 
-## Concurrent Dirt
+## Concurrent dirt / blockers
 
-None observed.
+- All observed root dirty paths were treated as in-scope for the requested OpenPlanner recursive fork tax.
+- `packages/vexx` was clean but behind `origin/main` by 1; it was tagged at the checked-out submodule SHA to preserve the exact OpenPlanner state, not fast-forwarded.
+- No repo-wide reset/restore/clean was used.

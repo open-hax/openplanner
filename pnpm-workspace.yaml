@@ -1,4 +1,7 @@
 packages:
-  # Production packages — always built and tested
-  - './app/*'
-  - 'packages/**'
+  - ./app/*
+  - packages/**
+
+onlyBuiltDependencies:
+  - lmdb
+  - msgpackr-extract
