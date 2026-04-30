@@ -106,6 +106,7 @@ const filterState = {
   nodeKinds: null,
   edgeKinds: null,
 };
+let filterOptionsSignature = "";
 
 let fullGraph = null;
 let renderedGraph = { nodes: [], edges: [] };
@@ -360,40 +361,35 @@ function renderLegend(graph) {
   ].join("\n");
 }
 
-function ensureFilterSelections(graph) {
-  const layers = [
-    ...graph.nodes.map((node) => inferLayer(node)),
-    ...graph.edges.map((edge) => inferLayer(edge)),
-  ];
-  const nodeKinds = graph.nodes.map((node) => inferNodeKind(node));
-  const edgeKinds = graph.edges.map((edge) => inferEdgeKind(edge));
+function graphFilterOptions(graph) {
+  return {
+    layers: [...new Set([
+      ...graph.nodes.map((node) => inferLayer(node)),
+      ...graph.edges.map((edge) => inferLayer(edge)),
+    ])].sort(),
+    nodeKinds: [...new Set(graph.nodes.map((node) => inferNodeKind(node)))].sort(),
+    edgeKinds: [...new Set(graph.edges.map((edge) => inferEdgeKind(edge)))].sort(),
+  };
+}
 
-  if (!filterState.layers) filterState.layers = new Set(layers);
-  else layers.forEach((value) => {
-    filterState.layers.add(value);
-  });
-
-  if (!filterState.nodeKinds) filterState.nodeKinds = new Set(nodeKinds);
-  else nodeKinds.forEach((value) => {
-    filterState.nodeKinds.add(value);
-  });
-
-  if (!filterState.edgeKinds) filterState.edgeKinds = new Set(edgeKinds);
-  else edgeKinds.forEach((value) => {
-    filterState.edgeKinds.add(value);
-  });
+function ensureFilterSelections(options) {
+  // Initialize once from the first graph. After that, websocket ticks must not
+  // silently re-check filters that the operator deliberately turned off.
+  if (!filterState.layers) filterState.layers = new Set(options.layers);
+  if (!filterState.nodeKinds) filterState.nodeKinds = new Set(options.nodeKinds);
+  if (!filterState.edgeKinds) filterState.edgeKinds = new Set(options.edgeKinds);
 }
 
 function renderFilters(graph) {
   if (!filtersEl) return;
-  ensureFilterSelections(graph);
+  const options = graphFilterOptions(graph);
+  ensureFilterSelections(options);
 
-  const layers = [...new Set([
-    ...graph.nodes.map((node) => inferLayer(node)),
-    ...graph.edges.map((edge) => inferLayer(edge)),
-  ])].sort();
-  const nodeKinds = [...new Set(graph.nodes.map((node) => inferNodeKind(node)))].sort();
-  const edgeKinds = [...new Set(graph.edges.map((edge) => inferEdgeKind(edge)))].sort();
+  const signature = JSON.stringify(options);
+  if (signature === filterOptionsSignature) return;
+  filterOptionsSignature = signature;
+
+  const { layers, nodeKinds, edgeKinds } = options;
 
   const checkbox = (group, value, checked) => `
     <label class="filterOption">
