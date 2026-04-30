@@ -37,3 +37,7 @@
 
 - Push outcome details are recorded in `.ημ/Π_PUSH.md`.
 - Final push-ledger tag: `Π/openplanner-recursive-2026-04-30-push-ledger`.
+
+## Final manifest tag
+
+- `Π/openplanner-recursive-2026-04-30-final` records the repaired full snapshot manifest over `b67067d..HEAD`.

@@ -18,3 +18,7 @@
 - knoxx: `6bf9e72d`
 - openplanner-migration-tools: `a0c7919`
 - vexx: `8696d57`
+
+## Final manifest repair
+
+- `Π/openplanner-recursive-2026-04-30-final` is the final root tag for the complete recursive handoff manifest.
