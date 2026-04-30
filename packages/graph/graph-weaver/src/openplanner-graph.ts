@@ -7,6 +7,8 @@ type ExportNode = {
   label: string;
   lake?: string;
   nodeType?: string;
+  x?: number;
+  y?: number;
   data?: Record<string, unknown>;
 };
 
@@ -91,10 +93,12 @@ export async function rebuildOpenPlannerGraph(params: {
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
 
   for (const node of nodes) {
+    const hasExportedPosition = typeof node.x === "number" && Number.isFinite(node.x) && typeof node.y === "number" && Number.isFinite(node.y);
     const data = {
       ...(node.data ?? {}),
       lake: node.lake ?? (node.data as any)?.lake,
       node_type: node.nodeType ?? (node.data as any)?.node_type,
+      ...(hasExportedPosition ? { pos: { x: node.x, y: node.y } } : {}),
     } as Record<string, unknown>;
 
     const graphNode: GraphNode = {
