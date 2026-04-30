@@ -306,6 +306,44 @@ export interface GraphDaimoiTrailDocument {
   updatedAt: Date;
 }
 
+export type GraphViewNodeStatus = "active" | "expanded" | "archived";
+
+export interface GraphViewNodeSourceMetadata {
+  node_id: string;
+  source_kind: string;
+  project: string | null;
+  source: string | null;
+  title: string | null;
+  source_ref: Record<string, unknown> | null;
+  access_instruction: string;
+}
+
+export interface GraphViewNodeDocument {
+  _id: string;
+  view_node_id: string;
+  view_kind: "compact";
+  status: GraphViewNodeStatus;
+  project: string | null;
+  graph_version: string | null;
+  parent_view_node_id: string | null;
+  child_node_ids: string[];
+  child_view_node_ids: string[];
+  descendant_node_count: number;
+  embedding_model: string | null;
+  embedding_dimensions: number;
+  embedding: number[];
+  saturation: number;
+  average_child_saturation: number;
+  expansion_threshold: number;
+  compaction_scalar: number;
+  resource_pressure: number;
+  source_metadata: GraphViewNodeSourceMetadata[];
+  created_by: string | null;
+  updated_at: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GraphClusterMembershipDocument {
   _id: string; // `${clustering_version}::${node_id}`
   node_id: string;
@@ -401,6 +439,7 @@ export interface MongoConnection {
   graphEdges: Collection<GraphEdgeDocument>;
   graphEdgeClaims: Collection<GraphEdgeClaimDocument>;
   graphDaimoiTrails: Collection<GraphDaimoiTrailDocument>;
+  graphViewNodes: Collection<GraphViewNodeDocument>;
   graphClusterMemberships: Collection<GraphClusterMembershipDocument>;
   semanticGraphRuns: Collection<SemanticGraphRunDocument>;
   migrationJobs: Collection<MigrationJobDocument>;
@@ -433,6 +472,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphEdges = db.collection<GraphEdgeDocument>("graph_edges");
   const graphEdgeClaims = db.collection<GraphEdgeClaimDocument>("graph_edge_claims");
   const graphDaimoiTrails = db.collection<GraphDaimoiTrailDocument>("graph_daimoi_trails");
+  const graphViewNodes = db.collection<GraphViewNodeDocument>("graph_view_nodes");
   const graphClusterMemberships = db.collection<GraphClusterMembershipDocument>("graph_cluster_memberships");
   const semanticGraphRuns = db.collection<SemanticGraphRunDocument>("semantic_graph_runs");
   const migrationJobs = db.collection<MigrationJobDocument>("migration_jobs");
@@ -529,6 +569,16 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphDaimoiTrails.createIndex({ current_node_id: 1, emitted_at: -1 as IndexDirection });
   await graphDaimoiTrails.createIndex({ emitted_at: -1 as IndexDirection });
 
+  // Compacted ViewGraph nodes for simulation. TruthGraph nodes remain in their
+  // original collections; these rows are lossy runtime projections with
+  // averaged embeddings and source metadata for expansion/audit.
+  await graphViewNodes.createIndex({ view_node_id: 1 }, { unique: true });
+  await graphViewNodes.createIndex({ status: 1, saturation: -1 as IndexDirection, updated_at: -1 as IndexDirection });
+  await graphViewNodes.createIndex({ child_node_ids: 1, status: 1 });
+  await graphViewNodes.createIndex({ child_view_node_ids: 1, status: 1 });
+  await graphViewNodes.createIndex({ parent_view_node_id: 1, status: 1 });
+  await graphViewNodes.createIndex({ project: 1, status: 1, updated_at: -1 as IndexDirection });
+
   // Cluster memberships
   await graphClusterMemberships.createIndex({ node_id: 1 });
   await graphClusterMemberships.createIndex({ graph_version: 1, cluster_id: 1 });
@@ -616,6 +666,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphEdges,
     graphEdgeClaims,
     graphDaimoiTrails,
+    graphViewNodes,
     graphClusterMemberships,
     semanticGraphRuns,
     migrationJobs,

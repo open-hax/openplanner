@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { createHash } from "node:crypto";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphSemanticForceSamples, upsertGraphEdges } from "../../lib/mongodb.js";
-import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus } from "../../lib/mongodb.js";
+import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus, GraphViewNodeDocument, GraphViewNodeSourceMetadata } from "../../lib/mongodb.js";
 import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import { extractTieredVectorHits } from "../../lib/vector-search.js";
 import { formatEmbeddingQueryText, formatEmbeddingPassageText } from "../../lib/embedding-text.js";
@@ -256,6 +256,96 @@ export function semanticChargeFromSimilarity(similarity: unknown, alpha = 2.4): 
   const safeSim = Number.isFinite(sim) ? Math.max(-1, Math.min(1, sim)) : 0;
   const safeAlpha = Number.isFinite(alpha) ? Math.max(0.01, alpha) : 2.4;
   return Math.tanh(safeSim * safeAlpha);
+}
+
+function clamp01(value: unknown, fallback = 0): number {
+  const numeric = Number(value ?? fallback);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function normalizeVector(vector: number[]): number[] {
+  let norm = 0;
+  for (const value of vector) norm += value * value;
+  const scale = Math.sqrt(norm);
+  if (!Number.isFinite(scale) || scale <= 0) return vector;
+  return vector.map((value) => value / scale);
+}
+
+function averageEmbeddingVectors(vectors: number[][]): number[] {
+  if (vectors.length === 0) return [];
+  const dimensions = vectors[0]?.length ?? 0;
+  if (dimensions <= 0) return [];
+  const sum = Array.from({ length: dimensions }, () => 0);
+  let count = 0;
+  for (const vector of vectors) {
+    if (!Array.isArray(vector) || vector.length !== dimensions) continue;
+    for (let index = 0; index < dimensions; index += 1) {
+      const value = Number(vector[index] ?? 0);
+      sum[index] += Number.isFinite(value) ? value : 0;
+    }
+    count += 1;
+  }
+  if (count === 0) return [];
+  return normalizeVector(sum.map((value) => value / count));
+}
+
+function inferSourceKindFromNodeId(nodeId: string): string {
+  const [, kind = "node"] = String(nodeId).split(":");
+  return kind || "node";
+}
+
+function accessInstructionForSourceKind(sourceKind: string): string {
+  switch (sourceKind) {
+    case "file":
+      return "Fetch the represented file/source path via graph node preview or repository file tools before quoting content.";
+    case "url":
+      return "Fetch the represented URL with the browser/web fetch path before relying on page content.";
+    case "message":
+    case "event":
+      return "Retrieve the represented event/message by node id from OpenPlanner before using its text.";
+    case "compact":
+      return "Expand this compacted view node through graph view-node metadata, then inspect its represented sources.";
+    default:
+      return "Use the node id and source metadata to retrieve the underlying TruthGraph source before citing content.";
+  }
+}
+
+function buildViewNodeId(params: { nodeIds: string[]; parentViewNodeId?: string | null; graphVersion?: string | null }): string {
+  const digest = createHash("sha256")
+    .update(JSON.stringify({
+      nodeIds: [...params.nodeIds].sort(),
+      parentViewNodeId: params.parentViewNodeId ?? null,
+      graphVersion: params.graphVersion ?? null,
+    }))
+    .digest("hex")
+    .slice(0, 24);
+  return `view:compact:${digest}`;
+}
+
+function graphViewNodeToApi(row: GraphViewNodeDocument): Record<string, unknown> {
+  return {
+    view_node_id: row.view_node_id,
+    view_kind: row.view_kind,
+    status: row.status,
+    project: row.project,
+    graph_version: row.graph_version,
+    parent_view_node_id: row.parent_view_node_id,
+    child_node_ids: row.child_node_ids,
+    child_view_node_ids: row.child_view_node_ids,
+    descendant_node_count: row.descendant_node_count,
+    embedding_model: row.embedding_model,
+    embedding_dimensions: row.embedding_dimensions,
+    saturation: row.saturation,
+    average_child_saturation: row.average_child_saturation,
+    expansion_threshold: row.expansion_threshold,
+    compaction_scalar: row.compaction_scalar,
+    resource_pressure: row.resource_pressure,
+    source_metadata: row.source_metadata,
+    updated_at: row.updated_at,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 function semanticForceSampleToApi(row: any): Record<string, unknown> {
@@ -1538,6 +1628,204 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       compatibilityKind: "semantic_force_legacy",
     }));
     return { ok: true, count: samples.length, samples, source: "legacy_semantic_edges" };
+  });
+
+  // ============================================================
+  // Compacted ViewGraph Nodes (simulation projection, not truth)
+  // ============================================================
+
+  app.get("/graph/view/compact", async (req: any) => {
+    const nodeId = typeof req.query?.node_id === "string" ? req.query.node_id.trim() : "";
+    const viewNodeId = typeof req.query?.view_node_id === "string" ? req.query.view_node_id.trim() : "";
+    const status = typeof req.query?.status === "string" ? req.query.status.trim() : "active";
+    const limit = Math.max(1, Math.min(1000, Number(req.query?.limit ?? 200)));
+
+    const filter: Record<string, unknown> = {};
+    if (viewNodeId) filter.view_node_id = viewNodeId;
+    if (nodeId) filter.child_node_ids = nodeId;
+    if (status && status !== "any") filter.status = status;
+
+    const rows = await app.mongo.graphViewNodes
+      .find(filter)
+      .sort({ updated_at: -1 })
+      .limit(limit)
+      .toArray();
+
+    return {
+      ok: true,
+      count: rows.length,
+      view_nodes: rows.map(graphViewNodeToApi),
+    };
+  });
+
+  app.post("/graph/view/compact", async (req: any, reply) => {
+    const nodeIds = uniqueStrings(req.body?.nodeIds ?? req.body?.childNodeIds);
+    const childViewNodeIds = uniqueStrings(req.body?.childViewNodeIds);
+    const graphVersion = typeof req.body?.graphVersion === "string" ? req.body.graphVersion.trim() || null : null;
+    const parentViewNodeId = typeof req.body?.parentViewNodeId === "string" ? req.body.parentViewNodeId.trim() || null : null;
+    const project = typeof req.body?.project === "string" ? req.body.project.trim() || null : null;
+    const expansionThreshold = clamp01(req.body?.expansionThreshold, 0.82);
+    const saturation = clamp01(req.body?.saturation, 0);
+    const averageChildSaturation = clamp01(req.body?.averageChildSaturation, saturation);
+    const compactionScalar = clamp01(req.body?.compactionScalar, 0.5);
+    const resourcePressure = clamp01(req.body?.resourcePressure, compactionScalar);
+    const source = typeof req.body?.source === "string" ? req.body.source.trim() || "graph-view-compaction" : "graph-view-compaction";
+
+    if (nodeIds.length === 0 && childViewNodeIds.length === 0) {
+      return reply.status(400).send({ error: "nodeIds or childViewNodeIds are required" });
+    }
+
+    const childViewRows = childViewNodeIds.length > 0
+      ? await app.mongo.graphViewNodes.find({ view_node_id: { $in: childViewNodeIds }, status: { $ne: "archived" } }).toArray() as GraphViewNodeDocument[]
+      : [];
+    const representedNodeIds = [...new Set([
+      ...nodeIds,
+      ...childViewRows.flatMap((row) => Array.isArray(row.child_node_ids) ? row.child_node_ids : []),
+    ])];
+    if (representedNodeIds.length === 0) {
+      return reply.status(400).send({ error: "no represented truth nodes resolved" });
+    }
+
+    const embeddingRows = await app.mongo.graphNodeEmbeddings
+      .find({ node_id: { $in: representedNodeIds }, embedding: { $exists: true } }, {
+        projection: { node_id: 1, embedding: 1, embedding_model: 1, embedding_dimensions: 1, project: 1 },
+      })
+      .toArray() as Array<{ node_id: string; embedding?: number[]; embedding_model?: string | null; embedding_dimensions?: number | null; project?: string | null }>;
+
+    const embeddingCandidates = [
+      ...embeddingRows
+        .filter((row) => Array.isArray(row.embedding) && row.embedding.length > 0)
+        .map((row) => ({ model: row.embedding_model ?? null, dimensions: Number(row.embedding_dimensions ?? row.embedding!.length), embedding: row.embedding! })),
+      ...childViewRows
+        .filter((row) => Array.isArray(row.embedding) && row.embedding.length > 0)
+        .map((row) => ({ model: row.embedding_model ?? null, dimensions: Number(row.embedding_dimensions ?? row.embedding.length), embedding: row.embedding })),
+    ];
+    if (embeddingCandidates.length === 0) {
+      return reply.status(400).send({ error: "no embeddings found for represented nodes" });
+    }
+
+    const groups = new Map<string, typeof embeddingCandidates>();
+    for (const candidate of embeddingCandidates) {
+      const key = `${candidate.model ?? ""}::${candidate.dimensions}`;
+      const rows = groups.get(key) ?? [];
+      rows.push(candidate);
+      groups.set(key, rows);
+    }
+    const selected = [...groups.values()].sort((a, b) => b.length - a.length)[0]!;
+    const embedding = averageEmbeddingVectors(selected.map((row) => row.embedding));
+    if (embedding.length === 0) {
+      return reply.status(400).send({ error: "failed to average embeddings for compacted view node" });
+    }
+    const embeddingModel = selected[0]?.model ?? null;
+    const embeddingDimensions = selected[0]?.dimensions ?? embedding.length;
+
+    const eventRows = await app.mongo.events.find({
+      $or: [
+        { id: { $in: representedNodeIds } },
+        { "extra.node_id": { $in: representedNodeIds } },
+      ],
+    }, {
+      projection: { id: 1, kind: 1, source: 1, project: 1, message: 1, extra: 1 },
+    }).limit(Math.min(5000, representedNodeIds.length * 2)).toArray() as any[];
+    const eventByNodeId = new Map<string, any>();
+    for (const row of eventRows) {
+      const nodeId = typeof row?.extra?.node_id === "string" ? row.extra.node_id : row.id;
+      if (typeof nodeId === "string" && nodeId) eventByNodeId.set(nodeId, row);
+    }
+
+    const sourceMetadata: GraphViewNodeSourceMetadata[] = representedNodeIds.map((nodeId) => {
+      const event = eventByNodeId.get(nodeId);
+      const sourceKind = inferSourceKindFromNodeId(nodeId);
+      const extra = isPlainRecord(event?.extra) ? event.extra : {};
+      const rawSourceRef = isPlainRecord(extra.source_ref) ? extra.source_ref : extra;
+      const { preview: _preview, text: _text, body: _body, content: _content, ...sourceRef } = rawSourceRef;
+      return {
+        node_id: nodeId,
+        source_kind: sourceKind,
+        project: typeof event?.project === "string" ? event.project : project,
+        source: typeof event?.source === "string" ? event.source : null,
+        title: typeof extra.title === "string" ? extra.title : (typeof event?.message === "string" ? event.message.slice(0, 120) : null),
+        source_ref: sourceRef,
+        access_instruction: accessInstructionForSourceKind(sourceKind),
+      };
+    });
+
+    const viewNodeId = typeof req.body?.viewNodeId === "string" && req.body.viewNodeId.trim()
+      ? req.body.viewNodeId.trim()
+      : buildViewNodeId({ nodeIds: representedNodeIds, parentViewNodeId, graphVersion });
+    const now = new Date();
+    const doc: GraphViewNodeDocument = {
+      _id: viewNodeId,
+      view_node_id: viewNodeId,
+      view_kind: "compact",
+      status: saturation >= expansionThreshold ? "expanded" : "active",
+      project,
+      graph_version: graphVersion,
+      parent_view_node_id: parentViewNodeId,
+      child_node_ids: representedNodeIds,
+      child_view_node_ids: childViewNodeIds,
+      descendant_node_count: representedNodeIds.length,
+      embedding_model: embeddingModel,
+      embedding_dimensions: embeddingDimensions,
+      embedding,
+      saturation,
+      average_child_saturation: averageChildSaturation,
+      expansion_threshold: expansionThreshold,
+      compaction_scalar: compactionScalar,
+      resource_pressure: resourcePressure,
+      source_metadata: sourceMetadata,
+      created_by: source,
+      updated_at: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const { _id: _docId, createdAt: _createdAt, ...docSet } = doc;
+    await app.mongo.graphViewNodes.updateOne(
+      { view_node_id: viewNodeId },
+      {
+        $set: docSet,
+        $setOnInsert: { createdAt: now },
+      },
+      { upsert: true },
+    );
+
+    await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, [{
+      node_id: viewNodeId,
+      source_event_id: viewNodeId,
+      project,
+      embedding_model: embeddingModel,
+      embedding_dimensions: embeddingDimensions,
+      embedding,
+      chunk_index: 0,
+      chunk_count: 1,
+      text: `Compacted ViewGraph node representing ${representedNodeIds.length} TruthGraph nodes. Use source_metadata to expand represented sources; do not treat this as one source document.`,
+      updated_at: now,
+    }]);
+
+    return {
+      ok: true,
+      view_node: graphViewNodeToApi(doc),
+      represented: representedNodeIds.length,
+      embeddingStored: true,
+    };
+  });
+
+  app.post("/graph/view/compact/:view_node_id/state", async (req: any, reply) => {
+    const viewNodeId = String(req.params?.view_node_id ?? "").trim();
+    if (!viewNodeId) return reply.status(400).send({ error: "view_node_id is required" });
+    const now = new Date();
+    const patch: Record<string, unknown> = { updated_at: now, updatedAt: now };
+    if (req.body?.saturation !== undefined) patch.saturation = clamp01(req.body.saturation, 0);
+    if (req.body?.averageChildSaturation !== undefined) patch.average_child_saturation = clamp01(req.body.averageChildSaturation, 0);
+    if (req.body?.expansionThreshold !== undefined) patch.expansion_threshold = clamp01(req.body.expansionThreshold, 0.82);
+    if (req.body?.status !== undefined) {
+      const status = String(req.body.status ?? "").trim();
+      if (!["active", "expanded", "archived"].includes(status)) return reply.status(400).send({ error: "invalid status" });
+      patch.status = status;
+    }
+    const result = await app.mongo.graphViewNodes.updateOne({ view_node_id: viewNodeId }, { $set: patch });
+    return { ok: result.matchedCount > 0, matched: result.matchedCount, modified: result.modifiedCount };
   });
 
   // ============================================================
@@ -2825,6 +3113,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const minVectorSimilarity = Number(req.body?.minVectorSimilarity ?? 0.35);
     const maxCandidates = Number(req.body?.maxCandidates ?? 10000);
     const includeText = req.body?.includeText !== false;
+    const useCompactView = req.body?.useCompactView !== false;
     const persistDaimoiTrails = req.body?.persistDaimoiTrails !== false;
     const trailHalfLifeSeconds = Math.max(30, Number(req.body?.trailHalfLifeSeconds ?? 900));
     const trailLookbackSeconds = Math.max(trailHalfLifeSeconds, Number(req.body?.trailLookbackSeconds ?? 7200));
@@ -2913,10 +3202,51 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
+    const truthSeedNodeIds = [...seedNodeIds];
+    const compactMemberToViewNode = new Map<string, string>();
+    const compactViewNodeById = new Map<string, GraphViewNodeDocument>();
+    const expandedCompactViewSeedIds = new Set<string>();
+
+    if (useCompactView) {
+      const candidateViewRows = await app.mongo.graphViewNodes.find({
+        status: { $ne: "archived" },
+        $or: [
+          { child_node_ids: { $in: truthSeedNodeIds } },
+          { view_node_id: { $in: truthSeedNodeIds } },
+        ],
+      }).limit(1000).toArray() as GraphViewNodeDocument[];
+
+      for (const row of candidateViewRows) {
+        compactViewNodeById.set(row.view_node_id, row);
+        const isSaturated = Number(row.saturation ?? 0) >= Number(row.expansion_threshold ?? 0.82) || row.status === "expanded";
+        if (isSaturated) {
+          expandedCompactViewSeedIds.add(row.view_node_id);
+          continue;
+        }
+        const seededAsViewNode = truthSeedNodeIds.includes(row.view_node_id);
+        for (const memberId of row.child_node_ids ?? []) {
+          if (seededAsViewNode || truthSeedNodeIds.includes(memberId)) compactMemberToViewNode.set(memberId, row.view_node_id);
+        }
+      }
+
+      if (compactMemberToViewNode.size > 0) {
+        const nextScores = new Map<string, number>();
+        for (const seedId of seedNodeIds) {
+          const viewNodeId = compactMemberToViewNode.get(seedId);
+          const targetId = viewNodeId ?? seedId;
+          nextScores.set(targetId, Math.max(nextScores.get(targetId) ?? 0, seedScoresMap.get(seedId) ?? 0));
+        }
+        seedNodeIds = [...nextScores.keys()];
+        seedScoresMap = nextScores;
+      }
+    }
+
+    const compactedSeedMemberIds = [...compactMemberToViewNode.keys()];
+    const edgeLookupNodeIds = [...new Set([...seedNodeIds, ...compactedSeedMemberIds])];
     const seedBoundaryFilter = {
       $or: [
-        { source_node_id: { $in: seedNodeIds } },
-        { target_node_id: { $in: seedNodeIds } },
+        { source_node_id: { $in: edgeLookupNodeIds } },
+        { target_node_id: { $in: edgeLookupNodeIds } },
       ],
     };
 
@@ -2935,7 +3265,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         ],
       }).toArray(),
       app.mongo.graphDaimoiTrails.find({
-        node_ids: { $in: seedNodeIds },
+        node_ids: { $in: edgeLookupNodeIds },
         emitted_at: { $gte: trailSince },
       }).limit(5000).toArray(),
     ]);
@@ -3023,8 +3353,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     };
 
     for (const sample of forceSamples) {
-      const sourceId = sample.source_node_id;
-      const targetId = sample.target_node_id;
+      const sourceId = compactMemberToViewNode.get(sample.source_node_id) ?? sample.source_node_id;
+      const targetId = compactMemberToViewNode.get(sample.target_node_id) ?? sample.target_node_id;
+      if (sourceId === targetId) continue;
       const charge = Number(sample.charge ?? semanticChargeFromSimilarity(sample.similarity));
       if (charge <= 0) continue;
       addDaimoiEdge(sourceId, targetId, {
@@ -3037,8 +3368,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     for (const edge of legacySemanticEdges) {
-      const sourceId = edge.source_node_id;
-      const targetId = edge.target_node_id;
+      const sourceId = compactMemberToViewNode.get(edge.source_node_id) ?? edge.source_node_id;
+      const targetId = compactMemberToViewNode.get(edge.target_node_id) ?? edge.target_node_id;
+      if (sourceId === targetId) continue;
       const sim = edge.similarity;
       addDaimoiEdge(sourceId, targetId, {
         cost: 1 - sim,
@@ -3050,8 +3382,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     for (const claim of activeClaimRows) {
-      const sourceId = claim.source_node_id;
-      const targetId = claim.target_node_id;
+      const sourceId = compactMemberToViewNode.get(claim.source_node_id) ?? claim.source_node_id;
+      const targetId = compactMemberToViewNode.get(claim.target_node_id) ?? claim.target_node_id;
+      if (sourceId === targetId) continue;
       const confidence = clampConfidence(claim.confidence, 0.5);
       addDaimoiEdge(sourceId, targetId, {
         cost: Math.max(0.001, 1 - confidence),
@@ -3146,6 +3479,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const lakeCluster = (id: string): string => {
+      if (id.startsWith("view:compact:")) return "view";
       for (const lake of ["devel", "web", "bluesky", "knoxx-session"]) {
         if (id.startsWith(lake + ":")) return lake;
       }
@@ -3153,6 +3487,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     };
 
     const nodeTypeOf = (id: string): string => {
+      if (id.startsWith("view:compact:")) return "compact_view";
       const parts = id.split(":");
       return parts.length >= 2 ? parts[1] : "unknown";
     };
@@ -3163,6 +3498,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       const vectorScore = seedScoresMap.get(id) ?? 0;
       const daimoi = daimoiByNode.get(id);
       const score = vectorScore > 0 ? vectorScore : (daimoi?.activation ?? 1 / (1 + traversalCost));
+      const compactView = compactViewNodeById.get(id);
       return {
         id,
         score,
@@ -3172,6 +3508,10 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         daimoiActivation: daimoi?.activation ?? 0,
         lake: lakeCluster(id),
         nodeType: nodeTypeOf(id),
+        compactedView: Boolean(compactView),
+        representedNodeCount: compactView?.descendant_node_count ?? null,
+        saturation: compactView?.saturation ?? null,
+        sourceMetadata: compactView?.source_metadata ?? null,
       };
     }).sort((a, b) => b.score - a.score).slice(0, maxNodes);
 
@@ -3278,7 +3618,11 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       daimoi: emittedDaimoi,
       stats: {
         vectorHits: vectorHitCount,
+        truthSeeds: truthSeedNodeIds.length,
         seeds: seedNodeIds.length,
+        compactViewSeeds: compactViewNodeById.size,
+        compactedSeedMembers: compactMemberToViewNode.size,
+        expandedCompactViewSeeds: expandedCompactViewSeedIds.size,
         daimoi: emittedDaimoi.length,
         visited: visited.size,
         edges: traversedEdges.length,

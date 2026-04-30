@@ -150,6 +150,57 @@ ViewGraph may forget by projection: old, refuted, low-confidence, stale, or
 out-of-scope edge claims can disappear from the active view without deleting the
 underlying evidence.
 
+### 3b. CompactViewGraph
+
+The runtime simulation must not run over the entire TruthGraph when the graph is
+large. It runs over a **CompactViewGraph**: a lossy, resource-aware projection
+where a single view node can represent a subgraph of TruthGraph nodes or other
+compacted view nodes.
+
+A compacted view node is not a source document and not a truth claim. It is a
+simulation cell with:
+
+- `view_node_id`, status, parent view node, and child view-node ids,
+- represented TruthGraph node ids,
+- source metadata and source-access instructions for represented nodes,
+- average embedding vector of represented children,
+- saturation and average child saturation,
+- expansion threshold,
+- compaction scalar derived from current system resources,
+- resource pressure and provenance of the compaction event.
+
+Compacted vectors can themselves be compacted, forming a hierarchical embedding
+tree. The hierarchy is a runtime compression structure; the TruthGraph remains
+available for exact source retrieval and raw semantic search.
+
+Expansion/compaction policy:
+
+```text
+if compact_node.saturation >= compact_node.expansion_threshold:
+  prefer expansion / true-node traversal
+else:
+  seed traversal at the compact view node
+
+if average_child_saturation is low and resource_pressure is high:
+  node/subgraph is a candidate for periodic compaction
+```
+
+Compaction is periodic and resource-sensitive. The scheduler consumes a scalar
+input derived from system resources (CPU/RAM/GPU/NPU pressure, queue backlog,
+render budget, and graph size) to choose how aggressively to compact or expand.
+
+Query behavior:
+
+- Raw semantic queries can yield true graph nodes and compacted view nodes.
+- Graph-memory query seed search remains raw semantic search.
+- If a seed true node is represented by an active, non-saturated compacted view
+  node, the daimoi traversal starts at that view node.
+- If the compacted view node is saturated/expanded, traversal may start at the
+  underlying true node(s) instead.
+- When an agent tool (for example Knoxx) receives a compacted view node as a
+  result, it should receive source metadata for represented nodes plus
+  source-kind-specific access instructions, not text from a single child node.
+
 ### 4. SemanticGravityField
 
 A force layer derived from embeddings and active nodes.
@@ -277,11 +328,16 @@ the most recent path.
 1. Client submits graph query Q.
 2. OpenPlanner embeds Q.
 3. Vector search finds seed nodes.
-4. OpenPlanner compiles a bounded ViewGraph around the seeds.
-5. Runtime emits query daimoi at seed nodes.
-6. Daimoi traverse, collide, branch, absorb, and deposit activation.
-7. Runtime returns an active filled subgraph, trails, scores, and explanation.
-8. Optional: selected trails are promoted into observations or edge-claim support.
+4. OpenPlanner resolves seed membership in the CompactViewGraph.
+5. If a seed is represented by an active non-saturated compacted node, traversal
+   starts at that compacted view node.
+6. OpenPlanner compiles a bounded ViewGraph/CompactViewGraph region around the
+   traversal seeds.
+7. Runtime emits query daimoi at traversal seeds.
+8. Daimoi traverse, collide, branch, absorb, and deposit activation.
+9. Runtime returns an active filled subgraph, trails, scores, compact-source
+   metadata, and explanation.
+10. Optional: selected trails are promoted into observations or edge-claim support.
 ```
 
 A query result is not merely a nearest-neighbor list. It is the stable illuminated
@@ -369,6 +425,24 @@ Output:
 Implementation may expose internal debug/admin endpoints for seed resolution or
 fill replay later, but they are not the product contract.
 
+### Compact view nodes
+
+```http
+GET  /v1/graph/view/compact?node_id=...
+POST /v1/graph/view/compact
+POST /v1/graph/view/compact/:view_node_id/state
+```
+
+`POST /v1/graph/view/compact` stores a compacted ViewGraph node with an averaged
+embedding and source metadata, then upserts that view-node embedding into
+`graph_node_embeddings` so raw semantic search can discover compacted cells.
+
+`POST /v1/graph/memory` accepts `useCompactView` (default `true`). When enabled,
+seed true nodes represented by active, non-saturated compacted cells are replaced
+by those view nodes before daimoi traversal. The response stats report
+`truthSeeds`, `compactViewSeeds`, `compactedSeedMembers`, and
+`expandedCompactViewSeeds`.
+
 ### Edge claim lifecycle
 
 ```http
@@ -429,13 +503,27 @@ accelerate semantic gravity and charge calculations.
 - Use semantic force, active edge claims, decayed trail influence, and an
   evolving simplex-noise field when scoring daimoi movement.
 
-### Phase 4 — Presence integration
+### Phase 4 — Compact ViewGraph hierarchy
+
+- Add compacted view-node records separate from TruthGraph records.
+- Store averaged child embeddings on compacted view nodes.
+- Upsert compacted view-node embeddings into graph semantic search so raw search
+  can find both true nodes and compacted cells.
+- During graph-memory query, translate true-node seeds into active non-saturated
+  compacted view nodes before daimoi traversal.
+- Return source metadata/access instructions for compacted results instead of
+  pretending a compacted node has one source text.
+- Add a resource-pressure scalar as the input to periodic compaction/expansion.
+
+### Phase 5 — Presence integration
 
 - Add presence wells to query fill scoring.
+- Use presence/resource saturation to drive CompactViewGraph expansion and
+  compaction thresholds.
 - Allow Knoxx/promptdb actors to propose edge-claim support/refutation using
   observed daimoi trails and external evidence.
 
-### Phase 5 — Fork Tales absorption
+### Phase 6 — Fork Tales absorption
 
 - Port the useful fork_tales particle/field concepts behind the new contracts.
 - Do not import narrative/lore dressing as core API names unless it names a real
@@ -459,6 +547,14 @@ accelerate semantic gravity and charge calculations.
   TruthGraph evidence history.
 - A query can return a filled subgraph whose top nodes are not only the initial
   vector nearest neighbors.
+- A graph-memory query whose vector seed is represented by an active compacted
+  view node starts daimoi traversal at the compacted view node.
+- A saturated compacted view node can be marked expanded so traversal may fall
+  through to underlying truth nodes.
+- Compacted view-node embeddings are averages of represented child embeddings
+  and may themselves be compacted.
+- Compact-node query results expose represented source metadata and source access
+  instructions rather than text from a single child.
 - Daimoi trail observations are persisted separately from edge claims.
 - Trail influence decays by configured half-life and affects later movement cost
   without changing relation truth.
