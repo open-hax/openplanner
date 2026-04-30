@@ -8,7 +8,8 @@
     "start": "node dist/main.js",
     "dev": "tsc -w",
     "dev:watch:container": "sh ./scripts/dev-watch-container.sh",
-    "test": "tsx --tsconfig tsconfig.json"
+    "test": "tsx --tsconfig tsconfig.json",
+    "test:e2e:compact-viewgraph": "tsx --tsconfig tsconfig.json tests/e2e-compact-viewgraph.test.mjs"
   },
   "dependencies": {
     "@open-hax/openplanner-document-hydration": "workspace:*",
