@@ -17,6 +17,9 @@ importers:
       '@open-hax/openplanner-document-hydration':
         specifier: workspace:*
         version: link:packages/stores/document-hydration
+      '@open-hax/openplanner-graph-claim-core':
+        specifier: workspace:*
+        version: link:packages/graph/graph-claim-core
       '@types/yauzl':
         specifier: ^2.10.3
         version: 2.10.3
@@ -517,6 +520,12 @@ importers:
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
+
+  packages/graph/graph-claim-core:
+    devDependencies:
+      shadow-cljs:
+        specifier: ^3.3.5
+        version: 3.3.8
 
   packages/graph/graph-weaver:
     dependencies:

@@ -4,7 +4,7 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "pnpm --filter @open-hax/openplanner-document-hydration build && tsc",
+    "build": "pnpm --filter @open-hax/openplanner-graph-claim-core build && pnpm --filter @open-hax/openplanner-document-hydration build && tsc",
     "start": "node dist/main.js",
     "dev": "tsc -w",
     "dev:watch:container": "sh ./scripts/dev-watch-container.sh",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@open-hax/openplanner-document-hydration": "workspace:*",
+    "@open-hax/openplanner-graph-claim-core": "workspace:*",
     "@fastify/multipart": "^8.2.0",
     "@fastify/sensible": "^5.6.0",
     "@types/yauzl": "^2.10.3",

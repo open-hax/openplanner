@@ -1,4 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
+import {
+  buildEdgeClaimId as buildEdgeClaimIdFromCore,
+  evaluateEdgeClaim,
+  explainEdgeClaim,
+  normalizeEdgeClaimDirection as normalizeEdgeClaimDirectionFromCore,
+  normalizeEdgeClaimScope as normalizeEdgeClaimScopeFromCore,
+  normalizeEdgeClaimStatus as normalizeEdgeClaimStatusFromCore,
+  projectEdgeClaims,
+} from "@open-hax/openplanner-graph-claim-core";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphSemanticForceSamples, upsertGraphEdges } from "../../lib/mongodb.js";
@@ -179,17 +188,6 @@ type SemanticFieldInteraction = {
   targetLevel: number;
 };
 
-const EDGE_CLAIM_STATUSES = [
-  "proposed",
-  "supported",
-  "active",
-  "refuted",
-  "rejected",
-  "superseded",
-  "expired",
-  "withdrawn",
-] as const satisfies readonly GraphEdgeClaimStatus[];
-
 const EDGE_CLAIM_ACTIVE_PROJECTABLE_STATUSES = ["supported", "active"] as const;
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -208,14 +206,11 @@ function clampConfidence(value: unknown, fallback = 0.5): number {
 }
 
 export function normalizeEdgeClaimStatus(value: unknown, fallback: GraphEdgeClaimStatus = "proposed"): GraphEdgeClaimStatus {
-  const normalized = String(value ?? "").trim().toLowerCase().replace(/-/g, "_");
-  return EDGE_CLAIM_STATUSES.includes(normalized as GraphEdgeClaimStatus)
-    ? normalized as GraphEdgeClaimStatus
-    : fallback;
+  return normalizeEdgeClaimStatusFromCore(value, fallback) as GraphEdgeClaimStatus;
 }
 
 export function normalizeEdgeClaimDirection(value: unknown): GraphEdgeClaimDirection {
-  return String(value ?? "").trim().toLowerCase() === "undirected" ? "undirected" : "directed";
+  return normalizeEdgeClaimDirectionFromCore(value) as GraphEdgeClaimDirection;
 }
 
 export function buildEdgeClaimId(params: {
@@ -225,27 +220,11 @@ export function buildEdgeClaimId(params: {
   direction: GraphEdgeClaimDirection;
   scope: Record<string, unknown> | null;
 }): string {
-  const left = params.direction === "undirected" && params.targetNodeId < params.sourceNodeId
-    ? params.targetNodeId
-    : params.sourceNodeId;
-  const right = params.direction === "undirected" && params.targetNodeId < params.sourceNodeId
-    ? params.sourceNodeId
-    : params.targetNodeId;
-  const scopeJson = JSON.stringify(params.scope ?? {}, Object.keys(params.scope ?? {}).sort());
-  const digest = createHash("sha256")
-    .update(`${left}\n${right}\n${params.relationKind}\n${params.direction}\n${scopeJson}`)
-    .digest("hex")
-    .slice(0, 24);
-  return `edge_claim:${digest}`;
+  return buildEdgeClaimIdFromCore(params);
 }
 
 function normalizeEdgeClaimScope(value: unknown): Record<string, unknown> | null {
-  if (!isPlainRecord(value)) return null;
-  const entries = Object.entries(value)
-    .filter(([, entryValue]) => entryValue !== undefined && entryValue !== null && String(entryValue).trim() !== "")
-    .map(([key, entryValue]) => [key, entryValue] as const);
-  if (entries.length === 0) return null;
-  return Object.fromEntries(entries);
+  return normalizeEdgeClaimScopeFromCore(value) as Record<string, unknown> | null;
 }
 
 function parseOptionalDate(value: unknown): Date | null {
@@ -2637,6 +2616,23 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const validFrom = parseOptionalDate(body.valid_from) ?? now;
     const validUntil = parseOptionalDate(body.valid_until);
     const status = normalizeEdgeClaimStatus(body.status);
+    const confidence = clampConfidence(body.confidence);
+    const normalizedClaim = {
+      claim_id: claimId,
+      source_node_id: sourceNodeId,
+      target_node_id: targetNodeId,
+      relation_kind: relationKind,
+      direction,
+      scope: scope ?? {},
+      status,
+      confidence,
+      valid_until: validUntil,
+    };
+    const claimExplanation = explainEdgeClaim(normalizedClaim) as { "valid?"?: boolean; errors?: unknown[] };
+    if (claimExplanation["valid?"] === false) {
+      return reply.status(400).send({ error: "invalid_edge_claim", details: claimExplanation.errors ?? [] });
+    }
+    const claimDecision = evaluateEdgeClaim(normalizedClaim);
 
     await app.mongo.graphEdgeClaims.updateOne(
       { _id: claimId },
@@ -2649,7 +2645,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           direction,
           scope,
           status,
-          confidence: clampConfidence(body.confidence),
+          confidence,
           support_event_ids: uniqueStrings(body.support_event_ids ?? body.supportEventIds),
           refute_event_ids: uniqueStrings(body.refute_event_ids ?? body.refuteEventIds),
           supersedes_claim_ids: uniqueStrings(body.supersedes_claim_ids ?? body.supersedesClaimIds),
@@ -2664,7 +2660,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     );
 
     const row = await app.mongo.graphEdgeClaims.findOne({ _id: claimId });
-    return { ok: true, claim: row ? edgeClaimToApi(row) : { claim_id: claimId } };
+    return { ok: true, claim: row ? edgeClaimToApi(row) : { claim_id: claimId }, decision: claimDecision };
   });
 
   app.get("/graph/edge-claims", async (req: any) => {
@@ -2780,18 +2776,13 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const rows = await app.mongo.graphEdgeClaims.find(filter).sort({ confidence: -1, updatedAt: -1 }).limit(limit).toArray();
-    const edges = rows.map((row: GraphEdgeClaimDocument) => ({
-      source: row.source_node_id,
-      target: row.target_node_id,
-      kind: row.relation_kind,
-      claim_id: row.claim_id,
-      confidence: row.confidence,
-      direction: row.direction,
-      scope: row.scope ?? {},
-      status: row.status,
-    }));
+    const projection = projectEdgeClaims(rows.map(edgeClaimToApi), {
+      statuses,
+      includeExpired,
+      now,
+    });
 
-    return { ok: true, edges, claims: rows.map(edgeClaimToApi), stats: { claims: rows.length, edges: edges.length } };
+    return { ok: true, edges: projection.edges, claims: rows.map(edgeClaimToApi), stats: projection.stats };
   });
 
   // ============================================================
