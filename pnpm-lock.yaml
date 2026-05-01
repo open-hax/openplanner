@@ -299,8 +299,8 @@ importers:
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
       '@open-hax/eta-mu':
-        specifier: ^0.1.1
-        version: 0.1.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
+        specifier: ^0.1.2
+        version: 0.1.2(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
       '@resvg/resvg-js':
         specifier: ^2.6.2
         version: 2.6.2
@@ -2093,8 +2093,8 @@ packages:
     engines: {node: '>=20.0.0'}
     hasBin: true
 
-  '@open-hax/eta-mu-coding-agent@0.70.6':
-    resolution: {integrity: sha512-N8DxrjKjH/ilsdt/0LCm89HEl0WC+fpEoFiKfMb0gVS0nL9BFIUacZx4Nn4OeSNVSk7ow5irO8uv3LWIX99ZJg==}
+  '@open-hax/eta-mu-coding-agent@0.70.7':
+    resolution: {integrity: sha512-5ekKHRRI3rtU5QZYzbxONrwFWuRm5mo6PhTtZo6VAvonY0tkkvaWqFASBWpshC4j62nuZQkxfMLl2nDm/a9bAg==}
     engines: {node: '>=20.6.0'}
     hasBin: true
 
@@ -2102,8 +2102,8 @@ packages:
     resolution: {integrity: sha512-CJ0gm4P9Cb8mpROXmnl0oTpixeGKnlaFp9P/BeYC+pkYFOZb0WQyYJvqsrt8ODkxF24llHZTjzuomJWOipde5w==}
     engines: {node: '>=20.0.0'}
 
-  '@open-hax/eta-mu@0.1.1':
-    resolution: {integrity: sha512-jsrf3jfl1lv02HdIDVCWboj5LMWXvl8izcQ3ppJaVXJ0fHC+MkDoyyDqxC6MS9hSWwJLijAg00gZB98Cq9k1fA==}
+  '@open-hax/eta-mu@0.1.2':
+    resolution: {integrity: sha512-ygg6rVTt3Gah4fwoE06MNMR+PaBJIwqjJ9amrq/juz+WixNZ6vnqitYAPf2FY4zXhq7Cq8TP0YW+/5XaKrpBmA==}
 
   '@open-hax/uxx-helix@0.1.0':
     resolution: {integrity: sha512-GVPvB3JzI7qZsLT1W6hq5D4QC5dcyOwzaP25geitaKadOZHfkEpHjcILmuZquyLPdPfKXkZu5w9nSiakFlgalQ==}
@@ -8891,7 +8891,7 @@ snapshots:
       - ws
       - zod
 
-  '@open-hax/eta-mu-coding-agent@0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)':
+  '@open-hax/eta-mu-coding-agent@0.70.7(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)':
     dependencies:
       '@mariozechner/jiti': 2.6.5
       '@open-hax/eta-mu-agent-core': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
@@ -8935,11 +8935,11 @@ snapshots:
     optionalDependencies:
       koffi: 2.16.0
 
-  '@open-hax/eta-mu@0.1.1(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)':
+  '@open-hax/eta-mu@0.1.2(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)':
     dependencies:
       '@open-hax/eta-mu-agent-core': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
       '@open-hax/eta-mu-ai': 0.70.5(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
-      '@open-hax/eta-mu-coding-agent': 0.70.6(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
+      '@open-hax/eta-mu-coding-agent': 0.70.7(@modelcontextprotocol/sdk@1.29.0(zod@3.25.76))(ws@8.20.0)(zod@3.25.76)
       '@open-hax/eta-mu-tui': 0.70.5
     transitivePeerDependencies:
       - '@modelcontextprotocol/sdk'
