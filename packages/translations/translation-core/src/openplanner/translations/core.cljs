@@ -112,3 +112,49 @@
               :data {:source_lang source-lang
                      :target_lang target-lang}}}
       {:ok? false :error "Missing source or target text"})))
+
+(defn sft-prompt
+  [{:keys [source-lang target-lang source-text]}]
+  (let [source-lang (or (nonblank-string source-lang) "English")
+        target-lang (or (nonblank-string target-lang) "target language")]
+    (str "Translate the following text from " source-lang " to " target-lang
+         ". Preserve formatting, technical terms, and code examples.\n\nText:\n"
+         (or source-text ""))))
+
+(defn sft-row
+  [{:keys [source-lang target-lang source-text translated-text corrected-text]}]
+  {:prompt (sft-prompt {:source-lang source-lang
+                        :target-lang target-lang
+                        :source-text source-text})
+   :target (or (nonblank-string corrected-text) translated-text "")})
+
+(defn manifest-shape
+  [{:keys [project languages corrections-by-language labelers]}]
+  (let [language-entries
+        (map (fn [{:keys [target-lang total approved rejected pending in-review]}]
+               (let [lang-key (or target-lang "unknown")
+                     approved (or approved 0)]
+                 [lang-key
+                  {:total_segments (or total 0)
+                   :approved approved
+                   :rejected (or rejected 0)
+                   :pending (or pending 0)
+                   :in_review (or in-review 0)
+                   :with_corrections (get corrections-by-language lang-key 0)
+                   :avg_labels_per_segment 0}]))
+             languages)
+        export-entries
+        (map (fn [{:keys [target-lang approved]}]
+               (let [lang-key (or target-lang "unknown")
+                     approved (or approved 0)]
+                 [(str "sft_" lang-key)
+                  {:rows approved
+                   :bytes_estimate (* approved 500)}]))
+             languages)]
+    {:project (or (nonblank-string project) "all")
+     :languages (into {} language-entries)
+     :labelers (mapv (fn [{:keys [email segments-labeled]}]
+                       {:email email
+                        :segments_labeled (or segments-labeled 0)})
+                     labelers)
+     :export_sizes (into {} export-entries)}))

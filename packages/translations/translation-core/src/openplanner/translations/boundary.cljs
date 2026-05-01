@@ -91,3 +91,46 @@
                                       :domain (jget input "domain")
                                       :content-type (jget input "content_type")})]
     (clj->js plan)))
+
+(defn sft-row-js
+  [input]
+  (clj->js (core/sft-row {:source-lang (or (jget input "source_lang") (jget input "sourceLang") "English")
+                           :target-lang (or (jget input "target_lang") (jget input "targetLang"))
+                           :source-text (or (jget input "source_text") (jget input "sourceText"))
+                           :translated-text (or (jget input "translated_text") (jget input "translatedText"))
+                           :corrected-text (or (jget input "corrected_text") (jget input "correctedText"))})))
+
+(defn- language-row-from-js
+  [row]
+  {:target-lang (or (jget row "target_lang") (jget row "targetLang") (jget row "_id"))
+   :total (jget row "total")
+   :approved (jget row "approved")
+   :rejected (jget row "rejected")
+   :pending (jget row "pending")
+   :in-review (or (jget row "in_review") (jget row "inReview"))})
+
+(defn- corrections-from-js
+  [value]
+  (if (js-object? value)
+    (into {}
+          (map (fn [entry] [(aget entry 0) (aget entry 1)]))
+          (array-seq (js/Object.entries value)))
+    {}))
+
+(defn- labeler-from-js
+  [row]
+  {:email (or (jget row "email") (jget row "_id"))
+   :segments-labeled (or (jget row "segments_labeled") (jget row "segmentsLabeled"))})
+
+(defn manifest-shape-js
+  [input]
+  (let [languages (if (array? (jget input "languages"))
+                    (mapv language-row-from-js (array-seq (jget input "languages")))
+                    [])
+        labelers (if (array? (jget input "labelers"))
+                   (mapv labeler-from-js (array-seq (jget input "labelers")))
+                   [])]
+    (clj->js (core/manifest-shape {:project (jget input "project")
+                                   :languages languages
+                                   :corrections-by-language (corrections-from-js (jget input "correctionsByLanguage"))
+                                   :labelers labelers}))))

@@ -46,3 +46,15 @@ export function documentOverallStatus(input: {
 export function summarizeSegments(segments: Array<{ status?: unknown }>): TranslationSummary;
 export function normalizeTranslationSegment(input: Record<string, unknown>): NormalizedTranslationSegment;
 export function translationGraphMemoryPlan(input: Record<string, unknown>): Record<string, unknown>;
+export function sftRow(input: Record<string, unknown>): { prompt: string; target: string };
+export function manifestShape(input: {
+  project?: string;
+  languages?: Array<Record<string, unknown>>;
+  correctionsByLanguage?: Record<string, number>;
+  labelers?: Array<Record<string, unknown>>;
+}): {
+  project: string;
+  languages: Record<string, Record<string, number>>;
+  labelers: Array<{ email: string; segments_labeled: number }>;
+  export_sizes: Record<string, { rows: number; bytes_estimate: number }>;
+};

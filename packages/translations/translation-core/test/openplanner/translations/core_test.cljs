@@ -20,6 +20,27 @@
     (is (= "pending" (aget segment "status")))
     (is (= 2 (.-length (aget segment "errors"))))))
 
+(deftest sft-row-and-manifest-shaping-are-domain-data
+  (let [row (boundary/sft-row-js #js {:source_lang "English"
+                                      :target_lang "es"
+                                      :source_text "hello"
+                                      :translated_text "hola"
+                                      :corrected_text "hola!"})
+        manifest (boundary/manifest-shape-js #js {:project "devel"
+                                                  :languages #js [#js {:_id "es"
+                                                                       :total 3
+                                                                       :approved 2
+                                                                       :rejected 0
+                                                                       :pending 1
+                                                                       :in_review 0}]
+                                                  :correctionsByLanguage #js {:es 1}
+                                                  :labelers #js [#js {:_id "dev@example.test"
+                                                                      :segments_labeled 2}]})]
+    (is (= "hola!" (aget row "target")))
+    (is (re-find #"Translate the following text" (aget row "prompt")))
+    (is (= 1 (aget (aget (aget manifest "languages") "es") "with_corrections")))
+    (is (= 1000 (aget (aget (aget manifest "export_sizes") "sft_es") "bytes_estimate")))))
+
 (deftest graph-memory-plan-is-data-only
   (let [plan (boundary/translation-graph-memory-plan-js #js {:segment_id "seg:1"
                                                             :source_text "hello world"

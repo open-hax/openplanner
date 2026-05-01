@@ -9,7 +9,9 @@
                                :documentOverallStatus openplanner.translations.boundary/document-overall-status-js
                                :summarizeSegments openplanner.translations.boundary/summarize-segments-js
                                :normalizeTranslationSegment openplanner.translations.boundary/normalize-translation-segment-js
-                               :translationGraphMemoryPlan openplanner.translations.boundary/translation-graph-memory-plan-js}}}
+                               :translationGraphMemoryPlan openplanner.translations.boundary/translation-graph-memory-plan-js
+                               :sftRow openplanner.translations.boundary/sft-row-js
+                               :manifestShape openplanner.translations.boundary/manifest-shape-js}}}
    :compiler-options {:output-feature-set :es-next}}
 
   :test

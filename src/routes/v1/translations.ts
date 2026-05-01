@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import {
   documentOverallStatus,
+  manifestShape,
   nextSegmentStatus,
   normalizeTranslationSegment,
+  sftRow,
   summarizeSegments,
   translationGraphMemoryPlan,
 } from "@open-hax/openplanner-translation-core";
@@ -590,9 +592,13 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
-      const prompt = `Translate the following text from English to ${seg.target_lang}. Preserve formatting, technical terms, and code examples.\n\nText:\n${seg.source_text}`;
-
-      lines.push(JSON.stringify({ prompt, target: targetText }));
+      lines.push(JSON.stringify(sftRow({
+        source_lang: "English",
+        target_lang: seg.target_lang,
+        source_text: seg.source_text,
+        translated_text: seg.translated_text,
+        corrected_text: targetText,
+      })));
     }
 
     reply.header("Content-Type", "application/x-ndjson");
@@ -677,39 +683,14 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       ])
       .toArray();
 
-    // Calculate export sizes
-    const exportSizes: Record<string, { rows: number; bytes_estimate: number }> = {};
-    for (const lang of languages) {
-      const key = `sft_${lang._id}`;
-      exportSizes[key] = {
-        rows: lang.approved,
-        bytes_estimate: lang.approved * 500, // Rough estimate
-      };
-    }
-
-    // Build languages object with corrections
-    const languagesObj: Record<string, Record<string, number>> = {};
-    for (const lang of languages) {
-      languagesObj[lang._id] = {
-        total_segments: lang.total,
-        approved: lang.approved,
-        rejected: lang.rejected,
-        pending: lang.pending,
-        in_review: lang.in_review,
-        with_corrections: correctionsByLanguage[lang._id] ?? 0,
-        avg_labels_per_segment: 0, // Computed below if we have label data
-      };
-    }
-
     return {
-      project: query.project || "all",
+      ...manifestShape({
+        project: query.project || "all",
+        languages,
+        correctionsByLanguage,
+        labelers,
+      }),
       generated_at: new Date().toISOString(),
-      languages: languagesObj,
-      labelers: labelers.map((l) => ({
-        email: l._id,
-        segments_labeled: l.segments_labeled,
-      })),
-      export_sizes: exportSizes,
     };
   });
 
