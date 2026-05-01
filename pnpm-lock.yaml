@@ -20,6 +20,9 @@ importers:
       '@open-hax/openplanner-graph-claim-core':
         specifier: workspace:*
         version: link:packages/graph/graph-claim-core
+      '@open-hax/openplanner-translation-core':
+        specifier: workspace:*
+        version: link:packages/translations/translation-core
       '@types/yauzl':
         specifier: ^2.10.3
         version: 2.10.3
@@ -659,6 +662,12 @@ importers:
         version: 8.20.0
 
   packages/stores/document-hydration:
+    devDependencies:
+      shadow-cljs:
+        specifier: ^3.3.5
+        version: 3.3.8
+
+  packages/translations/translation-core:
     devDependencies:
       shadow-cljs:
         specifier: ^3.3.5

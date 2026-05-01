@@ -1,0 +1,48 @@
+export type TranslationSegmentStatus = "pending" | "in_review" | "approved" | "rejected";
+export type TranslationLabelOverall = "approve" | "needs_edit" | "reject";
+
+export type NormalizedTranslationSegment = {
+  source_text: string;
+  translated_text: string;
+  source_lang: string;
+  target_lang: string;
+  document_id: string;
+  segment_index: number;
+  status: TranslationSegmentStatus;
+  mt_model?: string | null;
+  confidence?: number | null;
+  domain?: string | null;
+  content_type?: string | null;
+  url_context?: string | null;
+  garden_id?: string | null;
+  org_id?: string | null;
+  project?: string | null;
+  errors: Array<{ path: string[]; error: string }>;
+};
+
+export type TranslationSummary = {
+  total_segments: number;
+  approved: number;
+  pending: number;
+  rejected: number;
+  in_review: number;
+  overall_status: string;
+};
+
+export function nextSegmentStatus(input: {
+  currentStatus?: unknown;
+  overall?: unknown;
+  corrected_text?: unknown;
+  correctedText?: unknown;
+}): TranslationSegmentStatus;
+
+export function documentOverallStatus(input: {
+  total?: number;
+  approved?: number;
+  rejected?: number;
+  pending?: number;
+}): string;
+
+export function summarizeSegments(segments: Array<{ status?: unknown }>): TranslationSummary;
+export function normalizeTranslationSegment(input: Record<string, unknown>): NormalizedTranslationSegment;
+export function translationGraphMemoryPlan(input: Record<string, unknown>): Record<string, unknown>;

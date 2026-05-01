@@ -1,4 +1,11 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
+import {
+  documentOverallStatus,
+  nextSegmentStatus,
+  normalizeTranslationSegment,
+  summarizeSegments,
+  translationGraphMemoryPlan,
+} from "@open-hax/openplanner-translation-core";
 import { ObjectId } from "mongodb";
 
 /**
@@ -56,61 +63,31 @@ async function upsertTranslationToGraphMemory(
   segment: TranslationSegment,
   correctedText?: string
 ): Promise<{ success: boolean; error?: string }> {
-  const targetText = correctedText || segment.translated_text;
-  if (!targetText || !segment.source_text) {
-    return { success: false, error: "Missing source or target text" };
+  const plan = translationGraphMemoryPlan({
+    ...segment,
+    segment_id: segment._id?.toString(),
+    corrected_text: correctedText,
+  }) as any;
+  if (plan["ok?"] === false) {
+    return { success: false, error: String(plan.error ?? "Missing source or target text") };
   }
 
-  const nodeId = `translation:${segment.source_lang}:${segment.target_lang}:${segment._id}`;
-  const nodeLabel = `${segment.source_lang}→${segment.target_lang}: ${segment.source_text.slice(0, 50)}...`;
-
   try {
-    // Upsert to graph_nodes collection
+    const now = new Date();
     await app.mongo.db.collection("graph_nodes").updateOne(
-      { id: nodeId },
+      { id: plan.node.id },
       {
-        $set: {
-          id: nodeId,
-          kind: "translation_example",
-          label: nodeLabel,
-          data: {
-            source_text: segment.source_text,
-            target_text: targetText,
-            source_lang: segment.source_lang,
-            target_lang: segment.target_lang,
-            document_id: segment.document_id,
-            domain: segment.domain,
-            content_type: segment.content_type,
-            quality: "approved",
-            segment_id: segment._id?.toString(),
-          },
-          updated_at: new Date(),
-        },
-        $setOnInsert: {
-          created_at: new Date(),
-        },
+        $set: { ...plan.node, updated_at: now },
+        $setOnInsert: { created_at: now },
       },
       { upsert: true }
     );
 
-    // Also create edge
     await app.mongo.db.collection("graph_edges").updateOne(
-      { id: `translation:doc:${segment.document_id}:${segment._id}` },
+      { id: plan.edge.id },
       {
-        $set: {
-          id: `translation:doc:${segment.document_id}:${segment._id}`,
-          source: segment.document_id,
-          target: nodeId,
-          kind: "has_translation",
-          data: {
-            source_lang: segment.source_lang,
-            target_lang: segment.target_lang,
-          },
-          updated_at: new Date(),
-        },
-        $setOnInsert: {
-          created_at: new Date(),
-        },
+        $set: { ...plan.edge, updated_at: now },
+        $setOnInsert: { created_at: now },
       },
       { upsert: true }
     );
@@ -409,16 +386,11 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
 
     await labelsCollection.insertOne(label);
 
-    // Update segment status based on label
-    let newStatus: TranslationSegment["status"] = segment.status as TranslationSegment["status"];
-
-    if (label.overall === "approve") {
-      newStatus = "approved";
-    } else if (label.overall === "needs_edit") {
-      newStatus = label.corrected_text ? "approved" : "in_review";
-    } else if (label.overall === "reject") {
-      newStatus = "rejected";
-    }
+    const newStatus = nextSegmentStatus({
+      currentStatus: segment.status,
+      overall: label.overall,
+      corrected_text: label.corrected_text,
+    }) as TranslationSegment["status"];
 
     await segmentsCollection.updateOne(
       { _id: new ObjectId(segmentId) },
@@ -474,30 +446,34 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       const seg = segments[i];
 
       try {
-        const doc: TranslationSegment = {
-          source_text: String(seg.source_text || ""),
-          translated_text: String(seg.translated_text || ""),
-          source_lang: String(seg.source_lang || "en"),
-          target_lang: String(seg.target_lang || ""),
-          document_id: String(seg.document_id || ""),
-          segment_index: Number(seg.segment_index ?? i),
-          status: "pending",
-          mt_model: seg.mt_model ? String(seg.mt_model) : undefined,
-          confidence: seg.confidence ? Number(seg.confidence) : undefined,
-          domain: seg.domain ? String(seg.domain) : undefined,
-          content_type: seg.content_type ? String(seg.content_type) : undefined,
-          url_context: seg.url_context ? String(seg.url_context) : undefined,
+        const normalized = normalizeTranslationSegment({
+          ...seg,
+          segment_index: seg.segment_index ?? i,
           org_id: orgId,
-          project: project,
+          project,
+        }) as any;
+        if (Array.isArray(normalized.errors) && normalized.errors.length > 0) {
+          errors.push({ index: i, error: "Missing required fields", details: normalized.errors });
+          continue;
+        }
+        const doc: TranslationSegment = {
+          source_text: normalized.source_text,
+          translated_text: normalized.translated_text,
+          source_lang: normalized.source_lang,
+          target_lang: normalized.target_lang,
+          document_id: normalized.document_id,
+          segment_index: normalized.segment_index,
+          status: normalized.status,
+          mt_model: normalized.mt_model ?? undefined,
+          confidence: normalized.confidence ?? undefined,
+          domain: normalized.domain ?? undefined,
+          content_type: normalized.content_type ?? undefined,
+          url_context: normalized.url_context ?? undefined,
+          org_id: normalized.org_id ?? undefined,
+          project: normalized.project ?? undefined,
           created_at: new Date(),
           updated_at: new Date(),
         };
-
-        // Validate required fields
-        if (!doc.source_text || !doc.translated_text || !doc.target_lang || !doc.document_id) {
-          errors.push({ index: i, error: "Missing required fields" });
-          continue;
-        }
 
         const result = await segmentsCollection.insertOne(doc);
         results.push({
@@ -529,29 +505,31 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
   app.post("/translations/segments", async (req, reply) => {
     const body = req.body as Record<string, unknown>;
 
+    const normalized = normalizeTranslationSegment(body) as any;
+    if (Array.isArray(normalized.errors) && normalized.errors.length > 0) {
+      return reply.status(400).send({
+        error: "Missing required fields: source_text, translated_text, target_lang, document_id",
+        details: normalized.errors,
+      });
+    }
     const doc: TranslationSegment = {
-      source_text: String(body.source_text || ""),
-      translated_text: String(body.translated_text || ""),
-      source_lang: String(body.source_lang || "en"),
-      target_lang: String(body.target_lang || ""),
-      document_id: String(body.document_id || ""),
-      segment_index: Number(body.segment_index ?? 0),
-      status: "pending",
-      garden_id: body.garden_id ? String(body.garden_id) : undefined,
-      mt_model: body.mt_model ? String(body.mt_model) : undefined,
-      confidence: body.confidence ? Number(body.confidence) : undefined,
-      domain: body.domain ? String(body.domain) : undefined,
-      content_type: body.content_type ? String(body.content_type) : undefined,
-      org_id: body.org_id ? String(body.org_id) : undefined,
-      project: body.project ? String(body.project) : undefined,
+      source_text: normalized.source_text,
+      translated_text: normalized.translated_text,
+      source_lang: normalized.source_lang,
+      target_lang: normalized.target_lang,
+      document_id: normalized.document_id,
+      segment_index: normalized.segment_index,
+      status: normalized.status,
+      garden_id: normalized.garden_id ?? undefined,
+      mt_model: normalized.mt_model ?? undefined,
+      confidence: normalized.confidence ?? undefined,
+      domain: normalized.domain ?? undefined,
+      content_type: normalized.content_type ?? undefined,
+      org_id: normalized.org_id ?? undefined,
+      project: normalized.project ?? undefined,
       created_at: new Date(),
       updated_at: new Date(),
     };
-
-    // Validate required fields
-    if (!doc.source_text || !doc.translated_text || !doc.target_lang || !doc.document_id) {
-      return reply.status(400).send({ error: "Missing required fields: source_text, translated_text, target_lang, document_id" });
-    }
 
     // Upsert: update if exists (same document_id + segment_index + target_lang), insert if not
     const filter = {
@@ -1011,12 +989,12 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       const meta = titleMap.get(d._id.document_id);
       const approved = d.approved;
       const total = d.total_segments;
-      let overallStatus: string;
-      if (approved === total && total > 0) overallStatus = "fully_approved";
-      else if (d.rejected === total) overallStatus = "fully_rejected";
-      else if (d.pending === total) overallStatus = "pending_review";
-      else if (d.pending > 0) overallStatus = "partial_review";
-      else overallStatus = "mixed";
+      const overallStatus = documentOverallStatus({
+        total,
+        approved,
+        rejected: d.rejected,
+        pending: d.pending,
+      });
 
       return {
         document_id: d._id.document_id,
@@ -1123,17 +1101,7 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       ts: s.created_at?.toISOString?.() ?? null,
     }));
 
-    const total = formattedSegments.length;
-    const approved = formattedSegments.filter((s) => s.status === "approved").length;
-    const summary = {
-      total_segments: total,
-      approved,
-      pending: formattedSegments.filter((s) => s.status === "pending").length,
-      rejected: formattedSegments.filter((s) => s.status === "rejected").length,
-      in_review: formattedSegments.filter((s) => s.status === "in_review").length,
-      overall_status: approved === total && total > 0 ? "fully_approved" :
-        formattedSegments.every((s) => s.status === "pending") ? "pending_review" : "partial_review",
-    };
+    const summary = summarizeSegments(formattedSegments);
 
     return { document, segments: formattedSegments, summary };
   });
