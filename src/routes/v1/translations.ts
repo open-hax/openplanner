@@ -1,12 +1,14 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import {
   documentOverallStatus,
+  jobStatusUpdatePlan,
   manifestShape,
   nextSegmentStatus,
   normalizeTranslationSegment,
   sftRow,
   summarizeSegments,
   translationGraphMemoryPlan,
+  translationJobPlan,
 } from "@open-hax/openplanner-translation-core";
 import { ObjectId } from "mongodb";
 
@@ -709,30 +711,25 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: "Document not found" });
     }
 
-    const targetLangs = (body.target_languages as string[]) || ["es", "de"];
-    const gardenId = body.garden_id as string | undefined;
-    const text = String(document.text || "");
+    const plan = translationJobPlan({
+      document_id: documentId,
+      document_text: String(document.text || ""),
+      target_languages: body.target_languages,
+      garden_id: body.garden_id,
+      project: document.project,
+      source_lang: "en",
+    }) as any;
 
-    if (!text.trim()) {
-      return reply.status(400).send({ error: "Document has no content to translate" });
+    if (plan["ok?"] === false) {
+      return reply.status(400).send({ error: String(plan.error ?? "Document has no content to translate") });
     }
 
-    // Create one job per target language (matches CMS behavior)
     const jobsCollection = app.mongo.db.collection("translation_jobs");
     const jobIds: string[] = [];
+    const now = new Date();
 
-    for (const targetLang of targetLangs) {
-      const job = {
-        document_id: documentId,
-        garden_id: gardenId,
-        project: document.project,
-        source_lang: "en",
-        target_language: targetLang, // Singular, matching worker expectation
-        status: "queued",
-        created_at: new Date(),
-      };
-
-      const result = await jobsCollection.insertOne(job);
+    for (const job of plan.jobs ?? []) {
+      const result = await jobsCollection.insertOne({ ...job, created_at: now });
       jobIds.push(result.insertedId.toString());
     }
 
@@ -741,9 +738,9 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       job_id: jobIds[0],
       job_ids: jobIds,
       document_id: documentId,
-      target_languages: targetLangs,
+      target_languages: plan.targetLanguages ?? plan.target_languages,
       status: "queued",
-      message: "Translation job(s) created. MT pipeline will process them.",
+      message: plan.message,
     };
   });
 
@@ -781,20 +778,21 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
     const jobId = (req.params as { id: string }).id;
     const body = req.body as { status: string; error?: string };
 
-    if (!["processing", "complete", "failed"].includes(body.status)) {
-      return reply.status(400).send({ error: "Invalid status. Must be: processing, complete, or failed" });
+    const plan = jobStatusUpdatePlan(body) as any;
+    if (plan["ok?"] === false) {
+      return reply.status(400).send({ error: String(plan.error ?? "Invalid status. Must be: processing, complete, or failed") });
     }
 
     const jobsCollection = app.mongo.db.collection("translation_jobs");
     const update: Record<string, unknown> = {
-      status: body.status,
+      status: plan.status,
     };
 
-    if (body.status === "processing") {
+    if (plan["started?"]) {
       update.started_at = new Date();
-    } else if (body.status === "complete" || body.status === "failed") {
+    } else if (plan["completed?"]) {
       update.completed_at = new Date();
-      if (body.error) update.error = body.error;
+      if (plan.error) update.error = plan.error;
     }
 
     const result = await jobsCollection.updateOne(
@@ -806,7 +804,7 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(404).send({ error: "Job not found" });
     }
 
-    return { success: true, job_id: jobId, status: body.status };
+    return { success: true, job_id: jobId, status: plan.status };
   });
 
   /**

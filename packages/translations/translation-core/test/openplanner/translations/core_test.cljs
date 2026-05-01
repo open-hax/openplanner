@@ -41,6 +41,20 @@
     (is (= 1 (aget (aget (aget manifest "languages") "es") "with_corrections")))
     (is (= 1000 (aget (aget (aget manifest "export_sizes") "sft_es") "bytes_estimate")))))
 
+(deftest translation-job-plans-are-data-only
+  (let [plan (boundary/translation-job-plan-js #js {:document_id "doc:1"
+                                                    :document_text "hello"
+                                                    :target_languages #js ["es" "de"]
+                                                    :garden_id "garden:1"
+                                                    :project "devel"})
+        empty-plan (boundary/translation-job-plan-js #js {:document_id "doc:2" :document_text ""})
+        status-plan (boundary/job-status-update-plan-js #js {:status "failed" :error "boom"})]
+    (is (true? (aget plan "ok?")))
+    (is (= 2 (.-length (aget plan "jobs"))))
+    (is (false? (aget empty-plan "ok?")))
+    (is (= "failed" (aget status-plan "status")))
+    (is (true? (aget status-plan "completed?")))))
+
 (deftest graph-memory-plan-is-data-only
   (let [plan (boundary/translation-graph-memory-plan-js #js {:segment_id "seg:1"
                                                             :source_text "hello world"

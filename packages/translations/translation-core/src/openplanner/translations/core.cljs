@@ -128,6 +128,43 @@
                         :source-text source-text})
    :target (or (nonblank-string corrected-text) translated-text "")})
 
+(def job-statuses #{:queued :processing :complete :failed})
+
+(defn normalize-target-languages
+  [value]
+  (let [langs (if (sequential? value)
+                (->> value (keep nonblank-string) distinct vec)
+                [])]
+    (if (seq langs) langs ["es" "de"])))
+
+(defn translation-job-plan
+  [{:keys [document-id document-text target-languages garden-id project source-lang]}]
+  (if (str/blank? (or document-text ""))
+    {:ok? false :error "Document has no content to translate"}
+    (let [langs (normalize-target-languages target-languages)]
+      {:ok? true
+       :document-id document-id
+       :target-languages langs
+       :jobs (mapv (fn [target-lang]
+                     {:document_id document-id
+                      :garden_id garden-id
+                      :project project
+                      :source_lang (or (nonblank-string source-lang) "en")
+                      :target_language target-lang
+                      :status "queued"})
+                   langs)
+       :message "Translation job(s) created. MT pipeline will process them."})))
+
+(defn job-status-update-plan
+  [{:keys [status error]}]
+  (let [status (token status)]
+    (if-not (contains? #{:processing :complete :failed} status)
+      {:ok? false :error "Invalid status. Must be: processing, complete, or failed"}
+      (cond-> {:ok? true :status (status-wire status)}
+        (= :processing status) (assoc :started? true)
+        (contains? #{:complete :failed} status) (assoc :completed? true)
+        (and (= :failed status) (nonblank-string error)) (assoc :error (nonblank-string error))))))
+
 (defn manifest-shape
   [{:keys [project languages corrections-by-language labelers]}]
   (let [language-entries

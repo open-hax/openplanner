@@ -11,7 +11,9 @@
                                :normalizeTranslationSegment openplanner.translations.boundary/normalize-translation-segment-js
                                :translationGraphMemoryPlan openplanner.translations.boundary/translation-graph-memory-plan-js
                                :sftRow openplanner.translations.boundary/sft-row-js
-                               :manifestShape openplanner.translations.boundary/manifest-shape-js}}}
+                               :manifestShape openplanner.translations.boundary/manifest-shape-js
+                               :translationJobPlan openplanner.translations.boundary/translation-job-plan-js
+                               :jobStatusUpdatePlan openplanner.translations.boundary/job-status-update-plan-js}}}
    :compiler-options {:output-feature-set :es-next}}
 
   :test

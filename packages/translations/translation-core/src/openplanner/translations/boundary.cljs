@@ -122,6 +122,25 @@
   {:email (or (jget row "email") (jget row "_id"))
    :segments-labeled (or (jget row "segments_labeled") (jget row "segmentsLabeled"))})
 
+(defn- js-array->strings
+  [value]
+  (if (array? value) (mapv str (array-seq value)) []))
+
+(defn translation-job-plan-js
+  [input]
+  (clj->js (core/translation-job-plan {:document-id (or (jget input "document_id") (jget input "documentId"))
+                                       :document-text (or (jget input "document_text") (jget input "documentText"))
+                                       :target-languages (js-array->strings (or (jget input "target_languages")
+                                                                                (jget input "targetLanguages")))
+                                       :garden-id (or (jget input "garden_id") (jget input "gardenId"))
+                                       :project (jget input "project")
+                                       :source-lang (or (jget input "source_lang") (jget input "sourceLang"))})))
+
+(defn job-status-update-plan-js
+  [input]
+  (clj->js (core/job-status-update-plan {:status (jget input "status")
+                                         :error (jget input "error")})))
+
 (defn manifest-shape-js
   [input]
   (let [languages (if (array? (jget input "languages"))

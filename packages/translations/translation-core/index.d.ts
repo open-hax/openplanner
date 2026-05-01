@@ -58,3 +58,29 @@ export function manifestShape(input: {
   labelers: Array<{ email: string; segments_labeled: number }>;
   export_sizes: Record<string, { rows: number; bytes_estimate: number }>;
 };
+
+export function translationJobPlan(input: Record<string, unknown>): {
+  "ok?": boolean;
+  error?: string;
+  documentId?: string;
+  document_id?: string;
+  targetLanguages?: string[];
+  target_languages?: string[];
+  jobs?: Array<{
+    document_id: string;
+    garden_id?: string | null;
+    project?: string | null;
+    source_lang: string;
+    target_language: string;
+    status: "queued";
+  }>;
+  message?: string;
+};
+
+export function jobStatusUpdatePlan(input: Record<string, unknown>): {
+  "ok?": boolean;
+  error?: string;
+  status?: "processing" | "complete" | "failed";
+  "started?"?: boolean;
+  "completed?"?: boolean;
+};
