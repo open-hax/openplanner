@@ -1,12 +1,6 @@
 packages:
   - ./app/*
   - packages/**
-  # Local eta-mu SDK/runtime packages while @open-hax/eta-mu is being prepared for npm publish.
-  - ../eta-mu/packages/agent
-  - ../eta-mu/packages/ai
-  - ../eta-mu/packages/coding-agent
-  - ../eta-mu/packages/eta-mu-sdk
-  - ../eta-mu/packages/tui
 
 onlyBuiltDependencies:
   - lmdb
