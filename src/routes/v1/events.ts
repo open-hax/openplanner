@@ -133,8 +133,6 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       });
     };
 
-    const MAX_EMBED_TEXT_CHARS = 4_000;
-
     const queueNodeEmbedding = (params: {
       nodeId: string;
       sourceEventId: string;
@@ -144,12 +142,11 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     }): void => {
       const normalized = formatEmbeddingPassageText(params.text);
       if (!normalized) return;
-      const truncated = normalized.length > MAX_EMBED_TEXT_CHARS ? normalized.slice(0, MAX_EMBED_TEXT_CHARS) : normalized;
       graphNodeEmbeddingInputs.set(params.nodeId, {
         node_id: params.nodeId,
         source_event_id: params.sourceEventId,
         project: params.project ?? null,
-        text: truncated,
+        text: normalized,
         chunk_count: params.chunkCount ?? 1,
       });
     };

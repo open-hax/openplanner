@@ -5,6 +5,84 @@ export interface IEmbeddingFunction {
   generate(texts: string[]): Promise<number[][]>;
 }
 
+function estimateTokens(input: string): number {
+  const text = String(input || "");
+  if (!text.trim()) return 0;
+  const chars = text.length;
+  const words = text.match(/\S+/g)?.length ?? 0;
+  return Math.max(Math.ceil(chars / 4), Math.ceil(words * 1.35));
+}
+
+function splitTextIntoChunks(text: string, maxTokens: number): string[] {
+  if (estimateTokens(text) <= maxTokens) {
+    return [text];
+  }
+
+  const maxChars = maxTokens * 4;
+  const paragraphs = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const out: string[] = [];
+  let current = "";
+
+  for (const paragraph of paragraphs) {
+    const next = current ? `${current}\n\n${paragraph}` : paragraph;
+    if (current && (estimateTokens(next) > maxTokens || next.length > maxChars)) {
+      out.push(current.trim());
+      current = paragraph;
+    } else {
+      current = next;
+    }
+  }
+  if (current.trim()) out.push(current.trim());
+
+  const result: string[] = [];
+  for (const chunk of out) {
+    if (estimateTokens(chunk) <= maxTokens) {
+      result.push(chunk);
+      continue;
+    }
+
+    const sentences = chunk.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
+    let sentenceCurrent = "";
+    for (const sentence of sentences) {
+      const next = sentenceCurrent ? `${sentenceCurrent} ${sentence}` : sentence;
+      if (sentenceCurrent && (estimateTokens(next) > maxTokens || next.length > maxChars)) {
+        result.push(sentenceCurrent.trim());
+        sentenceCurrent = sentence;
+      } else {
+        sentenceCurrent = next;
+      }
+    }
+    if (sentenceCurrent.trim()) result.push(sentenceCurrent.trim());
+  }
+
+  const final: string[] = [];
+  for (const chunk of result) {
+    if (estimateTokens(chunk) <= maxTokens) {
+      final.push(chunk);
+      continue;
+    }
+    const step = Math.max(1, maxChars);
+    for (let start = 0; start < chunk.length; start += step) {
+      final.push(chunk.slice(start, start + step).trim());
+    }
+  }
+
+  return final.filter(Boolean);
+}
+
+function averageEmbeddings(embeddings: number[][]): number[] {
+  if (embeddings.length === 0) return [];
+  if (embeddings.length === 1) return embeddings[0]!;
+  const dims = embeddings[0]!.length;
+  const sum = new Array(dims).fill(0);
+  for (const emb of embeddings) {
+    for (let i = 0; i < dims; i++) {
+      sum[i] += emb[i] ?? 0;
+    }
+  }
+  return sum.map((s) => s / embeddings.length);
+}
+
 export class EmbedProviderFunction implements IEmbeddingFunction {
   private model: string;
   private url: string;
@@ -20,6 +98,7 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
   private batchQueue: Array<() => Promise<void>> = [];
   private readonly MAX_CHARS_PER_BATCH = 4_000;
   private readonly MAX_SINGLE_ENTRY_CHARS = 4_000;
+  private readonly CHUNK_TARGET_TOKENS = 6_000;
 
   constructor(
     model: string,
@@ -253,7 +332,14 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
         } catch (batchError) {
           if (!isContextOverflowError(batchError)) throw batchError;
           if (batch.length === 1) {
-            throw new Error(`Single entry exceeds max size: ${batch[0][1].text.length} chars`);
+            const singleEntry = batch[0]!;
+            const chunks = splitTextIntoChunks(singleEntry[1].text, this.CHUNK_TARGET_TOKENS);
+            const chunkEmbeddings = await this.resolveBatch(
+              chunks.map((chunk) => [singleEntry[0], { text: chunk, waiters: [] }]),
+            );
+            const averaged = averageEmbeddings(chunkEmbeddings);
+            results.push(averaged);
+            continue;
           }
           const mid = Math.ceil(batch.length / 2);
           const left = await this.resolveBatch(batch.slice(0, mid));
@@ -263,14 +349,17 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
       }
 
       for (const [key, entry] of oversizedEntries) {
-        // Truncate to MAX_SINGLE_ENTRY_CHARS and retry instead of filling with zeros
-        const truncated = entry.text.slice(0, this.MAX_SINGLE_ENTRY_CHARS);
+        const chunks = splitTextIntoChunks(entry.text, this.CHUNK_TARGET_TOKENS);
         try {
-          const [embedding] = await this.resolveBatch([[key, { text: truncated, waiters: [] }]]);
-          results.push(embedding);
+          const chunkEmbeddings = await this.resolveBatch(
+            chunks.map((chunk) => [key, { text: chunk, waiters: [] }]),
+          );
+          const averaged = averageEmbeddings(chunkEmbeddings);
+          results.push(averaged);
         } catch {
           // Last resort: zero vector (will be filtered out by callers)
-          results.push(new Array(truncated.length).fill(0));
+          const fallbackDims = 1024;
+          results.push(new Array(fallbackDims).fill(0));
         }
       }
 

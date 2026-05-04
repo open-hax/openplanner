@@ -75,13 +75,14 @@ function stripMarkdownHtmlArtifacts(input: string): string {
 }
 
 function htmlToMarkdown(input: string): string {
-  return stripMarkdownHtmlArtifacts(
-    turndown.turndown(
-      String(input || "")
-        .replace(HTML_COMMENT_RE, "\n")
-        .replace(DANGEROUS_BLOCK_RE, "\n"),
-    ),
-  );
+  const cleaned = String(input || "")
+    .replace(HTML_COMMENT_RE, "\n")
+    .replace(DANGEROUS_BLOCK_RE, "\n");
+  try {
+    return stripMarkdownHtmlArtifacts(turndown.turndown(cleaned));
+  } catch {
+    return stripMarkdownHtmlArtifacts(cleaned);
+  }
 }
 
 function extractHtmlCandidate(text: string, extra?: Record<string, unknown>): string | null {
