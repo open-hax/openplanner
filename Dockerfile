@@ -9,13 +9,17 @@ WORKDIR /app
 COPY package.json tsconfig.json ./
 COPY pnpm-workspace.yaml .
 COPY pnpm-lock.yaml .
+COPY packages/graph/graph-claim-core/package.json ./packages/graph/graph-claim-core/package.json
 COPY packages/stores/document-hydration/package.json ./packages/stores/document-hydration/package.json
+COPY packages/translations/translation-core/package.json ./packages/translations/translation-core/package.json
 
 RUN corepack enable && corepack prepare pnpm@10 --activate
 RUN pnpm install --no-frozen-lockfile
 
 COPY src ./src
+COPY packages/graph/graph-claim-core ./packages/graph/graph-claim-core
 COPY packages/stores/document-hydration ./packages/stores/document-hydration
+COPY packages/translations/translation-core ./packages/translations/translation-core
 COPY .env.example ./.env.example
 
 RUN pnpm build

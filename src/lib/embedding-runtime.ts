@@ -30,7 +30,7 @@ export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime
     cache: persistentCache,
     batchWindowMs: cfg.embedProviderBatchWindowMs,
     maxBatchItems: cfg.embedProviderMaxBatchItems,
-    maxConcurrentBatches: 4,
+    maxConcurrentBatches: 1,
   });
 
   const makeParallelPool = (model: string): ParallelEmbeddingPool => new ParallelEmbeddingPool(model, cfg.embedProviderBaseUrl, {

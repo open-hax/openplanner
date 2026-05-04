@@ -34,7 +34,7 @@ type SourceRef = {
 };
 
 const VECTOR_SEARCH_INDEX_NAME = "vs_embedding";
-const FILTERABLE_PATHS = ["source", "kind", "project", "session", "visibility", "parent_id", "embedding_model"] as const;
+const FILTERABLE_PATHS = ["source", "kind", "project", "session", "visibility", "quality_label", "parent_id", "embedding_model"] as const;
 const FILTERABLE_PATH_SET = new Set<string>(FILTERABLE_PATHS);
 const VEXX_BASE_URL = String(process.env.VEXX_BASE_URL ?? "").trim();
 const VEXX_API_KEY = String(process.env.VEXX_API_KEY ?? "").trim();
@@ -186,6 +186,13 @@ function buildMongoFilter(where: Record<string, unknown> | undefined): Filter<Mo
         }
         continue;
       }
+      if (Object.prototype.hasOwnProperty.call(record, "$ne")) {
+        const normalized = normalizeScalarFilterValue(record.$ne);
+        if (normalized !== undefined) {
+          (filter as Record<string, unknown>)[key] = { $ne: normalized };
+        }
+        continue;
+      }
       continue;
     }
 
@@ -286,6 +293,7 @@ function toMetadata(doc: MongoVectorDocument): Record<string, unknown> {
     role: doc.role ?? "",
     model: doc.model ?? "",
     visibility: doc.visibility ?? "",
+    quality_label: doc.quality_label ?? "",
     title: doc.title ?? "",
     embedding_model: doc.embedding_model ?? "",
     embedding_dimensions: doc.embedding_dimensions ?? null,
@@ -368,6 +376,7 @@ async function ensurePartitionSupportIndexes(collection: Collection<MongoVectorD
   await collection.createIndex({ project: 1, ts: -1 });
   await collection.createIndex({ session: 1, ts: -1 });
   await collection.createIndex({ visibility: 1, ts: -1 });
+  await collection.createIndex({ quality_label: 1, ts: -1 });
   await collection.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
   await collection.createIndex({ schema_version: 1, ts: -1 });
 }
@@ -556,6 +565,7 @@ function toMongoVectorDocument(entry: MongoVectorEntry, tier: MongoVectorTier, n
     role: toStringOrNull(entry.metadata.role),
     model: toStringOrNull(entry.metadata.model),
     visibility: toStringOrNull(entry.metadata.visibility),
+    quality_label: toStringOrNull(entry.metadata.quality_label),
     title: toStringOrNull(entry.metadata.title),
     embedding_model: toStringOrNull(entry.metadata.embedding_model),
     embedding_dimensions: entry.embedding.length,
@@ -824,6 +834,7 @@ async function queryPartitionWithNativeVectorSearch(params: {
         role: 1,
         model: 1,
         visibility: 1,
+        quality_label: 1,
         title: 1,
         embedding_model: 1,
         embedding_dimensions: 1,

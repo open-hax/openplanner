@@ -83,9 +83,116 @@ function tenantsCollection(app: FastifyInstance) {
   return app.mongo.db.collection("tenants");
 }
 
+function normalizeReactionEmoji(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function qualityFromReactionEmoji(emoji: string): "good" | "bad" | null {
+  if (["✅", "☑️", "✔️", "✔"].includes(emoji)) return "good";
+  if (["❌", "✖️", "✖", "❎"].includes(emoji)) return "bad";
+  return null;
+}
+
+function labelId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+async function updateVectorQualityLabel(app: FastifyInstance, recordId: string, quality: "good" | "bad" | null): Promise<number> {
+  if (!quality) return 0;
+  const update = { $set: { quality_label: quality, updatedAt: new Date() } };
+  let modified = 0;
+  const collections = [app.mongo.hotVectors, app.mongo.compactVectors];
+
+  const partitions = await app.mongo.vectorPartitions.find({}).project({ collectionName: 1 }).toArray();
+  for (const partition of partitions) {
+    if (typeof partition.collectionName === "string" && partition.collectionName.trim()) {
+      collections.push(app.mongo.db.collection(partition.collectionName) as any);
+    }
+  }
+
+  for (const collection of collections) {
+    const result = await collection.updateMany({ parent_id: recordId } as any, update as any);
+    modified += result.modifiedCount ?? 0;
+  }
+  return modified;
+}
+
 // ── Routes ───────────────────────────────────────────────────────────
 
 export async function labelsRoutes(app: FastifyInstance) {
+  // Weak claims/quality labels for existing OpenPlanner records.
+  // Explicit meanings:
+  //   ✅ -> good output
+  //   ❌ -> bad output
+  app.post<{ Params: { record_id: string } }>("/records/:record_id/reaction", async (req, reply) => {
+    const recordId = labelId(req.params.record_id);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const emoji = normalizeReactionEmoji(body.emoji ?? body.reaction);
+    if (!recordId) return reply.code(400).send({ error: "record_id is required" });
+    if (!emoji) return reply.code(400).send({ error: "emoji is required" });
+
+    const quality = qualityFromReactionEmoji(emoji);
+    const now = new Date().toISOString();
+    const reactionLabel = quality ? `quality:${quality}` : `reaction:${emoji}`;
+    const labelEntry = {
+      label: reactionLabel,
+      quality,
+      emoji,
+      source: String(body.source ?? "chat-reaction"),
+      labeler_id: String(body.labeler_id ?? body.user_id ?? "unknown"),
+      at: now,
+    };
+
+    const setFields: Record<string, unknown> = {
+      "extra.openplanner_labels.updated_at": now,
+      "extra.openplanner_labels.claim_system": "weak-reaction-v1",
+    };
+    if (quality) {
+      setFields["extra.openplanner_labels.quality"] = quality;
+      setFields["extra.openplanner_labels.explicit_meaning"] = quality === "good" ? "good output" : "bad output";
+    }
+
+    const result = await app.mongo.events.updateOne(
+      { _id: recordId },
+      {
+        $set: setFields,
+        $addToSet: {
+          "extra.openplanner_labels.reaction_emojis": emoji,
+          "extra.openplanner_labels.labels": reactionLabel,
+        },
+        $push: { "extra.openplanner_labels.history": labelEntry },
+      },
+    );
+    const vectorModified = await updateVectorQualityLabel(app, recordId, quality);
+
+    return {
+      ok: true,
+      record_id: recordId,
+      emoji,
+      quality,
+      matched: result.matchedCount,
+      modified: result.modifiedCount,
+      vector_modified: vectorModified,
+      label: labelEntry,
+    };
+  });
+
+  app.post("/records/lookup", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const ids = Array.isArray(body.ids) ? body.ids.map(labelId).filter(Boolean).slice(0, 500) : [];
+    if (ids.length === 0) return { ok: true, labels: {} };
+
+    const rows = await app.mongo.events
+      .find({ _id: { $in: ids } })
+      .project({ id: 1, extra: 1 })
+      .toArray();
+    const labels = Object.fromEntries(rows.map((row: any) => {
+      const openplannerLabels = row?.extra?.openplanner_labels ?? {};
+      return [String(row.id ?? row._id), openplannerLabels];
+    }));
+    return { ok: true, labels };
+  });
+
   // List labels for a tenant
   app.get<{ Params: { tenant_id: string } }>("/:tenant_id", async (req, reply) => {
     const { tenant_id } = req.params;

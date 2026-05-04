@@ -1,12 +1,13 @@
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import {
-  documentOverallStatus,
+  documentListShape,
+  documentReviewLabelPlan,
+  documentTranslationShape,
   jobStatusUpdatePlan,
   manifestShape,
   nextSegmentStatus,
   normalizeTranslationSegment,
   sftRow,
-  summarizeSegments,
   translationGraphMemoryPlan,
   translationJobPlan,
 } from "@open-hax/openplanner-translation-core";
@@ -751,10 +752,22 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
    */
   app.get("/translations/jobs/next", async (req, reply) => {
     const jobsCollection = app.mongo.db.collection("translation_jobs");
-    const job = await jobsCollection.findOne(
+    const result = await jobsCollection.findOneAndUpdate(
       { status: "queued" },
-      { sort: { created_at: 1 } }
+      {
+        $set: {
+          status: "processing",
+          started_at: new Date(),
+          updated_at: new Date(),
+        },
+        $inc: { attempts: 1 },
+      },
+      {
+        sort: { created_at: 1 },
+        returnDocument: "after",
+      }
     );
+    const job = result;
 
     if (!job) {
       return { job: null };
@@ -955,44 +968,15 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       .find({ _id: { $in: documentIds } }, { projection: { _id: 1, "extra.title": 1, "extra.visibility": 1 } })
       .toArray();
 
-    const titleMap = new Map<string, { title: string; visibility: string }>();
-    for (const row of eventRows) {
+    const titles = Object.fromEntries(eventRows.map((row) => {
       const extra = (row as Record<string, unknown>).extra as Record<string, unknown> | undefined;
-      titleMap.set(row._id as string, {
+      return [row._id as string, {
         title: String(extra?.title ?? "Untitled"),
         visibility: String(extra?.visibility ?? "internal"),
-      });
-    }
+      }];
+    }));
 
-    const documents = docs.map((d) => {
-      const meta = titleMap.get(d._id.document_id);
-      const approved = d.approved;
-      const total = d.total_segments;
-      const overallStatus = documentOverallStatus({
-        total,
-        approved,
-        rejected: d.rejected,
-        pending: d.pending,
-      });
-
-      return {
-        document_id: d._id.document_id,
-        target_lang: d._id.target_lang,
-        source_lang: d.source_lang,
-        garden_id: d.garden_id,
-        project: d.project,
-        title: meta?.title ?? "Untitled",
-        document_status: meta?.visibility ?? "internal",
-        total_segments: total,
-        approved,
-        pending: d.pending,
-        rejected: d.rejected,
-        in_review: d.in_review,
-        overall_status: overallStatus,
-      };
-    });
-
-    return { documents, total: documents.length };
+    return documentListShape({ documents: docs, titles });
   });
 
   /**
@@ -1044,45 +1028,7 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       .sort({ created_at: -1 })
       .toArray();
 
-    const labelsBySegment = new Map<string, typeof allLabels>();
-    for (const label of allLabels) {
-      const list = labelsBySegment.get(label.segment_id) ?? [];
-      list.push(label);
-      labelsBySegment.set(label.segment_id, list);
-    }
-
-    const formattedSegments = segments.map((s) => ({
-      id: s._id.toString(),
-      source_text: s.source_text,
-      translated_text: s.translated_text,
-      source_lang: s.source_lang,
-      target_lang: s.target_lang,
-      document_id: s.document_id,
-      segment_index: s.segment_index,
-      status: s.status,
-      confidence: s.confidence ?? null,
-      mt_model: s.mt_model ?? null,
-      garden_id: s.garden_id ?? null,
-      project: s.project ?? null,
-      labels: (labelsBySegment.get(s._id.toString()) ?? []).map((l) => ({
-        id: l._id.toString(),
-        segment_id: l.segment_id,
-        labeler_email: l.labeler_email,
-        adequacy: l.adequacy,
-        fluency: l.fluency,
-        terminology: l.terminology,
-        risk: l.risk,
-        overall: l.overall,
-        corrected_text: l.corrected_text ?? null,
-        editor_notes: l.editor_notes ?? null,
-        ts: l.created_at?.toISOString?.() ?? null,
-      })),
-      ts: s.created_at?.toISOString?.() ?? null,
-    }));
-
-    const summary = summarizeSegments(formattedSegments);
-
-    return { document, segments: formattedSegments, summary };
+    return documentTranslationShape({ document, segments, labels: allLabels });
   });
 
   /**
@@ -1129,30 +1075,29 @@ export const translationRoutes: FastifyPluginAsync = async (app) => {
       const segIndex = String(segment.segment_index);
       const override = overrides[segIndex] ?? overrides[segId];
       const effectiveOverall = override?.overall ?? body.overall;
-
-      // Determine new segment status
-      let newStatus: TranslationSegment["status"];
-      if (effectiveOverall === "approve") {
-        newStatus = "approved";
-      } else if (effectiveOverall === "needs_edit") {
-        newStatus = override?.corrected_text ? "approved" : "in_review";
-      } else {
-        newStatus = "rejected";
-      }
-
-      // Create label record
-      const label: TranslationLabel = {
+      const labelPlan = documentReviewLabelPlan({
         segment_id: segId,
         labeler_id: labelerId,
         labeler_email: labelerEmail,
-        label_version: (await labelsCollection.countDocuments({ segment_id: segId })) + 1,
-        adequacy: effectiveOverall === "approve" ? "good" : "adequate",
-        fluency: effectiveOverall === "approve" ? "good" : "adequate",
-        terminology: effectiveOverall === "approve" ? "correct" : "minor_errors",
-        risk: "safe",
         overall: effectiveOverall,
         corrected_text: override?.corrected_text,
         editor_notes: override?.editor_notes ?? body.editor_notes,
+      }) as any;
+      const newStatus = labelPlan.next_status as TranslationSegment["status"];
+
+      // Create label record
+      const label: TranslationLabel = {
+        segment_id: labelPlan.segment_id,
+        labeler_id: labelPlan.labeler_id,
+        labeler_email: labelPlan.labeler_email,
+        label_version: (await labelsCollection.countDocuments({ segment_id: segId })) + 1,
+        adequacy: labelPlan.adequacy,
+        fluency: labelPlan.fluency,
+        terminology: labelPlan.terminology,
+        risk: labelPlan.risk,
+        overall: labelPlan.overall,
+        corrected_text: labelPlan.corrected_text,
+        editor_notes: labelPlan.editor_notes,
         created_at: new Date(),
       };
 

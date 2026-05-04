@@ -79,8 +79,8 @@ test("prepareIndexDocument forceChunking overrides small text", () => {
     parentId: "small-but-forced",
     text: "Tiny doc.",
     forceChunking: true,
-    targetChunkTokens: 28_000,
-    targetChunkChars: 80_000,
+    targetChunkTokens: 4_000,
+    targetChunkChars: 16_000,
   });
   assert.ok(result.chunkCount > 1 || result.chunks.length >= 1, "should produce chunks");
 });
@@ -133,17 +133,17 @@ test("batchPreparedChunks handles single chunk", () => {
   assert.equal(batches[0]!.length, 1);
 });
 
-test("DEFAULT limits are conservative for 32k context", () => {
+test("DEFAULT limits are conservative for 8k context", () => {
   const result = prepareIndexDocument({
     parentId: "limit-check",
     text: "Word ".repeat(7_000),
-    targetChunkTokens: 28_000,
-    targetChunkChars: 80_000,
+    targetChunkTokens: 4_000,
+    targetChunkChars: 16_000,
   });
   for (const chunk of result.chunks) {
     assert.ok(
-      chunk.text.length <= 80_000,
-      `chunk chars ${chunk.text.length} exceeds 80k limit`
+      chunk.text.length <= 16_000,
+      `chunk chars ${chunk.text.length} exceeds 16k limit`
     );
   }
 });

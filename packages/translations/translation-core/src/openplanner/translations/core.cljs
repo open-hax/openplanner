@@ -165,6 +165,78 @@
         (contains? #{:complete :failed} status) (assoc :completed? true)
         (and (= :failed status) (nonblank-string error)) (assoc :error (nonblank-string error))))))
 
+(defn document-list-row
+  [{:keys [document-id target-lang source-lang garden-id project total approved pending rejected in-review title visibility]}]
+  {:document_id document-id
+   :target_lang target-lang
+   :source_lang source-lang
+   :garden_id garden-id
+   :project project
+   :title (or (nonblank-string title) "Untitled")
+   :document_status (or (nonblank-string visibility) "internal")
+   :total_segments (or total 0)
+   :approved (or approved 0)
+   :pending (or pending 0)
+   :rejected (or rejected 0)
+   :in_review (or in-review 0)
+   :overall_status (status-wire (document-overall-status {:total (or total 0)
+                                                          :approved (or approved 0)
+                                                          :pending (or pending 0)
+                                                          :rejected (or rejected 0)}))})
+
+(defn format-label
+  [{:keys [id segment-id labeler-id labeler-email adequacy fluency terminology risk overall corrected-text editor-notes ts]}]
+  {:id id
+   :segment_id segment-id
+   :labeler_id labeler-id
+   :labeler_email labeler-email
+   :adequacy adequacy
+   :fluency fluency
+   :terminology terminology
+   :risk risk
+   :overall overall
+   :corrected_text corrected-text
+   :editor_notes editor-notes
+   :ts ts})
+
+(defn format-segment
+  [{:keys [id source-text translated-text source-lang target-lang document-id segment-index status confidence mt-model garden-id project labels ts]}]
+  {:id id
+   :source_text source-text
+   :translated_text translated-text
+   :source_lang source-lang
+   :target_lang target-lang
+   :document_id document-id
+   :segment_index segment-index
+   :status (status-wire (token status))
+   :confidence confidence
+   :mt_model mt-model
+   :garden_id garden-id
+   :project project
+   :labels (mapv format-label labels)
+   :ts ts})
+
+(defn document-translation-shape
+  [{:keys [document segments]}]
+  (let [formatted (mapv format-segment segments)]
+    {:document document
+     :segments formatted
+     :summary (summarize-segments formatted)}))
+
+(defn document-review-label-plan
+  [{:keys [segment-id labeler-id labeler-email overall corrected-text editor-notes]}]
+  {:segment_id segment-id
+   :labeler_id (or (nonblank-string labeler-id) "unknown")
+   :labeler_email (or (nonblank-string labeler-email) "unknown")
+   :adequacy (if (= :approve (token overall)) "good" "adequate")
+   :fluency (if (= :approve (token overall)) "good" "adequate")
+   :terminology (if (= :approve (token overall)) "correct" "minor_errors")
+   :risk "safe"
+   :overall (name (or (token overall) :needs-edit))
+   :corrected_text (nonblank-string corrected-text)
+   :editor_notes (nonblank-string editor-notes)
+   :next_status (status-wire (next-segment-status {:overall overall :corrected-text corrected-text}))})
+
 (defn manifest-shape
   [{:keys [project languages corrections-by-language labelers]}]
   (let [language-entries

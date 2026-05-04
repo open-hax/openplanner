@@ -18,8 +18,8 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
   private flushing = false;
   private activeBatches = 0;
   private batchQueue: Array<() => Promise<void>> = [];
-  private readonly MAX_CHARS_PER_BATCH = 60_000;
-  private readonly MAX_SINGLE_ENTRY_CHARS = 50_000;
+  private readonly MAX_CHARS_PER_BATCH = 4_000;
+  private readonly MAX_SINGLE_ENTRY_CHARS = 4_000;
 
   constructor(
     model: string,
@@ -262,8 +262,16 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
         }
       }
 
-      for (const [, entry] of oversizedEntries) {
-        results.push(new Array(entry.text.length).fill(0));
+      for (const [key, entry] of oversizedEntries) {
+        // Truncate to MAX_SINGLE_ENTRY_CHARS and retry instead of filling with zeros
+        const truncated = entry.text.slice(0, this.MAX_SINGLE_ENTRY_CHARS);
+        try {
+          const [embedding] = await this.resolveBatch([[key, { text: truncated, waiters: [] }]]);
+          results.push(embedding);
+        } catch {
+          // Last resort: zero vector (will be filtered out by callers)
+          results.push(new Array(truncated.length).fill(0));
+        }
       }
 
       return results;

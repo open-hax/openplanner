@@ -141,6 +141,94 @@
   (clj->js (core/job-status-update-plan {:status (jget input "status")
                                          :error (jget input "error")})))
 
+(defn- string-id
+  [value]
+  (when (some? value) (.toString value)))
+
+(defn- maybe-iso
+  [value]
+  (cond
+    (nil? value) nil
+    (fn? (.-toISOString value)) (.toISOString value)
+    :else (str value)))
+
+(defn- doc-row-from-js
+  [row titles]
+  (let [id-obj (jget row "_id")
+        document-id (jget id-obj "document_id")
+        meta (jget titles document-id)]
+    {:document-id document-id
+     :target-lang (jget id-obj "target_lang")
+     :source-lang (jget row "source_lang")
+     :garden-id (jget row "garden_id")
+     :project (jget row "project")
+     :total (jget row "total_segments")
+     :approved (jget row "approved")
+     :pending (jget row "pending")
+     :rejected (jget row "rejected")
+     :in-review (jget row "in_review")
+     :title (jget meta "title")
+     :visibility (jget meta "visibility")}))
+
+(defn document-list-shape-js
+  [input]
+  (let [docs (if (array? (jget input "documents")) (array-seq (jget input "documents")) [])
+        titles (or (jget input "titles") #js {})
+        shaped (mapv #(core/document-list-row (doc-row-from-js % titles)) docs)]
+    #js {:documents (clj->js shaped)
+         :total (count shaped)}))
+
+(defn- label-from-js
+  [row]
+  {:id (string-id (jget row "_id"))
+   :segment-id (jget row "segment_id")
+   :labeler-id (jget row "labeler_id")
+   :labeler-email (jget row "labeler_email")
+   :adequacy (jget row "adequacy")
+   :fluency (jget row "fluency")
+   :terminology (jget row "terminology")
+   :risk (jget row "risk")
+   :overall (jget row "overall")
+   :corrected-text (jget row "corrected_text")
+   :editor-notes (jget row "editor_notes")
+   :ts (maybe-iso (jget row "created_at"))})
+
+(defn- segment-from-row-js
+  [row labels]
+  (let [id (string-id (jget row "_id"))]
+    {:id id
+     :source-text (jget row "source_text")
+     :translated-text (jget row "translated_text")
+     :source-lang (jget row "source_lang")
+     :target-lang (jget row "target_lang")
+     :document-id (jget row "document_id")
+     :segment-index (jget row "segment_index")
+     :status (jget row "status")
+     :confidence (jget row "confidence")
+     :mt-model (jget row "mt_model")
+     :garden-id (jget row "garden_id")
+     :project (jget row "project")
+     :labels (mapv label-from-js (or (get labels id) []))
+     :ts (maybe-iso (jget row "created_at"))}))
+
+(defn document-translation-shape-js
+  [input]
+  (let [segments (if (array? (jget input "segments")) (array-seq (jget input "segments")) [])
+        labels (if (array? (jget input "labels")) (array-seq (jget input "labels")) [])
+        labels-by-segment (group-by #(jget % "segment_id") labels)
+        shaped-segments (mapv #(segment-from-row-js % labels-by-segment) segments)]
+    (clj->js (core/document-translation-shape {:document (js->clj (jget input "document") :keywordize-keys false)
+                                               :segments shaped-segments}))))
+
+(defn document-review-label-plan-js
+  [input]
+  (clj->js (core/document-review-label-plan {:segment-id (jget input "segment_id")
+                                             :labeler-id (jget input "labeler_id")
+                                             :labeler-email (jget input "labeler_email")
+                                             :overall (jget input "overall")
+                                             :corrected-text (jget input "corrected_text")
+                                             :editor-notes (jget input "editor_notes")})))
+
 (defn manifest-shape-js
   [input]
   (let [languages (if (array? (jget input "languages"))

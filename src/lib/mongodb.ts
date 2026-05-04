@@ -100,6 +100,7 @@ export interface MongoVectorDocument {
   role: string | null;
   model: string | null;
   visibility: string | null;
+  quality_label?: string | null;
   title: string | null;
   embedding_model: string | null;
   embedding_dimensions: number | null;
@@ -523,6 +524,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await events.createIndex({ kind: 1, ts: -1 });
   await events.createIndex({ project: 1, ts: -1 });
   await events.createIndex({ session: 1, ts: -1 });
+  await events.createIndex({ "extra.openplanner_labels.quality": 1, ts: -1 });
   await events.createIndex({ schema_version: 1, ts: -1 });
   await events.createIndex({ "text": "text" }); // Full-text search index
 
@@ -540,6 +542,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await hotVectors.createIndex({ project: 1, ts: -1 });
   await hotVectors.createIndex({ session: 1, ts: -1 });
   await hotVectors.createIndex({ visibility: 1, ts: -1 });
+  await hotVectors.createIndex({ quality_label: 1, ts: -1 });
   await hotVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
   await hotVectors.createIndex({ schema_version: 1, ts: -1 });
 
@@ -550,6 +553,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await compactVectors.createIndex({ project: 1, ts: -1 });
   await compactVectors.createIndex({ session: 1, ts: -1 });
   await compactVectors.createIndex({ visibility: 1, ts: -1 });
+  await compactVectors.createIndex({ quality_label: 1, ts: -1 });
   await compactVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
   await compactVectors.createIndex({ schema_version: 1, ts: -1 });
 
@@ -1088,6 +1092,8 @@ export async function ftsSearch(
     project?: string;
     session?: string;
     visibility?: string;
+    quality?: "good" | "not_bad" | "any";
+    excludeIds?: string[];
   } = {}
 ): Promise<unknown[]> {
   const limit = options.limit ?? 20;
@@ -1100,6 +1106,9 @@ export async function ftsSearch(
   if (options.project) filter.project = options.project;
   if (options.session) filter.session = options.session;
   if (options.visibility) filter["extra.visibility"] = options.visibility;
+  if (options.quality === "good") filter["extra.openplanner_labels.quality"] = "good";
+  if (options.quality === "not_bad") filter["extra.openplanner_labels.quality"] = { $ne: "bad" };
+  if (options.excludeIds?.length) filter.id = { $nin: options.excludeIds };
 
   const results = await collection
     .find(filter, {
@@ -1113,6 +1122,7 @@ export async function ftsSearch(
         message: 1,
         role: 1,
         model: 1,
+        extra: 1,
         text: { $substr: ["$text", 0, 240] },
       },
     })
@@ -1123,6 +1133,7 @@ export async function ftsSearch(
   return results.map((r) => ({
     ...r,
     snippet: r.text,
+    quality_label: (r.extra as any)?.openplanner_labels?.quality ?? null,
     tier: "hot",
   }));
 }
@@ -1140,6 +1151,8 @@ export async function ilikeSearch(
     project?: string;
     session?: string;
     visibility?: string;
+    quality?: "good" | "not_bad" | "any";
+    excludeIds?: string[];
   } = {}
 ): Promise<unknown[]> {
   const limit = options.limit ?? 20;
@@ -1152,6 +1165,9 @@ export async function ilikeSearch(
   if (options.project) filter.project = options.project;
   if (options.session) filter.session = options.session;
   if (options.visibility) filter["extra.visibility"] = options.visibility;
+  if (options.quality === "good") filter["extra.openplanner_labels.quality"] = "good";
+  if (options.quality === "not_bad") filter["extra.openplanner_labels.quality"] = { $ne: "bad" };
+  if (options.excludeIds?.length) filter.id = { $nin: options.excludeIds };
 
   const results = await collection
     .find(filter, {
@@ -1165,6 +1181,7 @@ export async function ilikeSearch(
         message: 1,
         role: 1,
         model: 1,
+        extra: 1,
         text: { $substr: ["$text", 0, 240] },
       },
     })
@@ -1175,6 +1192,7 @@ export async function ilikeSearch(
   return results.map((r) => ({
     ...r,
     snippet: r.text,
+    quality_label: (r.extra as any)?.openplanner_labels?.quality ?? null,
     tier: "hot",
   }));
 }

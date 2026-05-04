@@ -6,13 +6,13 @@ const HTML_DOCUMENT_RE = /<!doctype html|<html\b|<body\b|<main\b|<article\b/i;
 const HTML_ARTIFACT_LINE_RE = /^\s*<\/?(?:div|span|section|article|main|header|footer|nav|aside|figure|figcaption|form|button|picture|source|template)[^>]*>\s*$/gim;
 const DANGEROUS_BLOCK_RE = /<(script|style|noscript|iframe|object|embed|svg)[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
-const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 32_000;
-const DEFAULT_TARGET_CHUNK_TOKENS = 28_000;
-const DEFAULT_TARGET_CHUNK_CHARS = 80_000;
-const DEFAULT_OVERLAP_CHARS = 1_000;
-const DEFAULT_BATCH_TOKEN_BUDGET = 512_000;
+const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 5_000;
+const DEFAULT_TARGET_CHUNK_TOKENS = 4_000;
+const DEFAULT_TARGET_CHUNK_CHARS = 16_000;
+const DEFAULT_OVERLAP_CHARS = 400;
+const DEFAULT_BATCH_TOKEN_BUDGET = 40_000;
 const DEFAULT_BATCH_ITEM_LIMIT = 256;
-const HARD_MIN_CHUNK_CHARS = 10_000;
+const HARD_MIN_CHUNK_CHARS = 3_000;
 
 const turndown = new TurndownService({
   headingStyle: "atx",

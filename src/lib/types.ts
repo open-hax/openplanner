@@ -80,6 +80,8 @@ export type FtsSearchRequest = {
   session?: string;
   visibility?: DocumentVisibility;
   tier?: SearchTier;
+  quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
+  output_quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
 };
 
 export type VectorSearchRequest = {
@@ -91,6 +93,8 @@ export type VectorSearchRequest = {
   visibility?: DocumentVisibility;
   where?: Record<string, unknown>;
   tier?: SearchTier;
+  quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
+  output_quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
 };
 
 // Translation types

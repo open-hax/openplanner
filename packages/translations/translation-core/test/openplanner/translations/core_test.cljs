@@ -55,6 +55,37 @@
     (is (= "failed" (aget status-plan "status")))
     (is (true? (aget status-plan "completed?")))))
 
+(deftest document-review-shaping-is-data-only
+  (let [list-result (boundary/document-list-shape-js
+                      #js {:documents #js [#js {:_id #js {:document_id "doc:1" :target_lang "es"}
+                                                 :source_lang "en"
+                                                 :total_segments 2
+                                                 :approved 1
+                                                 :pending 1
+                                                 :rejected 0
+                                                 :in_review 0}]
+                           :titles #js {"doc:1" #js {:title "Doc" :visibility "public"}}})
+        detail (boundary/document-translation-shape-js
+                #js {:document #js {:id "doc:1" :title "Doc"}
+                     :segments #js [#js {:_id "seg:1"
+                                          :source_text "hello"
+                                          :translated_text "hola"
+                                          :source_lang "en"
+                                          :target_lang "es"
+                                          :document_id "doc:1"
+                                          :segment_index 0
+                                          :status "approved"}]
+                     :labels #js [#js {:_id "label:1"
+                                        :segment_id "seg:1"
+                                        :labeler_email "dev@example.test"
+                                        :overall "approve"}]})
+        label-plan (boundary/document-review-label-plan-js #js {:segment_id "seg:1"
+                                                               :overall "needs_edit"
+                                                               :corrected_text "hola!"})]
+    (is (= "partial_review" (aget (aget (aget list-result "documents") 0) "overall_status")))
+    (is (= 1 (.-length (aget (aget (aget detail "segments") 0) "labels"))))
+    (is (= "approved" (aget label-plan "next_status")))))
+
 (deftest graph-memory-plan-is-data-only
   (let [plan (boundary/translation-graph-memory-plan-js #js {:segment_id "seg:1"
                                                             :source_text "hello world"

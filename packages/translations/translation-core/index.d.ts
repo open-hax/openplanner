@@ -84,3 +84,16 @@ export function jobStatusUpdatePlan(input: Record<string, unknown>): {
   "started?"?: boolean;
   "completed?"?: boolean;
 };
+
+export function documentListShape(input: { documents: unknown[]; titles: Record<string, unknown> }): {
+  documents: Array<Record<string, unknown>>;
+  total: number;
+};
+
+export function documentTranslationShape(input: { document: Record<string, unknown>; segments: unknown[]; labels: unknown[] }): {
+  document: Record<string, unknown>;
+  segments: Array<Record<string, unknown>>;
+  summary: TranslationSummary;
+};
+
+export function documentReviewLabelPlan(input: Record<string, unknown>): Record<string, unknown> & { next_status: TranslationSegmentStatus };

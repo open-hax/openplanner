@@ -133,6 +133,8 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       });
     };
 
+    const MAX_EMBED_TEXT_CHARS = 4_000;
+
     const queueNodeEmbedding = (params: {
       nodeId: string;
       sourceEventId: string;
@@ -142,11 +144,12 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     }): void => {
       const normalized = formatEmbeddingPassageText(params.text);
       if (!normalized) return;
+      const truncated = normalized.length > MAX_EMBED_TEXT_CHARS ? normalized.slice(0, MAX_EMBED_TEXT_CHARS) : normalized;
       graphNodeEmbeddingInputs.set(params.nodeId, {
         node_id: params.nodeId,
         source_event_id: params.sourceEventId,
         project: params.project ?? null,
-        text: normalized,
+        text: truncated,
         chunk_count: params.chunkCount ?? 1,
       });
     };
@@ -364,10 +367,11 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
                 embedding_model: embeddingModel ?? "",
                 search_tier: "hot",
                 visibility: extra.visibility ?? "internal",
+                quality_label: ((extra.openplanner_labels as any)?.quality ?? ""),
                 title: extra.title ?? (sr as any).message ?? ev.id,
               },
               embeddingFunction,
-            }), 10000, `event vector index ${ev.id}`);
+            }), 30_000, `event vector index ${ev.id}`);
           } catch (err) {
             app.log.warn({ err, eventId: ev.id }, "Failed to index event into MongoDB vectors; preserving base event without embeddings");
           }
@@ -428,7 +432,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
 
             const embeddings = await withTimeout(
               embeddingFunction.generate(toEmbed.map((row) => row.text)) as Promise<number[][]>,
-              10_000,
+              30_000,
               `graph node embedding batch ${model}`,
             );
 

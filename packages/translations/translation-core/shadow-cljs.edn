@@ -13,7 +13,10 @@
                                :sftRow openplanner.translations.boundary/sft-row-js
                                :manifestShape openplanner.translations.boundary/manifest-shape-js
                                :translationJobPlan openplanner.translations.boundary/translation-job-plan-js
-                               :jobStatusUpdatePlan openplanner.translations.boundary/job-status-update-plan-js}}}
+                               :jobStatusUpdatePlan openplanner.translations.boundary/job-status-update-plan-js
+                               :documentListShape openplanner.translations.boundary/document-list-shape-js
+                               :documentTranslationShape openplanner.translations.boundary/document-translation-shape-js
+                               :documentReviewLabelPlan openplanner.translations.boundary/document-review-label-plan-js}}}
    :compiler-options {:output-feature-set :es-next}}
 
   :test
