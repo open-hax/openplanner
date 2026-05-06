@@ -1,43 +1,17 @@
-# Π Last — OpenPlanner recursive snapshot
+# Π Fork Tax — openplanner pointer freeze for Knoxx audio work
 
-**Timestamp:** 2026-04-30T06:23:07Z
-**Branch:** tests/sentance-chunker
-**Head before snapshot:** b67067d
-**Tag:** Π/openplanner-recursive-2026-04-30
-**Mode:** recursive fork tax for OpenPlanner and submodules
+Timestamp: 20260506T231041Z
+Repo: /home/err/devel/orgs/open-hax/openplanner
+Branch: tests/sentance-chunker
+Base HEAD: 1c50cdc
+Tag target: pi-fork-tax-openplanner-knoxx-audio-20260506T231041Z
 
-## What was preserved
+## Preserved submodule pointer
+- `packages/agents/knoxx` -> `011a145b352b5a595b7093a0ee73e811f1cda82a` (`Π freeze broadcast studio audio hearing`)
+- Knoxx tag: `pi-fork-tax-broadcast-audio-20260506T231041Z`
 
-- Root workspace dependency policy update in `pnpm-workspace.yaml`.
-- New OpenPlanner architecture/operations notes under `docs/notes/`.
-- Migration pitfalls note under `packages/stores/migrations/migration_pitfalls.md`.
-- Knoxx submodule pointer advanced to the newly committed recursive handoff snapshot.
-- Root verification logs under `.ημ/verification/`.
-- Recursive submodule tags prepared for Knoxx, migration tools, and Vexx.
+## Why this exists
+The working Broadcast Studio audio fix lives in the rank-3 Knoxx submodule. This parent repo commit pins the openplanner submodule pointer so the frozen Knoxx commit is reachable from the openplanner tree.
 
-## Submodule state
-
-- `packages/agents/knoxx`: `6bf9e72d` on `feat/discord-attachments` (## feat/discord-attachments...origin/feat/discord-attachments [ahead 3])
-- `packages/stores/migrations/openplanner-migration-tools`: `a0c7919` on `main` (## main...origin/main [ahead 6])
-- `packages/vexx`: `8696d57` on `main` (## main...origin/main [behind 1])
-
-## Verification
-
-- `pnpm build` at the OpenPlanner root exited 0. Output captured at `.ημ/verification/openplanner-root-build-20260430T000000Z.txt`.
-- `pnpm --filter @open-hax/openplanner build` exited 0 but matched no projects; output preserved at `.ημ/verification/openplanner-build-20260430T000000Z.txt`.
-- Knoxx backend test passed in the submodule; see `packages/agents/knoxx/.ημ/verification/knoxx-backend-test-20260430T000000Z.txt`.
-
-## Concurrent dirt / blockers
-
-- All observed root dirty paths were treated as in-scope for the requested OpenPlanner recursive fork tax.
-- `packages/vexx` was clean but behind `origin/main` by 1; it was tagged at the checked-out submodule SHA to preserve the exact OpenPlanner state, not fast-forwarded.
-- No repo-wide reset/restore/clean was used.
-
-## Push ledger
-
-- Push outcome details are recorded in `.ημ/Π_PUSH.md`.
-- Final push-ledger tag: `Π/openplanner-recursive-2026-04-30-push-ledger`.
-
-## Final manifest tag
-
-- `Π/openplanner-recursive-2026-04-30-final` records the repaired full snapshot manifest over `b67067d..HEAD`.
+## Concurrent dirt intentionally not absorbed
+OpenPlanner has unrelated dirty files in graph/routes/embeddings/docker-compose/spec areas. This commit stages only the Knoxx submodule pointer and `.ημ` fork-tax artifacts.

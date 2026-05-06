@@ -1,20 +1,9 @@
-(Π-state
-  (repo "openplanner")
-  (timestamp "2026-04-30T06:23:07Z")
-  (mode :recursive-fork-tax)
-  (branch "tests/sentance-chunker")
-  (head-before "b67067d")
-  (tag "Π/openplanner-recursive-2026-04-30")
-  (verification
-    (root-pnpm-build :exit 0 :log ".ημ/verification/openplanner-root-build-20260430T000000Z.txt")
-    (root-filter-build :exit 0 :note "no projects matched" :log ".ημ/verification/openplanner-build-20260430T000000Z.txt")
-    (knoxx-backend-pnpm-test :exit 0 :log "packages/agents/knoxx/.ημ/verification/knoxx-backend-test-20260430T000000Z.txt"))
-  (submodules
-    (knoxx :path "packages/agents/knoxx" :commit "6bf9e72d" :branch "feat/discord-attachments" :tag "Π/knoxx-openplanner-recursive-2026-04-30")
-    (openplanner-migration-tools :path "packages/stores/migrations/openplanner-migration-tools" :commit "a0c7919" :branch "main" :tag "Π/openplanner-migration-tools-recursive-2026-04-30")
-    (vexx :path "packages/vexx" :commit "8696d57" :branch "main" :tag "Π/vexx-openplanner-recursive-2026-04-30" :note "clean but behind origin/main by 1; exact checked-out SHA preserved"))
-  (concurrent-dirt "none; all observed root dirty paths were in requested openplanner scope")
-  (destructive-cleanup-used false)
-  (push-ledger :path ".ημ/Π_PUSH.md" :final-tag "Π/openplanner-recursive-2026-04-30-push-ledger")
-  (final-manifest-tag "Π/openplanner-recursive-2026-04-30-final")
-  (manifest-base "b67067d"))
+(fork-tax/state
+  {:timestamp "20260506T231041Z"
+    :repo "/home/err/devel/orgs/open-hax/openplanner"
+    :branch "tests/sentance-chunker"
+    :base-head "1c50cdc"
+    :tag "pi-fork-tax-openplanner-knoxx-audio-20260506T231041Z"
+    :scope :openplanner-knoxx-submodule-pointer
+    :knoxx-submodule-head "011a145b352b5a595b7093a0ee73e811f1cda82a"
+    :concurrent-dirt "unrelated openplanner graph/routes/embeddings/spec changes left unstaged"})
