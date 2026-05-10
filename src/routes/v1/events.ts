@@ -344,7 +344,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
             };
 
             const embeddingRuntime = (app as any).embeddingRuntime;
-            const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+            const embeddingFunction = embeddingRuntime.hot.getBackgroundEmbeddingFunction(embeddingScope);
             const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
             await withTimeout(indexTextInMongoVectors({
               mongo: app.mongo,
@@ -412,7 +412,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
           }
 
           for (const [model, rows] of groupedByModel) {
-            const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunctionForModel(model);
+            const embeddingFunction = embeddingRuntime.hot.getBackgroundEmbeddingFunctionForModel(model);
             const nodeIds = rows.map((row) => row.node_id);
             const existing = await app.mongo.graphNodeEmbeddings
               .find({ node_id: { $in: nodeIds }, embedding_model: model })

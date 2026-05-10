@@ -1,5 +1,8 @@
 # OpenPlanner - Personal Data Lake
 #
+# Horizontal scaling: docker compose up -d --scale openplanner=3
+# Nginx load-balances across all OpenPlanner replicas using least-connections.
+#
 # Storage backends:
 #   - DuckDB (default): file-based, embedded
 #   - MongoDB: scalable, shared with Cephalon Hive
@@ -7,14 +10,16 @@
 # Set OPENPLANNER_STORAGE_BACKEND=mongodb to use MongoDB.
 
 services:
+  # OpenPlanner — horizontally scalable API workers.
+  # Nginx handles load balancing across all replicas.
+  # Change deploy.replicas below to scale.
   openplanner:
     build:
       context: .
       dockerfile: Dockerfile
+    deploy:
+      replicas: 3
     depends_on:
-      chroma:
-        condition: service_started
-        required: false
       mongodb:
         condition: service_healthy
         required: false
@@ -24,8 +29,10 @@ services:
       mongo-init:
         condition: service_completed_successfully
         required: false
-    ports:
-      - "${OPENPLANNER_PORT:-7777}:7777"
+    # No host port binding — accessed through nginx reverse proxy only.
+    # This allows multiple replicas without port collisions.
+    expose:
+      - "7777"
     environment:
       NODE_ENV: production
       OPENPLANNER_HOST: 0.0.0.0
@@ -45,26 +52,12 @@ services:
       # Recommended: 2592000 = 30 days, 7776000 = 90 days
       MONGODB_EVENTS_TTL_SECONDS: "${MONGODB_EVENTS_TTL_SECONDS:-0}"
       MONGODB_COMPACTED_TTL_SECONDS: "${MONGODB_COMPACTED_TTL_SECONDS:-0}"
-      # ChromaDB for vector search
-      CHROMA_URL: http://chroma:8000
-      CHROMA_COLLECTION: "${OPENPLANNER_CHROMA_COLLECTION:-openplanner_events_v1}"
-      CHROMA_COMPACT_COLLECTION: "${OPENPLANNER_CHROMA_COMPACT_COLLECTION:-openplanner_events_v1_compact}"
-      # Ollama embeddings (routed through Proxx for key rotation)
-      OLLAMA_BASE_URL: "${OPENPLANNER_OLLAMA_BASE_URL:-http://proxx:8789}"
-      OLLAMA_API_KEY: "${OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN:-change-me-open-hax-proxy-token}"
       # Embedding provider (separate from Ollama — used by EmbedProviderFunction)
       EMBED_PROVIDER_BASE_URL: "${EMBED_PROVIDER_BASE_URL:-${OPENPLANNER_OLLAMA_BASE_URL:-http://proxx:8789}}"
       EMBED_PROVIDER_API_KEY: "${EMBED_PROVIDER_API_KEY:-${OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN:-change-me-open-hax-proxy-token}}"
       EMBED_PROVIDER_MAX_BATCH_ITEMS: "${EMBED_PROVIDER_MAX_BATCH_ITEMS:-64}"
       # Qwen3-Embedding is instruction tuned; query-side instruction improves retrieval.
       EMBED_QUERY_PREFIX: "${EMBED_QUERY_PREFIX:-Instruct: Given a conversational memory search query, retrieve relevant OpenPlanner passages, Knoxx session memories, tool results, and decisions that answer the query.\\nQuery: }"
-      OLLAMA_EMBED_MODEL: "${OPENPLANNER_OLLAMA_EMBED_MODEL:-qwen3-embedding:0.6b}"
-      OLLAMA_COMPACT_EMBED_MODEL: "${OPENPLANNER_OLLAMA_COMPACT_EMBED_MODEL:-qwen3-embedding:4b}"
-      OLLAMA_EMBED_MODEL_BY_SOURCE: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_SOURCE:-}"
-      OLLAMA_EMBED_MODEL_BY_KIND: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_KIND:-}"
-      OLLAMA_EMBED_MODEL_BY_PROJECT: "${OPENPLANNER_OLLAMA_EMBED_MODEL_BY_PROJECT:-}"
-      OLLAMA_EMBED_TRUNCATE: "${OPENPLANNER_OLLAMA_EMBED_TRUNCATE:-true}"
-      OLLAMA_EMBED_NUM_CTX: "${OPENPLANNER_OLLAMA_EMBED_NUM_CTX:-8000}"
     volumes:
       - ./openplanner-lake:/app/openplanner-lake
     extra_hosts:
@@ -81,6 +74,27 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
+    restart: unless-stopped
+    networks:
+      default: {}
+      ai-infra: {}
+
+  # Nginx reverse proxy — load balances across OpenPlanner replicas.
+  # Uses least-connections for better distribution of long requests.
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "${OPENPLANNER_PORT:-7777}:7777"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - openplanner
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7777/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
     networks:
       default: {}

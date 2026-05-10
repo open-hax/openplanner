@@ -97,6 +97,13 @@ export const migrations: Migration[] = [
       await events.createIndex({ tenant_id: 1 });
       await events.createIndex({ tenant_id: 1, kind: 1 });
       
+      // Skip backfill if events collection is large (>100k docs) to avoid timeouts
+      const count = await events.countDocuments({});
+      if (count > 100_000) {
+        console.log("[migration] Skipping tenant_id backfill for large events collection:", count);
+        return;
+      }
+      
       // Backfill tenant_id from project (project acts as tenant surrogate)
       // Only for documents (kind: docs, code, config, data)
       const documentKinds = ["docs", "code", "config", "data"];
@@ -121,6 +128,61 @@ export const migrations: Migration[] = [
       await auditLog.createIndex({ tenant_id: 1, ts: -1 });
       await auditLog.createIndex({ user_id: 1, ts: -1 });
       await auditLog.createIndex({ action: 1, ts: -1 });
+    },
+  },
+  {
+    id: "008_default_tenant",
+    name: "default_tenant",
+    description: "Create default tenant 'knoxx-session' to silence tenant resolution warnings",
+    up: async (ctx) => {
+      const tenants = ctx.mongo.db.collection("tenants");
+      const tenantPolicies = ctx.mongo.db.collection("tenant_policies");
+
+      // Ensure indexes exist
+      await tenants.createIndex({ tenant_id: 1 }, { unique: true });
+      await tenantPolicies.createIndex({ tenant_id: 1 }, { unique: true });
+
+      // Upsert default tenant
+      await tenants.updateOne(
+        { tenant_id: "knoxx-session" },
+        {
+          $set: {
+            tenant_id: "knoxx-session",
+            slug: "knoxx-session",
+            name: "Knoxx Session",
+            status: "active",
+            isolation_mode: "shared",
+            domains: [],
+            updated_at: new Date(),
+          },
+          $setOnInsert: {
+            created_at: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      // Upsert default policy
+      await tenantPolicies.updateOne(
+        { tenant_id: "knoxx-session" },
+        {
+          $set: {
+            tenant_id: "knoxx-session",
+            retention_days: 90,
+            review_threshold: 0.5,
+            pii_rules: { detect: true, redact: false, reject: false },
+            translation_config: { default_target_langs: ["en"] },
+            rate_limits: { requests_per_minute: 1000, tokens_per_day: 1000000 },
+            updated_at: new Date(),
+          },
+          $setOnInsert: {
+            created_at: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      console.log("[migration] Default tenant 'knoxx-session' ensured");
     },
   },
 ];

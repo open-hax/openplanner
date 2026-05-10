@@ -1621,7 +1621,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     req.log.info({ inputs: inputs.length, model, inputs_sample: inputs.slice(0, 2) }, "materialize node embeddings batch start");
 
     const embeddingRuntime = (app as any).embeddingRuntime;
-    const embeddingFn = embeddingRuntime?.hot?.getEmbeddingFunctionForModel?.(model);
+    const embeddingFn = embeddingRuntime?.hot?.getBackgroundEmbeddingFunctionForModel?.(model);
 
     if (!embeddingFn) {
       req.log.error({ model }, "embedding function not found for model");
@@ -2761,6 +2761,299 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { ok: true, edges: projection.edges, claims: rows.map(edgeClaimToApi), stats: projection.stats };
+  });
+
+  // ============================================================
+  // Label Nodes — structural nodes for categorical labels
+  // ============================================================
+
+  const DEFAULT_LABEL_ACTOR_ID = "foamy125_gmail_com";
+
+  function buildLabelId(tenantId: string, slug: string): string {
+    return `label:${tenantId}:${slug}`;
+  }
+
+  function normalizeActorId(value: unknown): string {
+    return String(value ?? DEFAULT_LABEL_ACTOR_ID).trim() || DEFAULT_LABEL_ACTOR_ID;
+  }
+
+  function normalizeLabelSlug(value: unknown): string {
+    return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64);
+  }
+
+  app.post("/graph/labels", async (req: any, reply) => {
+    const body = isPlainRecord(req.body) ? req.body : {};
+    const tenantId = String(body.tenant_id ?? "default").trim();
+    const slug = normalizeLabelSlug(body.slug ?? body.label);
+    const label = String(body.label ?? "").trim();
+    const description = String(body.description ?? "").trim();
+    const emoji = String(body.emoji ?? "").trim() || null;
+    const color = String(body.color ?? "").trim() || null;
+    const project = String(body.project ?? "").trim() || null;
+    const actorId = normalizeActorId(body.actor_id ?? body.actorId ?? body.created_by_actor_id ?? body.createdByActorId);
+
+    if (!slug) return reply.status(400).send({ error: "slug_or_label_required" });
+    if (!label) return reply.status(400).send({ error: "label_required" });
+
+    const labelId = buildLabelId(tenantId, slug);
+    const now = new Date();
+
+    const doc = {
+      _id: labelId,
+      label_id: labelId,
+      label,
+      emoji,
+      description,
+      color,
+      tenant_id: tenantId,
+      project,
+      embedding_model: null,
+      embedding_dimensions: 0,
+      embedding: null,
+      created_by: String(body.created_by ?? actorId),
+      created_by_actor_id: actorId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await app.mongo.graphLabelNodes.updateOne(
+      { label_id: labelId },
+      { $set: doc },
+      { upsert: true },
+    );
+
+    // Queue embedding for the label description
+    if (description) {
+      const embeddingText = `${label}. ${description}`;
+      const normalized = formatEmbeddingPassageText(embeddingText);
+      if (normalized) {
+        await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, [{
+          node_id: labelId,
+          source_event_id: labelId,
+          project,
+          embedding_model: null,
+          embedding_dimensions: 0,
+          embedding: [],
+          chunk_index: 0,
+          chunk_count: 1,
+          text: normalized,
+          updated_at: now,
+        }]);
+      }
+    }
+
+    return { ok: true, label: doc };
+  });
+
+  app.get("/graph/labels", async (req: any) => {
+    const tenantId = String(req.query?.tenant_id ?? "default").trim();
+    const project = typeof req.query?.project === "string" ? req.query.project.trim() : null;
+    const search = typeof req.query?.search === "string" ? req.query.search.trim() : "";
+    const limit = Math.max(1, Math.min(1000, Number(req.query?.limit ?? 100)));
+
+    const filter: Record<string, unknown> = { tenant_id: tenantId };
+    if (project) filter.project = project;
+    if (search) {
+      filter.$or = [
+        { label: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const rows = await app.mongo.graphLabelNodes
+      .find(filter)
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .toArray();
+
+    const labelIds = rows.map((row: any) => row.label_id).filter(Boolean);
+    const counts = labelIds.length > 0
+      ? await app.mongo.graphEdges.aggregate([
+          { $match: { target_node_id: { $in: labelIds }, edge_kind: "has_label" } },
+          { $group: {
+              _id: "$target_node_id",
+              node_count: { $sum: 1 },
+              sources: { $addToSet: "$source" },
+              actor_ids: { $addToSet: "$data.actor_id" },
+            } },
+        ]).toArray()
+      : [];
+    const countByLabelId = new Map(counts.map((row: any) => [row._id, row]));
+    const labels = rows.map((row: any) => {
+      const stats = countByLabelId.get(row.label_id) ?? {};
+      const actorIds = Array.isArray(stats.actor_ids) ? stats.actor_ids.filter(Boolean) : [];
+      const sources = Array.isArray(stats.sources) ? stats.sources.filter(Boolean) : [];
+      return {
+        ...row,
+        node_count: Number(stats.node_count ?? 0),
+        label_count: Number(stats.node_count ?? 0),
+        source_stats: {
+          sources,
+          actor_ids: actorIds,
+        },
+      };
+    });
+
+    return { ok: true, labels, count: labels.length };
+  });
+
+  app.get("/graph/labels/:label_id", async (req: any, reply) => {
+    const labelId = String(req.params?.label_id ?? "").trim();
+    if (!labelId) return reply.status(400).send({ error: "label_id_required" });
+
+    const row = await app.mongo.graphLabelNodes.findOne({ label_id: labelId });
+    if (!row) return reply.status(404).send({ error: "label_not_found" });
+
+    return { ok: true, label: row };
+  });
+
+  app.patch("/graph/labels/:label_id", async (req: any, reply) => {
+    const labelId = String(req.params?.label_id ?? "").trim();
+    const body = isPlainRecord(req.body) ? req.body : {};
+    if (!labelId) return reply.status(400).send({ error: "label_id_required" });
+
+    const updates: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.label !== undefined) updates.label = String(body.label).trim();
+    if (body.description !== undefined) updates.description = String(body.description).trim();
+    if (body.emoji !== undefined) updates.emoji = String(body.emoji).trim() || null;
+    if (body.color !== undefined) updates.color = String(body.color).trim() || null;
+
+    const result = await app.mongo.graphLabelNodes.findOneAndUpdate(
+      { label_id: labelId },
+      { $set: updates },
+      { returnDocument: "after" },
+    );
+
+    if (!result) return reply.status(404).send({ error: "label_not_found" });
+
+    // Re-queue embedding if description changed
+    if (body.description !== undefined && result.description) {
+      const embeddingText = `${result.label}. ${result.description}`;
+      const normalized = formatEmbeddingPassageText(embeddingText);
+      if (normalized) {
+        await upsertGraphNodeEmbeddings(app.mongo.graphNodeEmbeddings, [{
+          node_id: labelId,
+          source_event_id: labelId,
+          project: result.project,
+          embedding_model: null,
+          embedding_dimensions: 0,
+          embedding: [],
+          chunk_index: 0,
+          chunk_count: 1,
+          text: normalized,
+          updated_at: new Date(),
+        }]);
+      }
+    }
+
+    return { ok: true, label: result };
+  });
+
+  app.delete("/graph/labels/:label_id", async (req: any, reply) => {
+    const labelId = String(req.params?.label_id ?? "").trim();
+    if (!labelId) return reply.status(400).send({ error: "label_id_required" });
+
+    // Remove all has_label edges first
+    await app.mongo.graphEdges.deleteMany({ target_node_id: labelId, edge_kind: "has_label" });
+
+    // Remove the label node
+    const result = await app.mongo.graphLabelNodes.deleteOne({ label_id: labelId });
+    if (result.deletedCount === 0) return reply.status(404).send({ error: "label_not_found" });
+
+    return { ok: true, deleted: true };
+  });
+
+  app.post("/graph/labels/:label_id/apply", async (req: any, reply) => {
+    const labelId = String(req.params?.label_id ?? "").trim();
+    const body = isPlainRecord(req.body) ? req.body : {};
+    const nodeId = String(body.node_id ?? "").trim();
+    const source = String(body.source ?? "api").trim();
+    const actorId = normalizeActorId(body.actor_id ?? body.actorId ?? body.source_actor_id ?? body.sourceActorId ?? body.applied_by_actor_id ?? body.appliedByActorId);
+
+    if (!labelId) return reply.status(400).send({ error: "label_id_required" });
+    if (!nodeId) return reply.status(400).send({ error: "node_id_required" });
+
+    const label = await app.mongo.graphLabelNodes.findOne({ label_id: labelId });
+    if (!label) return reply.status(404).send({ error: "label_not_found" });
+
+    const now = new Date();
+    const edge = {
+      _id: `has_label:${nodeId}:${labelId}`,
+      source_node_id: nodeId,
+      target_node_id: labelId,
+      edge_kind: "has_label",
+      layer: null,
+      project: label.project,
+      source,
+      data: {
+        applied_at: now.toISOString(),
+        confidence: body.confidence ?? null,
+        actor_id: actorId,
+        applied_by_actor_id: actorId,
+      },
+      updated_at: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await app.mongo.graphEdges.updateOne(
+      { _id: edge._id },
+      { $set: edge },
+      { upsert: true },
+    );
+
+    return { ok: true, edge };
+  });
+
+  app.post("/graph/labels/:label_id/remove", async (req: any, reply) => {
+    const labelId = String(req.params?.label_id ?? "").trim();
+    const body = isPlainRecord(req.body) ? req.body : {};
+    const nodeId = String(body.node_id ?? "").trim();
+
+    if (!labelId) return reply.status(400).send({ error: "label_id_required" });
+    if (!nodeId) return reply.status(400).send({ error: "node_id_required" });
+
+    const edgeId = `has_label:${nodeId}:${labelId}`;
+    const result = await app.mongo.graphEdges.deleteOne({ _id: edgeId });
+
+    return { ok: true, removed: result.deletedCount > 0 };
+  });
+
+  app.get("/graph/labels/:label_id/nodes", async (req: any, reply) => {
+    const labelId = String(req.params?.label_id ?? "").trim();
+    const limit = Math.max(1, Math.min(10000, Number(req.query?.limit ?? 1000)));
+
+    if (!labelId) return reply.status(400).send({ error: "label_id_required" });
+
+    const edges = await app.mongo.graphEdges
+      .find({ target_node_id: labelId, edge_kind: "has_label" })
+      .limit(limit)
+      .toArray();
+
+    const nodeIds = edges.map((e: any) => e.source_node_id);
+
+    // Fetch events for these nodes by their _id (source_node_id on has_label edges)
+    const events = await app.mongo.events
+      .find({ _id: { $in: nodeIds } })
+      .limit(limit)
+      .toArray();
+
+    const eventByNodeId = new Map(events.map((e: any) => [e._id, e]));
+
+    const nodes = edges.map((edge: any) => {
+      const nodeId = String(edge.source_node_id);
+      return {
+        node_id: nodeId,
+        event: eventByNodeId.get(nodeId) ?? null,
+        label_edge: {
+          source: edge.source ?? null,
+          actor_id: edge.data?.actor_id ?? edge.data?.applied_by_actor_id ?? DEFAULT_LABEL_ACTOR_ID,
+          applied_at: edge.data?.applied_at ?? null,
+        },
+      };
+    });
+
+    return { ok: true, nodes, count: nodes.length };
   });
 
   // ============================================================

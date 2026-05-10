@@ -5,71 +5,6 @@ export interface IEmbeddingFunction {
   generate(texts: string[]): Promise<number[][]>;
 }
 
-function estimateTokens(input: string): number {
-  const text = String(input || "");
-  if (!text.trim()) return 0;
-  const chars = text.length;
-  const words = text.match(/\S+/g)?.length ?? 0;
-  return Math.max(Math.ceil(chars / 4), Math.ceil(words * 1.35));
-}
-
-function splitTextIntoChunks(text: string, maxTokens: number): string[] {
-  if (estimateTokens(text) <= maxTokens) {
-    return [text];
-  }
-
-  const maxChars = maxTokens * 4;
-  const paragraphs = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
-  const out: string[] = [];
-  let current = "";
-
-  for (const paragraph of paragraphs) {
-    const next = current ? `${current}\n\n${paragraph}` : paragraph;
-    if (current && (estimateTokens(next) > maxTokens || next.length > maxChars)) {
-      out.push(current.trim());
-      current = paragraph;
-    } else {
-      current = next;
-    }
-  }
-  if (current.trim()) out.push(current.trim());
-
-  const result: string[] = [];
-  for (const chunk of out) {
-    if (estimateTokens(chunk) <= maxTokens) {
-      result.push(chunk);
-      continue;
-    }
-
-    const sentences = chunk.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean);
-    let sentenceCurrent = "";
-    for (const sentence of sentences) {
-      const next = sentenceCurrent ? `${sentenceCurrent} ${sentence}` : sentence;
-      if (sentenceCurrent && (estimateTokens(next) > maxTokens || next.length > maxChars)) {
-        result.push(sentenceCurrent.trim());
-        sentenceCurrent = sentence;
-      } else {
-        sentenceCurrent = next;
-      }
-    }
-    if (sentenceCurrent.trim()) result.push(sentenceCurrent.trim());
-  }
-
-  const final: string[] = [];
-  for (const chunk of result) {
-    if (estimateTokens(chunk) <= maxTokens) {
-      final.push(chunk);
-      continue;
-    }
-    const step = Math.max(1, maxChars);
-    for (let start = 0; start < chunk.length; start += step) {
-      final.push(chunk.slice(start, start + step).trim());
-    }
-  }
-
-  return final.filter(Boolean);
-}
-
 function averageEmbeddings(embeddings: number[][]): number[] {
   if (embeddings.length === 0) return [];
   if (embeddings.length === 1) return embeddings[0]!;
@@ -98,7 +33,6 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
   private batchQueue: Array<() => Promise<void>> = [];
   private readonly MAX_CHARS_PER_BATCH = 4_000;
   private readonly MAX_SINGLE_ENTRY_CHARS = 4_000;
-  private readonly CHUNK_TARGET_TOKENS = 6_000;
 
   constructor(
     model: string,
@@ -304,67 +238,70 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
         throw error;
       }
 
-      const oversizedEntries: typeof entries = [];
-      const normalEntries: typeof entries = [];
-      for (const entry of entries) {
-        if (entry[1].text.length > this.MAX_SINGLE_ENTRY_CHARS) {
-          oversizedEntries.push(entry);
-        } else {
-          normalEntries.push(entry);
-        }
-      }
-
       const results: number[][] = [];
-      const remaining = [...normalEntries];
-      while (remaining.length > 0) {
-        const batch: typeof entries = [];
-        let batchChars = 0;
-        while (remaining.length > 0 && batchChars < this.MAX_CHARS_PER_BATCH) {
-          const next = remaining[0]!;
-          if (batchChars + next[1].text.length > this.MAX_CHARS_PER_BATCH && batch.length > 0) break;
-          batch.push(remaining.shift()!);
-          batchChars += next[1].text.length;
-        }
-        if (batch.length === 0) break;
-        try {
-          const batchEmbeddings = await this.resolveBatch(batch);
-          results.push(...batchEmbeddings);
-        } catch (batchError) {
-          if (!isContextOverflowError(batchError)) throw batchError;
-          if (batch.length === 1) {
-            const singleEntry = batch[0]!;
-            const chunks = splitTextIntoChunks(singleEntry[1].text, this.CHUNK_TARGET_TOKENS);
-            const chunkEmbeddings = await this.resolveBatch(
-              chunks.map((chunk) => [singleEntry[0], { text: chunk, waiters: [] }]),
-            );
-            const averaged = averageEmbeddings(chunkEmbeddings);
-            results.push(averaged);
-            continue;
-          }
-          const mid = Math.ceil(batch.length / 2);
-          const left = await this.resolveBatch(batch.slice(0, mid));
-          const right = await this.resolveBatch(batch.slice(mid));
-          results.push(...left, ...right);
-        }
-      }
 
-      for (const [key, entry] of oversizedEntries) {
-        const chunks = splitTextIntoChunks(entry.text, this.CHUNK_TARGET_TOKENS);
+      for (const entry of entries) {
         try {
-          const chunkEmbeddings = await this.resolveBatch(
-            chunks.map((chunk) => [key, { text: chunk, waiters: [] }]),
-          );
-          const averaged = averageEmbeddings(chunkEmbeddings);
-          results.push(averaged);
+          const embedding = await this.resolveSingleEntry(entry);
+          results.push(embedding);
         } catch {
-          // Last resort: zero vector (will be filtered out by callers)
-          const fallbackDims = 1024;
-          results.push(new Array(fallbackDims).fill(0));
+          results.push([]);
         }
       }
 
       return results;
     }
+  }
+
+  private async resolveSingleEntry(
+    entry: [string, { text: string; waiters: Array<{ resolve: (vector: number[]) => void; reject: (error: unknown) => void }> }],
+  ): Promise<number[]> {
+    const text = entry[1].text;
+
+    // If it's short enough, just try it directly
+    if (text.length <= this.MAX_SINGLE_ENTRY_CHARS) {
+      try {
+        const [embedding] = await this.fetchBatch([text]);
+        return embedding;
+      } catch (error) {
+        if (!isContextOverflowError(error)) throw error;
+        // Fall through to binary split
+      }
+    }
+
+    // Binary split the text until pieces are small enough for the provider.
+    // We do NOT trust our local token estimator; we let the provider tell us.
+    const halves = this.binarySplitText(text);
+    const leftEmb = await this.resolveSingleEntry([entry[0], { text: halves[0], waiters: [] }]);
+    const rightEmb = halves[1]
+      ? await this.resolveSingleEntry([entry[0], { text: halves[1], waiters: [] }])
+      : null;
+
+    if (rightEmb) {
+      return averageEmbeddings([leftEmb, rightEmb]);
+    }
+    return leftEmb;
+  }
+
+  private binarySplitText(text: string): [string, string | null] {
+    if (text.length <= 1) {
+      return [text, null];
+    }
+    const mid = Math.floor(text.length / 2);
+    // Try to split on a newline or space near the middle
+    let splitAt = mid;
+    const searchRange = Math.min(100, Math.floor(mid / 4));
+    for (let i = 0; i < searchRange; i++) {
+      if (text[mid + i] === '\n' || text[mid + i] === ' ') {
+        splitAt = mid + i + 1;
+        break;
+      }
+      if (text[mid - i] === '\n' || text[mid - i] === ' ') {
+        splitAt = mid - i + 1;
+        break;
+      }
+    }
+    return [text.slice(0, splitAt), text.slice(splitAt)];
   }
 }
 

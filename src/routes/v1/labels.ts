@@ -133,7 +133,7 @@ export async function labelsRoutes(app: FastifyInstance) {
 
     const quality = qualityFromReactionEmoji(emoji);
     const now = new Date().toISOString();
-    const reactionLabel = quality ? `quality:${quality}` : `reaction:${emoji}`;
+    const reactionLabel = `emoji:${emoji}`;
     const labelEntry = {
       label: reactionLabel,
       quality,
@@ -165,6 +165,65 @@ export async function labelsRoutes(app: FastifyInstance) {
     );
     const vectorModified = await updateVectorQualityLabel(app, recordId, quality);
 
+    // Also create/update graph-native label node and has_label edge
+    try {
+      const tenantId = String(body.tenant_id ?? "default").trim();
+      const labelSlug = emoji ? Array.from(emoji).map(c => c.codePointAt(0)?.toString(16)).join("-") : "empty";
+      const labelId = `label:${tenantId}:${labelSlug}`;
+      const labelDoc = {
+        _id: labelId,
+        label_id: labelId,
+        label: reactionLabel,
+        emoji: emoji || null,
+        description: `Reaction emoji: ${emoji}`,
+        color: quality === "good" ? "#22c55e" : quality === "bad" ? "#ef4444" : null,
+        tenant_id: tenantId,
+        project: null,
+        embedding_model: null,
+        embedding_dimensions: 0,
+        embedding: null,
+        created_by: String(body.labeler_id ?? body.user_id ?? "unknown"),
+        createdAt: new Date(now),
+        updatedAt: new Date(now),
+      };
+
+      const { createdAt: _ca2, ...labelDocWithoutCreatedAt2 } = labelDoc;
+      await app.mongo.graphLabelNodes.updateOne(
+        { label_id: labelId },
+        { $set: labelDocWithoutCreatedAt2, $setOnInsert: { createdAt: new Date(now) } },
+        { upsert: true }
+      );
+
+      const edgeId = `has_label:${recordId}:${labelId}`;
+      await app.mongo.graphEdges.updateOne(
+        { _id: edgeId },
+        {
+          $set: {
+            _id: edgeId,
+            source_node_id: recordId,
+            target_node_id: labelId,
+            edge_kind: "has_label",
+            layer: null,
+            project: null,
+            source: "reaction",
+            data: {
+              applied_at: now,
+              confidence: 1.0,
+              emoji,
+              quality,
+            },
+            updated_at: new Date(now),
+            createdAt: new Date(now),
+            updatedAt: new Date(now),
+          }
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      // Don't fail the reaction if graph-native label creation fails
+      req.log.warn({ err, recordId, emoji }, "failed to create graph-native label for reaction");
+    }
+
     return {
       ok: true,
       record_id: recordId,
@@ -174,6 +233,109 @@ export async function labelsRoutes(app: FastifyInstance) {
       modified: result.modifiedCount,
       vector_modified: vectorModified,
       label: labelEntry,
+    };
+  });
+
+  // Migrate existing extra.openplanner_labels to graph-native label nodes
+  app.post("/migrate-to-graph-labels", async (req) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const tenantId = String(body.tenant_id ?? "default").trim();
+    const limit = Math.max(1, Math.min(10000, Number(body.limit ?? 1000)));
+    const dryRun = body.dry_run === true;
+
+    // Find events with legacy labels
+    const filter: Record<string, unknown> = {
+      "extra.openplanner_labels.labels": { $exists: true, $ne: [] }
+    };
+
+    const events = await app.mongo.events
+      .find(filter)
+      .project({ _id: 1, extra: 1, project: 1 })
+      .limit(limit)
+      .toArray();
+
+    const migratedLabels = new Set<string>();
+    const migratedEdges = 0;
+    let edgesCreated = 0;
+    const now = new Date();
+
+    for (const event of events) {
+      const recordId = String(event._id);
+      const emojis: string[] = event.extra?.openplanner_labels?.reaction_emojis ?? [];
+
+      for (const emoji of emojis) {
+        const labelSlug = emoji ? Array.from(emoji).map(c => c.codePointAt(0)?.toString(16)).join("-") : "empty";
+        const labelId = `label:${tenantId}:${labelSlug}`;
+        const reactionLabel = `emoji:${emoji}`;
+
+        if (!migratedLabels.has(labelId)) {
+          migratedLabels.add(labelId);
+
+          const quality = qualityFromReactionEmoji(emoji);
+
+          const labelDoc = {
+            _id: labelId,
+            label_id: labelId,
+            label: reactionLabel,
+            emoji: emoji || null,
+            description: `Reaction emoji: ${emoji}`,
+            color: quality === "good" ? "#22c55e" : quality === "bad" ? "#ef4444" : null,
+            tenant_id: tenantId,
+            project: event.project ?? null,
+            embedding_model: null,
+            embedding_dimensions: 0,
+            embedding: null,
+            created_by: "migration",
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          if (!dryRun) {
+            const { createdAt: _ca, ...labelDocWithoutCreatedAt } = labelDoc;
+            await app.mongo.graphLabelNodes.updateOne(
+              { label_id: labelId },
+              { $set: labelDocWithoutCreatedAt, $setOnInsert: { createdAt: now } },
+              { upsert: true }
+            );
+          }
+        }
+
+        const edgeId = `has_label:${recordId}:${labelId}`;
+        if (!dryRun) {
+          await app.mongo.graphEdges.updateOne(
+            { _id: edgeId },
+            {
+              $set: {
+                _id: edgeId,
+                source_node_id: recordId,
+                target_node_id: labelId,
+                edge_kind: "has_label",
+                layer: null,
+                project: event.project ?? null,
+                source: "migration",
+                data: {
+                  applied_at: now.toISOString(),
+                  confidence: 1.0,
+                  migrated_from: "extra.openplanner_labels",
+                },
+                updated_at: now,
+                createdAt: now,
+                updatedAt: now,
+              }
+            },
+            { upsert: true }
+          );
+        }
+        edgesCreated++;
+      }
+    }
+
+    return {
+      ok: true,
+      dry_run: dryRun,
+      events_scanned: events.length,
+      labels_created: migratedLabels.size,
+      edges_created: edgesCreated,
     };
   });
 

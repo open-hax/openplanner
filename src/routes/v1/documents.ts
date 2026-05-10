@@ -185,7 +185,7 @@ export async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promi
   }
 }
 
-async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
+export async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
   const sr = ev.source_ref ?? {};
   const meta = ev.meta ?? {};
   const role = meta.role ? String(meta.role) : null;
@@ -245,7 +245,7 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
   } as Record<string, unknown>;
 
   const embeddingRuntime = (app as any).embeddingRuntime;
-  const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+  const embeddingFunction = embeddingRuntime.hot.getBackgroundEmbeddingFunction(embeddingScope);
   const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
   await indexTextInMongoVectors({
     mongo: app.mongo,

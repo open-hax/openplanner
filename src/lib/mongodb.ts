@@ -382,6 +382,23 @@ export interface GraphViewNodeDocument {
   updatedAt: Date;
 }
 
+export interface GraphLabelNodeDocument {
+  _id: string;
+  label_id: string;
+  label: string;
+  emoji: string | null;
+  description: string;
+  color: string | null;
+  tenant_id: string;
+  project: string | null;
+  embedding_model: string | null;
+  embedding_dimensions: number;
+  embedding: number[] | null;
+  created_by: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface GraphClusterMembershipDocument {
   _id: string; // `${clustering_version}::${node_id}`
   node_id: string;
@@ -480,6 +497,7 @@ export interface MongoConnection {
   graphDaimoiTrails: Collection<GraphDaimoiTrailDocument>;
   graphViewNodes: Collection<GraphViewNodeDocument>;
   graphClusterMemberships: Collection<GraphClusterMembershipDocument>;
+  graphLabelNodes: Collection<GraphLabelNodeDocument>;
   semanticGraphRuns: Collection<SemanticGraphRunDocument>;
   migrationJobs: Collection<MigrationJobDocument>;
   gardens: Collection<GardenDocument>;
@@ -514,6 +532,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const graphDaimoiTrails = db.collection<GraphDaimoiTrailDocument>("graph_daimoi_trails");
   const graphViewNodes = db.collection<GraphViewNodeDocument>("graph_view_nodes");
   const graphClusterMemberships = db.collection<GraphClusterMembershipDocument>("graph_cluster_memberships");
+  const graphLabelNodes = db.collection<GraphLabelNodeDocument>("graph_label_nodes");
   const semanticGraphRuns = db.collection<SemanticGraphRunDocument>("semantic_graph_runs");
   const migrationJobs = db.collection<MigrationJobDocument>("migration_jobs");
   const gardens = db.collection<GardenDocument>("gardens");
@@ -601,6 +620,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphEdges.createIndex({ source_node_id: 1, target_node_id: 1, edge_kind: 1 }, { unique: true });
   await graphEdges.createIndex({ source_node_id: 1, updated_at: -1 as IndexDirection });
   await graphEdges.createIndex({ target_node_id: 1, updated_at: -1 as IndexDirection });
+  await graphEdges.createIndex({ target_node_id: 1, edge_kind: 1 });
   await graphEdges.createIndex({ edge_kind: 1, updated_at: -1 as IndexDirection });
   await graphEdges.createIndex({ project: 1, updated_at: -1 as IndexDirection });
 
@@ -634,6 +654,11 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await graphClusterMemberships.createIndex({ graph_version: 1, cluster_id: 1 });
   await graphClusterMemberships.createIndex({ clustering_version: 1, cluster_id: 1 });
 
+  // Label nodes — structural graph nodes for categorical labels
+  await graphLabelNodes.createIndex({ label_id: 1 }, { unique: true });
+  await graphLabelNodes.createIndex({ tenant_id: 1, project: 1, updatedAt: -1 as IndexDirection });
+  await graphLabelNodes.createIndex({ label: "text" });
+
   // Semantic graph runs
   await semanticGraphRuns.createIndex({ run_id: 1 }, { unique: true });
   await semanticGraphRuns.createIndex({ graph_version: 1 }, { unique: true });
@@ -647,6 +672,53 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await gardens.createIndex({ garden_id: 1 }, { unique: true });
   await gardens.createIndex({ owner_id: 1, createdAt: -1 as IndexDirection });
   await gardens.createIndex({ status: 1, createdAt: -1 as IndexDirection });
+
+  // Tenant collections — queried on every request, must be indexed
+  const tenants = db.collection("tenants");
+  const tenantPolicies = db.collection("tenant_policies");
+  await tenants.createIndex({ tenant_id: 1 }, { unique: true });
+  await tenants.createIndex({ domains: 1 });
+  await tenantPolicies.createIndex({ tenant_id: 1 }, { unique: true });
+
+  // Ensure default tenant exists (fire-and-forget, non-blocking)
+  void (async () => {
+    try {
+      await tenants.updateOne(
+        { tenant_id: "knoxx-session" },
+        {
+          $set: {
+            tenant_id: "knoxx-session",
+            slug: "knoxx-session",
+            name: "Knoxx Session",
+            status: "active",
+            isolation_mode: "shared",
+            domains: [],
+            updated_at: new Date(),
+          },
+          $setOnInsert: { created_at: new Date() },
+        },
+        { upsert: true }
+      );
+      await tenantPolicies.updateOne(
+        { tenant_id: "knoxx-session" },
+        {
+          $set: {
+            tenant_id: "knoxx-session",
+            retention_days: 90,
+            review_threshold: 0.5,
+            pii_rules: { detect: true, redact: false, reject: false },
+            translation_config: { default_target_langs: ["en"] },
+            rate_limits: { requests_per_minute: 1000, tokens_per_day: 1000000 },
+            updated_at: new Date(),
+          },
+          $setOnInsert: { created_at: new Date() },
+        },
+        { upsert: true }
+      );
+    } catch {
+      // Silently ignore — tenant resolution is non-strict
+    }
+  })();
 
   // TTL index for events (auto-expire old signals)
   const eventsTtl = config.eventsTtlSeconds ?? DEFAULT_EVENTS_TTL_SECONDS;
@@ -719,6 +791,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
     graphDaimoiTrails,
     graphViewNodes,
     graphClusterMemberships,
+    graphLabelNodes,
     semanticGraphRuns,
     migrationJobs,
     gardens,

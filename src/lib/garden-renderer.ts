@@ -6,6 +6,8 @@
 
 import { marked } from "marked";
 import { codeToHtml, createHighlighter, type Highlighter } from "shiki";
+import { extractPublicationBlocks as extractReactPublicationBlocks } from "@open-hax/garden-publication-components";
+import { renderPublicationBlocksHtml, serializeGardenPublicationProps } from "@open-hax/garden-publication-components/server";
 import type { GardenDocument } from "./mongodb.js";
 
 export type ThemeName = "monokai" | "night-owl" | "proxy-console";
@@ -30,10 +32,12 @@ export interface GardenDocumentInput {
   content: string;
   source_path?: string | null;
   language?: string;
+  metadata?: Record<string, unknown>;
   translationStatus?: "pending" | "in_review" | "approved" | "rejected";
   /** Available languages including the source language */
   availableLanguages?: string[];
 }
+
 
 // Shiki theme mapping
 const SHIKI_THEMES: Record<ThemeName, string> = {
@@ -302,6 +306,25 @@ export async function renderMarkdown(
   </div>`;
 }
 
+function safeDomId(value: unknown): string {
+  return String(value ?? "playlist").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64) || "playlist";
+}
+
+async function renderPublicationBlocks(metadata: unknown, _theme: ThemeName): Promise<string | null> {
+  const blocks = extractReactPublicationBlocks(metadata);
+  if (blocks.length === 0) return null;
+  const rootId = `garden-publication-${safeDomId(blocks.map((block) => block.id).join("-"))}`;
+  const props = { blocks, maxInitialPlaylistTracks: 100, audioUrlBase: "/api/studio/stream" };
+  const rendered = renderPublicationBlocksHtml(props);
+  return `
+    <div class="garden-content garden-publication-react">
+      <link rel="stylesheet" href="/api/openplanner/v1/public/assets/style.css">
+      <div id="${rootId}">${rendered}</div>
+      <script type="application/json" data-garden-publication-props data-garden-publication-root="${rootId}">${serializeGardenPublicationProps(props)}</script>
+      <script type="module" src="/api/openplanner/v1/public/assets/garden-publication-app.js"></script>
+    </div>`;
+}
+
 /**
  * Render translation status banner
  */
@@ -410,7 +433,7 @@ export async function renderGardenPage(
   const gardenHomeUrl = getGardenIndexUrl(pageUrl);
   const globalLinksHtml = renderGlobalLinks(gardenHomeUrl);
   const navHtml = options.includeNav !== false ? renderNav(garden, options) : "";
-  const contentHtml = await renderMarkdown(document.content, theme);
+  const contentHtml = await renderPublicationBlocks(document.metadata, theme) ?? await renderMarkdown(document.content, theme);
   const translationBanner = renderTranslationBanner(document.translationStatus, document.language ?? "en");
   const languageSelector = renderLanguageSelector(
     document.language ?? "en",
@@ -832,6 +855,18 @@ function getGardenStyles(): string {
       max-width: 100%;
       height: auto;
       border-radius: var(--uxx-radius-md);
+    }
+
+    .garden-publication-react {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    @media (max-width: 720px) {
+      .garden-main {
+        padding: 20px;
+      }
     }
 
     .garden-document-list {

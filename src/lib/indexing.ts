@@ -172,7 +172,8 @@ function chunkText(input: string, targetTokens: number, targetChars: number, ove
     const next = current ? `${current}\n\n${block}` : block;
     if (current && (estimateTokens(next) > targetTokens || next.length > targetChars)) {
       out.push(current.trim());
-      const overlap = overlapChars > 0 ? current.slice(-overlapChars).trim() : "";
+      const maxOverlapChars = Math.max(0, Math.min(overlapChars, targetChars - block.length - 2));
+      const overlap = maxOverlapChars > 0 ? current.slice(-maxOverlapChars).trim() : "";
       current = overlap ? `${overlap}\n\n${block}` : block;
       continue;
     }
@@ -252,7 +253,7 @@ export function isContextOverflowError(error: unknown): boolean {
   // We treat "input too large" (embed provider / OpenAI-style errors) the same as
   // context overflow, because the fix is the same: split the batch into smaller
   // pieces.
-  return /context window|ollama_context_overflow|exceeds model context window|exceed_context_size|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
+  return /context window|context size has been exceeded|ollama_context_overflow|exceeds model context window|exceed_context_size|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
 }
 
 export function batchPreparedChunks(

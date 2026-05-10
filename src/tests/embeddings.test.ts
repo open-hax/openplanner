@@ -89,8 +89,8 @@ test("EmbedProviderFunction batches multiple texts", async () => {
 
 test("EmbedProviderFunction MAX_CHARS limits are enforced", () => {
   const fn = new EmbedProviderFunction("test-model", "http://localhost:9999");
-  assert.equal((fn as any).MAX_CHARS_PER_BATCH, 20_000, "MAX_CHARS_PER_BATCH should be 20k");
-  assert.equal((fn as any).MAX_SINGLE_ENTRY_CHARS, 16_000, "MAX_SINGLE_ENTRY_CHARS should be 16k");
+  assert.equal((fn as any).MAX_CHARS_PER_BATCH, 4_000, "MAX_CHARS_PER_BATCH should be 4k");
+  assert.equal((fn as any).MAX_SINGLE_ENTRY_CHARS, 4_000, "MAX_SINGLE_ENTRY_CHARS should be 4k");
 });
 
 test("EmbedProviderFunction maxBatchItems and maxConcurrentBatches are set", () => {

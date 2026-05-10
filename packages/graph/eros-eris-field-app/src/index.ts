@@ -1058,7 +1058,32 @@ async function main(): Promise<void> {
   const openPlannerStructuralEdgeLimit = Math.max(1000, Math.min(200000, Math.floor(num("OPENPLANNER_STRUCTURAL_EDGE_LIMIT", 50000))));
   const graphViewComponentCount = Math.max(1, Math.min(16, Math.floor(num("GRAPH_VIEW_COMPONENT_COUNT", 6))));
   const simShardCount = Math.max(1, Math.min(64, Math.floor(num("SIM_SHARD_COUNT", 1))));
-  const simShardIndex = ((Math.floor(num("SIM_SHARD_INDEX", 0)) % simShardCount) + simShardCount) % simShardCount;
+
+  const resolveShardIndex = (): number => {
+    const raw = String(process.env.SIM_SHARD_INDEX ?? "").trim();
+    if (raw.length > 0) {
+      return ((Math.floor(num("SIM_SHARD_INDEX", 0)) % simShardCount) + simShardCount) % simShardCount;
+    }
+
+    // If SIM_SHARD_INDEX isn't explicitly set, derive a stable shard index from
+    // container hostname so docker compose --scale can be used without
+    // defining N near-identical services.
+    const hostname = String(process.env.HOSTNAME ?? "").trim();
+    const digits = hostname.match(/(\d+)(?:\D*)$/)?.[1];
+    if (digits) {
+      const n = Number.parseInt(digits, 10);
+      if (Number.isFinite(n)) return ((n % simShardCount) + simShardCount) % simShardCount;
+    }
+
+    // Fallback: very small hash.
+    let acc = 0;
+    for (let i = 0; i < hostname.length; i += 1) {
+      acc = (acc * 31 + hostname.charCodeAt(i)) >>> 0;
+    }
+    return simShardCount > 0 ? acc % simShardCount : 0;
+  };
+
+  const simShardIndex = resolveShardIndex();
 
   healthSnapshot = {
     ...healthSnapshot,

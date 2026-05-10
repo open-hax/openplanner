@@ -11,6 +11,7 @@ test("isContextOverflowError matches ollama context overflow", () => {
   assert.ok(isContextOverflowError(new Error("ollama_context_overflow")));
   assert.ok(isContextOverflowError(new Error("context window exceeded")));
   assert.ok(isContextOverflowError(new Error("exceeds model context window")));
+  assert.ok(isContextOverflowError(new Error("Context size has been exceeded.")));
   assert.ok(isContextOverflowError(new Error("embed_input_too_large")));
   assert.ok(isContextOverflowError(new Error("embedding input is too large")));
   assert.ok(isContextOverflowError(new Error("input is too large")));
