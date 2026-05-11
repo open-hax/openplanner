@@ -31,5 +31,6 @@
     "c8": "^10.1.2",
     "shadow-cljs": "^3.3.5",
     "zod": "^3.25.0"
-  }
+  },
+  "license": "GPL-3.0-or-later"
 }

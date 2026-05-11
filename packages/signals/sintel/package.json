@@ -2,7 +2,7 @@
   "name": "@open-hax/sintel",
   "version": "0.1.0",
   "private": true,
-  "license": "GPL-3.0-only",
+  "license": "GPL-3.0-or-later",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",

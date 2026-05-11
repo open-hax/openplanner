@@ -29,5 +29,6 @@
     "@stryker-mutator/core": "^8.7.1",
     "c8": "^10.1.2",
     "shadow-cljs": "^3.3.5"
-  }
+  },
+  "license": "LGPL-3.0-or-later"
 }
