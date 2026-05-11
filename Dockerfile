@@ -1,19 +1,31 @@
-FROM node:22-bookworm-slim
+FROM node:22-trixie-slim
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openjdk-21-jre-headless \
+  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY package.json tsconfig.json ./
+COPY pnpm-workspace.yaml .
+COPY pnpm-lock.yaml .
+COPY packages/graph/graph-claim-core/package.json ./packages/graph/graph-claim-core/package.json
+COPY packages/stores/document-hydration/package.json ./packages/stores/document-hydration/package.json
+COPY packages/translations/translation-core/package.json ./packages/translations/translation-core/package.json
 
-# Use npm install to regenerate lock file if needed
-RUN npm install
+RUN corepack enable && corepack prepare pnpm@10 --activate
+RUN pnpm install --no-frozen-lockfile
 
 COPY src ./src
+COPY packages/graph/graph-claim-core ./packages/graph/graph-claim-core
+COPY packages/stores/document-hydration ./packages/stores/document-hydration
+COPY packages/translations/translation-core ./packages/translations/translation-core
 COPY .env.example ./.env.example
 
-RUN npm run build
+RUN pnpm build
 
 # Remove dev dependencies to slim image
-RUN npm prune --production
+RUN CI=true pnpm prune --prod
 
 USER 1000:1000
 

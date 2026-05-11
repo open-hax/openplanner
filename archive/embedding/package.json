@@ -18,5 +18,6 @@
   "dependencies": {},
   "devDependencies": {
     "typescript": "^5.5.4"
-  }
+  },
+  "license": "LGPL-3.0-or-later"
 }

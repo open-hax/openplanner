@@ -30,6 +30,11 @@ const DEFAULT_PUBLIC_PATHS = [
   "/v1/health",
   "/v1/metrics",
   "/v1/public",
+
+  // Graph export is currently authenticated via API key and not tenant-scoped.
+  // Graph-weaver and other internal consumers do not send X-Tenant-ID yet.
+  "/v1/graph/export",
+
   "/v1/graph/node-embeddings/query",
   "/v1/graph/node-embeddings/materialize",
 ];
@@ -154,8 +159,9 @@ export const tenantPlugin = fp<TenantPluginOptions>(async (app, options) => {
         return reply.unauthorized("Tenant context required");
       }
 
-      // In non-strict mode, log warning and proceed
-      req.log.warn({ pathname }, "no tenant context resolved");
+      // In non-strict mode, log at debug level and proceed
+      // (warn level creates too much noise from internal docker services)
+      req.log.debug({ pathname }, "no tenant context resolved");
       return;
     }
 

@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { DocumentPatchRequest, DocumentRecord } from "../../lib/types.js";
-import { buildDocumentFilter, countFieldValues, documentToEvent, getDocumentById, persistAndMaybeIndex, rowToDocument } from "./documents.js";
+import { buildDocumentFilter, countFieldValues, documentToEvent, getDocumentById, hydrateDocumentRowsForApi, persistAndMaybeIndex, persistEvent, rowToDocument } from "./documents.js";
 
 type CmsDocument = {
   doc_id: string;
@@ -32,6 +32,8 @@ type CreateCmsDocumentPayload = {
   source_path?: string | null;
   visibility?: "internal" | "review" | "public" | "archived";
   metadata?: Record<string, unknown>;
+  garden_id?: string;
+  defer_index?: boolean;
 };
 
 type DraftCmsPayload = {
@@ -121,7 +123,8 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     if (limit !== null) cursor = cursor.limit(limit);
 
     const rows = await cursor.toArray();
-    const documents = rows.map((row: Record<string, unknown>) => toCmsDocument(rowToDocument(row), tenantId));
+    const hydratedRows = await hydrateDocumentRowsForApi(rows as Array<Record<string, unknown>>);
+    const documents = hydratedRows.map((row) => toCmsDocument(rowToDocument(row), tenantId));
 
     return {
       documents,
@@ -145,10 +148,23 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     const payload = req.body ?? {};
     const title = String(payload.title ?? "").trim();
     const content = String(payload.content ?? "").trim();
+    const requestedGardenId = String(payload.garden_id ?? payload.metadata?.garden_id ?? "").trim();
 
     if (!title || !content) {
       return reply.status(400).send({ detail: "title and content are required" });
     }
+
+    if (requestedGardenId) {
+      const garden = await app.mongo.gardens.findOne({ garden_id: requestedGardenId, status: { $ne: "archived" } });
+      if (!garden) {
+        return reply.status(404).send({ detail: "Garden not found or archived" });
+      }
+    }
+
+    const metadata = {
+      ...(payload.metadata ?? {}),
+      ...(requestedGardenId ? { garden_id: requestedGardenId } : {}),
+    };
 
     const document: DocumentRecord = {
       id: crypto.randomUUID(),
@@ -156,15 +172,24 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
       content,
       project: tenantId,
       kind: "docs",
-      visibility: payload.visibility ?? "internal",
+      visibility: payload.visibility ?? (requestedGardenId ? "review" : "internal"),
       source: "manual",
       sourcePath: payload.source_path ?? undefined,
       domain: payload.domain ?? "general",
       language: payload.language ?? "en",
       createdBy: "openplanner-cms",
-      metadata: payload.metadata ?? {},
+      metadata,
       ts: new Date().toISOString(),
     };
+
+    if (payload.defer_index === true) {
+      await persistEvent(app, documentToEvent(document));
+      return {
+        ...toCmsDocument(document, tenantId),
+        indexed: false,
+        indexing_deferred: true,
+      };
+    }
 
     const result = await persistAndMaybeIndex(app, documentToEvent(document));
     if (result.warning) {
@@ -308,9 +333,15 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
       ts: now.toISOString(),
     };
 
-    const result = await persistAndMaybeIndex(app, documentToEvent(published, existing));
-    if (result.warning) {
+    const deferIndex = query.defer_index === "true";
+    const result = deferIndex
+      ? { indexed: false }
+      : await persistAndMaybeIndex(app, documentToEvent(published, existing));
+    if (!deferIndex && "warning" in result && result.warning) {
       return reply.status(503).send({ detail: result.warning, persisted: true, indexed: false });
+    }
+    if (deferIndex) {
+      await persistEvent(app, documentToEvent(published, existing));
     }
 
     // Queue translation jobs if target languages are configured
@@ -364,6 +395,7 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
       garden_id: gardenId,
       visibility: "public",
       indexed: result.indexed,
+      indexing_deferred: deferIndex,
       translation_jobs: translationJobs,
     };
   });
@@ -480,7 +512,8 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     if (limit !== null) cursor = cursor.limit(limit);
 
     const rows = await cursor.toArray();
-    const documents = rows.map((row: Record<string, unknown>) => toCmsDocument(rowToDocument(row), tenantId));
+    const hydratedRows = await hydrateDocumentRowsForApi(rows as Array<Record<string, unknown>>);
+    const documents = hydratedRows.map((row) => toCmsDocument(rowToDocument(row), tenantId));
 
     return {
       documents,

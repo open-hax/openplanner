@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import type { WithId, Collection } from "mongodb";
 import type { GardenDocument, EventDocument } from "../../lib/mongodb.js";
@@ -118,6 +119,18 @@ async function latestLabelsBySegmentId(
 export const publicRoutes: FastifyPluginAsync = async (app) => {
   const gardens = app.mongo.gardens;
   const events = app.mongo.events;
+
+  app.get("/public/assets/:asset", async (req, reply) => {
+    const asset = String((req.params as { asset: string }).asset);
+    if (!/^[a-zA-Z0-9._-]+\.(?:js|css)$/.test(asset)) {
+      return reply.status(404).send({ error: "asset not found" });
+    }
+    const assetUrl = new URL(`../../../node_modules/@open-hax/garden-publication-components/dist/browser/${asset}`, import.meta.url);
+    const content = await readFile(assetUrl);
+    reply.header("cache-control", "no-store");
+    reply.type(asset.endsWith(".css") ? "text/css; charset=utf-8" : "application/javascript; charset=utf-8");
+    return content;
+  });
 
   /**
    * GET /v1/public/gardens/:garden_id
@@ -574,6 +587,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
         content,
         source_path: extra.source_path,
         language: servedLanguage,
+        metadata: extra.metadata as Record<string, unknown> | undefined,
         translationStatus,
         availableLanguages: docAvailableLanguages,
       },

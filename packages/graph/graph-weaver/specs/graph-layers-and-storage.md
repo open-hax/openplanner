@@ -4,7 +4,7 @@
 
 Make the internal graph layering explicit.
 
-## Three graph layers
+## Graph layers
 
 ### 1. Local layer
 Produced by repo scan.
@@ -39,12 +39,37 @@ Characteristics:
 - user-authored graph edits
 - persisted to Mongo under store `user`
 
+### 4. Semantic layer
+Produced by OpenPlanner semantic exports and daimoi reinforcement.
+
+Characteristics:
+- `layer: semantic`
+- semantic edges are transient circuit edges, not durable truth claims
+- every semantic edge must carry `data.similarity` with the cosine score between connected nodes
+- reinforced edges increase `data.conductance`; unreinforced edges decay by half-life into `broken` and then are pruned
+- durable truth still belongs to OpenPlanner edge claims, not semantic edges
+
+### 5. Presence layer
+Produced by presence GraphQL mutations and future OpenPlanner runtime sync.
+
+Characteristics:
+- `kind: presence`, `layer: presence`
+- `data.presence_class` is `resource`, `muse`, or `transient`
+- `data.saturation`, `data.emission_threshold`, and `data.refractory_ms` model neuron-like emission
+- resource presences represent CPU cores, NPU, GPU, RAM, or other system resources/processes
+- muse presences represent an LLM actor's autonomic graph interface
+- transient presences represent bounded effects such as memory-tool query emission events
+
 ## Merge model
 
 The runtime merges:
 - `localStore`
 - `webStore`
 - `userStore`
+
+Semantic and presence layers currently persist through `userStore` unless they are
+imported from OpenPlanner export, but they keep their own `layer` values so the
+GraphQL schema and renderer can distinguish them.
 
 Merged graph is cached until invalidated by a dirty mark.
 
@@ -71,3 +96,5 @@ It is a layered graph instrument that intentionally combines:
 - rebuildable derivation
 - discovered external state
 - human-authored overlay
+- transient semantic circuits
+- presence-driven intent/resource nodes

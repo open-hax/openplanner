@@ -8,6 +8,8 @@ export type EmbeddingRuntime = {
     getModel: (scope: { source?: string; kind?: string; project?: string }) => string;
     getEmbeddingFunction: (scope: { source?: string; kind?: string; project?: string }) => EmbedProviderFunction;
     getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
+    getBackgroundEmbeddingFunction: (scope: { source?: string; kind?: string; project?: string }) => EmbedProviderFunction;
+    getBackgroundEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
     getParallelPool: (scope: { source?: string; kind?: string; project?: string }) => ParallelEmbeddingPool;
     getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
   };
@@ -15,22 +17,25 @@ export type EmbeddingRuntime = {
     getModel: () => string;
     getEmbeddingFunction: () => EmbedProviderFunction;
     getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
+    getBackgroundEmbeddingFunction: () => EmbedProviderFunction;
+    getBackgroundEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
     getParallelPool: () => ParallelEmbeddingPool;
     getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
   };
 };
 
 export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime {
-  const embeddingCache = new Map<string, EmbedProviderFunction>();
+  const interactiveCache = new Map<string, EmbedProviderFunction>();
+  const backgroundCache = new Map<string, EmbedProviderFunction>();
   const parallelPoolCache = new Map<string, ParallelEmbeddingPool>();
   const persistentCache = new PersistentEmbeddingCache(cfg.embedProviderCachePath);
 
-  const makeEmbeddingFunction = (model: string): EmbedProviderFunction => new EmbedProviderFunction(model, cfg.embedProviderBaseUrl, {
+  const makeEmbeddingFunction = (model: string, opts?: { maxConcurrentBatches?: number }): EmbedProviderFunction => new EmbedProviderFunction(model, cfg.embedProviderBaseUrl, {
     apiKey: cfg.embedProviderApiKey,
     cache: persistentCache,
     batchWindowMs: cfg.embedProviderBatchWindowMs,
     maxBatchItems: cfg.embedProviderMaxBatchItems,
-    maxConcurrentBatches: 4,
+    maxConcurrentBatches: opts?.maxConcurrentBatches ?? 1,
   });
 
   const makeParallelPool = (model: string): ParallelEmbeddingPool => new ParallelEmbeddingPool(model, cfg.embedProviderBaseUrl, {
@@ -42,10 +47,18 @@ export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime
   });
 
   const getEmbeddingFunctionForModel = (model: string): EmbedProviderFunction => {
-    const cached = embeddingCache.get(model);
+    const cached = interactiveCache.get(model);
     if (cached) return cached;
-    const created = makeEmbeddingFunction(model);
-    embeddingCache.set(model, created);
+    const created = makeEmbeddingFunction(model, { maxConcurrentBatches: 2 });
+    interactiveCache.set(model, created);
+    return created;
+  };
+
+  const getBackgroundEmbeddingFunctionForModel = (model: string): EmbedProviderFunction => {
+    const cached = backgroundCache.get(model);
+    if (cached) return cached;
+    const created = makeEmbeddingFunction(model, { maxConcurrentBatches: 6 });
+    backgroundCache.set(model, created);
     return created;
   };
 
@@ -65,6 +78,8 @@ export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime
       getModel: getHotModel,
       getEmbeddingFunction: (scope) => getEmbeddingFunctionForModel(getHotModel(scope)),
       getEmbeddingFunctionForModel,
+      getBackgroundEmbeddingFunction: (scope) => getBackgroundEmbeddingFunctionForModel(getHotModel(scope)),
+      getBackgroundEmbeddingFunctionForModel,
       getParallelPool: (scope) => getParallelPoolForModel(getHotModel(scope)),
       getParallelPoolForModel,
     },
@@ -72,6 +87,8 @@ export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime
       getModel: () => cfg.compactEmbedModel,
       getEmbeddingFunction: () => getEmbeddingFunctionForModel(cfg.compactEmbedModel),
       getEmbeddingFunctionForModel,
+      getBackgroundEmbeddingFunction: () => getBackgroundEmbeddingFunctionForModel(cfg.compactEmbedModel),
+      getBackgroundEmbeddingFunctionForModel,
       getParallelPool: () => getParallelPoolForModel(cfg.compactEmbedModel),
       getParallelPoolForModel,
     },

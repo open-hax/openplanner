@@ -1,7 +1,13 @@
 import type { FastifyPluginAsync } from "fastify";
-import { upsertEvent } from "../../lib/mongodb.js";
+import {
+  rowToDocument as cljsRowToDocument,
+} from "@open-hax/openplanner-document-hydration";
+import { enqueueMigrationJob, upsertEvent } from "../../lib/mongodb.js";
 import { batchPreparedChunks, isContextOverflowError, prepareIndexDocument } from "../../lib/indexing.js";
 import { deleteMongoVectorEntriesByFilter, indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
+import { hydrateRowFromSourceCache } from "../../lib/source-hydration.js";
+import { planLazyMigrationAfterValidationError, shouldEnqueueLazyMigration } from "../../lib/lazy-migrations.js";
+import { OPENPLANNER_SCHEMA_TARGETS } from "../../lib/schema-versions.js";
 import type {
   DocumentPatchRequest,
   DocumentRecord,
@@ -119,31 +125,12 @@ export async function countFieldValues(
   }, {});
 }
 
-export function rowToDocument(row: Record<string, unknown>): DocumentRecord {
-  const extra = parseJson(row.extra);
-  const metadata = (extra.metadata && typeof extra.metadata === "object") ? (extra.metadata as Record<string, unknown>) : {};
-  const ts = row.ts instanceof Date ? row.ts.toISOString() : String(row.ts ?? new Date().toISOString());
+export async function hydrateDocumentRowsForApi(rows: Array<Record<string, unknown>>): Promise<Array<Record<string, unknown>>> {
+  return Promise.all(rows.map((row) => hydrateRowFromSourceCache(row)));
+}
 
-  return {
-    id: String(row.id),
-    title: String(extra.title ?? row.message ?? row.id),
-    content: String(row.text ?? ""),
-    project: String(row.project ?? "devel"),
-    kind: (DOCUMENT_KINDS.has(String(row.kind)) ? String(row.kind) : "docs") as DocumentRecord["kind"],
-    visibility: normalizeVisibility(extra.visibility),
-    source: row.source ? String(row.source) : undefined,
-    sourcePath: extra.source_path ? String(extra.source_path) : undefined,
-    domain: extra.domain ? String(extra.domain) : undefined,
-    language: extra.language ? String(extra.language) : undefined,
-    createdBy: extra.created_by ? String(extra.created_by) : undefined,
-    publishedBy: extra.published_by ? String(extra.published_by) : undefined,
-    publishedAt: extra.published_at ? String(extra.published_at) : null,
-    aiDrafted: Boolean(extra.ai_drafted),
-    aiModel: extra.ai_model ? String(extra.ai_model) : null,
-    aiPromptHash: extra.ai_prompt_hash ? String(extra.ai_prompt_hash) : null,
-    metadata,
-    ts,
-  };
+export function rowToDocument(row: Record<string, unknown>): DocumentRecord {
+  return cljsRowToDocument(row) as unknown as DocumentRecord;
 }
 
 export function documentToEvent(doc: DocumentRecord, original?: DocumentRecord): EventEnvelopeV1 {
@@ -198,7 +185,7 @@ export async function persistAndMaybeIndex(app: any, ev: EventEnvelopeV1): Promi
   }
 }
 
-async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
+export async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
   const sr = ev.source_ref ?? {};
   const meta = ev.meta ?? {};
   const role = meta.role ? String(meta.role) : null;
@@ -221,6 +208,8 @@ async function persistEvent(app: any, ev: EventEnvelopeV1): Promise<void> {
     text: ev.text ? String(ev.text) : "",
     attachments: ev.attachments ?? null,
     extra: ev.extra ?? null,
+    schema_version: ev.schema_version,
+    migration_state: ev.migration_state as any,
   });
 }
 
@@ -256,7 +245,7 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
   } as Record<string, unknown>;
 
   const embeddingRuntime = (app as any).embeddingRuntime;
-  const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+  const embeddingFunction = embeddingRuntime.hot.getBackgroundEmbeddingFunction(embeddingScope);
   const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
   await indexTextInMongoVectors({
     mongo: app.mongo,
@@ -272,7 +261,64 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
 
 export async function getDocumentById(app: any, id: string): Promise<DocumentRecord | null> {
   const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
-  return row ? rowToDocument(row as Record<string, unknown>) : null;
+  if (!row) return null;
+  const hydrated = await hydrateRowFromSourceCache(row as Record<string, unknown>);
+  return rowToDocument(hydrated);
+}
+
+function isSourceBackedRow(row: Record<string, unknown>): boolean {
+  const extra = parseJson(row.extra);
+  const metadata = parseJson(extra.metadata);
+  return [
+    extra.source_path,
+    extra.path,
+    extra.url,
+    extra.hostname,
+    metadata.path,
+    metadata.file_id,
+    metadata.url,
+  ].some((value) => typeof value === "string" && value.trim().length > 0);
+}
+
+function documentRowValidationError(row: Record<string, unknown>): Record<string, unknown> | null {
+  const schemaVersion = typeof row.schema_version === "number" ? row.schema_version : 1;
+  if (schemaVersion < OPENPLANNER_SCHEMA_TARGETS.event) {
+    return {
+      code: "schema_version_behind",
+      currentVersion: schemaVersion,
+      targetVersion: OPENPLANNER_SCHEMA_TARGETS.event,
+    };
+  }
+  if (isSourceBackedRow(row) && typeof row.text === "string" && row.text.trim().length > 0) {
+    return {
+      code: "reference_first_text_violation",
+      message: "source-backed document rows should not retain durable text",
+    };
+  }
+  return null;
+}
+
+async function planDocumentMigrationOnValidationError(app: any, row: Record<string, unknown>) {
+  const error = documentRowValidationError(row);
+  if (!error) return null;
+  const planResponse = await planLazyMigrationAfterValidationError({
+    entity: "openplanner/event",
+    targetVersion: OPENPLANNER_SCHEMA_TARGETS.event,
+    object: row,
+    error,
+  });
+  if (!planResponse?.plan) return null;
+  if (shouldEnqueueLazyMigration(planResponse.plan)) {
+    await enqueueMigrationJob(app.mongo.migrationJobs, {
+      entity: "openplanner/event",
+      object_id: String(row.id ?? row._id),
+      trigger: "schema-validation-error",
+      plan: planResponse.plan as unknown as Record<string, unknown>,
+      error,
+      priority: 10,
+    });
+  }
+  return planResponse.plan;
 }
 
 export const documentRoutes: FastifyPluginAsync = async (app) => {
@@ -341,13 +387,14 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
     if (limit !== null) cursor = cursor.limit(limit);
 
     const rows = await cursor.toArray();
+    const hydratedRows = await hydrateDocumentRowsForApi(rows as Array<Record<string, unknown>>);
     return {
       ok: true,
-      count: rows.length,
+      count: hydratedRows.length,
       total,
       offset,
       limit,
-      rows: rows.map((row: Record<string, unknown>) => rowToDocument(row)),
+      rows: hydratedRows.map((row) => rowToDocument(row)),
       storageBackend: "mongodb",
     };
   });
@@ -379,9 +426,15 @@ export const documentRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/documents/:id", async (req, reply) => {
     const id = String((req.params as { id: string }).id);
-    const doc = await getDocumentById(app, id);
-    if (!doc) return reply.status(404).send({ error: "document not found" });
-    return { ok: true, document: doc };
+    const row = await app.mongo.events.findOne({ _id: id, kind: { $in: [...DOCUMENT_KINDS] } });
+    if (!row) return reply.status(404).send({ error: "document not found" });
+    const migrationPlan = await planDocumentMigrationOnValidationError(app, row as Record<string, unknown>);
+    const hydrated = await hydrateRowFromSourceCache(row as Record<string, unknown>);
+    return {
+      ok: true,
+      document: rowToDocument(hydrated),
+      ...(migrationPlan ? { lazyMigration: { planned: true, enqueued: shouldEnqueueLazyMigration(migrationPlan), plan: migrationPlan } } : {}),
+    };
   });
 
   app.patch<{ Body: DocumentPatchRequest }>("/documents/:id", async (req, reply) => {

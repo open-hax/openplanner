@@ -560,14 +560,14 @@ async function upsertOpenPlannerSemanticEdges(params: {
   const baseUrl = String(params.openPlannerBaseUrl || "").trim().replace(/\/+$/, "");
   if (!baseUrl || params.edges.length === 0) return 0;
 
-  const res = await fetch(`${baseUrl}/v1/graph/semantic-edges/upsert`, {
+  const res = await fetch(`${baseUrl}/v1/graph/semantic-force/upsert`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...(params.openPlannerApiKey ? { authorization: `Bearer ${params.openPlannerApiKey}` } : {}),
     },
     body: JSON.stringify({
-      edges: params.edges.map((e) => ({
+      samples: params.edges.map((e) => ({
         source: e.a,
         target: e.b,
         similarity: e.sim,
@@ -575,13 +575,14 @@ async function upsertOpenPlannerSemanticEdges(params: {
       embeddingModel: params.embeddingModel,
       project: params.project,
       source: "eros-eris-field",
-      clusteringVersion: "v1",
+      fieldProfile: "layout.v1",
+      forceKind: "semantic_charge",
     }),
   });
 
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`openplanner semantic edges upsert ${res.status}: ${text.slice(0, 200)}`);
+    throw new Error(`openplanner semantic force upsert ${res.status}: ${text.slice(0, 200)}`);
   }
 
   const payload = JSON.parse(text) as { stored?: number };
@@ -592,14 +593,18 @@ type CanonicalEdge = {
   source: string;
   target: string;
   similarity: number;
-  edgeType: string;
-  graphVersion: string | null;
+  charge?: number;
+  forceKind?: string;
+  fieldProfile?: string;
+  compatibilityKind?: string;
 };
 
 type CanonicalEdgesResponse = {
   ok: boolean;
   count: number;
-  edges: CanonicalEdge[];
+  samples?: CanonicalEdge[];
+  edges?: CanonicalEdge[];
+  source?: string;
 };
 
 type StructuralEdgeResponse = {
@@ -622,7 +627,7 @@ async function fetchCanonicalSemanticEdges(params: {
   if (!baseUrl) return [];
 
   const limit = Math.max(1, Math.min(100000, params.limit ?? 50000));
-  const url = `${baseUrl}/v1/graph/semantic-edges?limit=${limit}`;
+  const url = `${baseUrl}/v1/graph/semantic-force?limit=${limit}&includeLegacyFallback=true`;
 
   const res = await fetch(url, {
     headers: {
@@ -631,11 +636,12 @@ async function fetchCanonicalSemanticEdges(params: {
   });
 
   if (!res.ok) {
-    throw new Error(`canonical semantic edges ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    throw new Error(`semantic force samples ${res.status}: ${(await res.text()).slice(0, 200)}`);
   }
 
   const payload = (await res.json()) as CanonicalEdgesResponse;
-  return payload.edges
+  const rows = payload.samples ?? payload.edges ?? [];
+  return rows
     .filter((e) => params.nodeIds.has(e.source) && params.nodeIds.has(e.target))
     .map((e) => ({ a: e.source, b: e.target, sim: e.similarity }));
 }
@@ -1052,7 +1058,32 @@ async function main(): Promise<void> {
   const openPlannerStructuralEdgeLimit = Math.max(1000, Math.min(200000, Math.floor(num("OPENPLANNER_STRUCTURAL_EDGE_LIMIT", 50000))));
   const graphViewComponentCount = Math.max(1, Math.min(16, Math.floor(num("GRAPH_VIEW_COMPONENT_COUNT", 6))));
   const simShardCount = Math.max(1, Math.min(64, Math.floor(num("SIM_SHARD_COUNT", 1))));
-  const simShardIndex = ((Math.floor(num("SIM_SHARD_INDEX", 0)) % simShardCount) + simShardCount) % simShardCount;
+
+  const resolveShardIndex = (): number => {
+    const raw = String(process.env.SIM_SHARD_INDEX ?? "").trim();
+    if (raw.length > 0) {
+      return ((Math.floor(num("SIM_SHARD_INDEX", 0)) % simShardCount) + simShardCount) % simShardCount;
+    }
+
+    // If SIM_SHARD_INDEX isn't explicitly set, derive a stable shard index from
+    // container hostname so docker compose --scale can be used without
+    // defining N near-identical services.
+    const hostname = String(process.env.HOSTNAME ?? "").trim();
+    const digits = hostname.match(/(\d+)(?:\D*)$/)?.[1];
+    if (digits) {
+      const n = Number.parseInt(digits, 10);
+      if (Number.isFinite(n)) return ((n % simShardCount) + simShardCount) % simShardCount;
+    }
+
+    // Fallback: very small hash.
+    let acc = 0;
+    for (let i = 0; i < hostname.length; i += 1) {
+      acc = (acc * 31 + hostname.charCodeAt(i)) >>> 0;
+    }
+    return simShardCount > 0 ? acc % simShardCount : 0;
+  };
+
+  const simShardIndex = resolveShardIndex();
 
   healthSnapshot = {
     ...healthSnapshot,
@@ -1203,7 +1234,7 @@ async function main(): Promise<void> {
       semanticPairs.set(key, e);
     }
 
-    // Persist semantic edges to OpenPlanner (layout-as-search-index)
+    // Persist semantic force samples to OpenPlanner (layout force cache, not graph truth)
     if (openPlannerBaseUrl && semanticEdges.length > 0) {
       try {
         const upsertStart = Date.now();
@@ -1215,12 +1246,12 @@ async function main(): Promise<void> {
         });
         if (stored > 0) {
           // eslint-disable-next-line no-console
-          console.log(`[eros-eris] persisted ${stored} semantic edges to openplanner upsertMs=${Date.now() - upsertStart}`);
+          console.log(`[eros-eris] persisted ${stored} semantic force samples to openplanner upsertMs=${Date.now() - upsertStart}`);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         // eslint-disable-next-line no-console
-        console.warn(`[eros-eris] semantic edge persist failed: ${message}`);
+        console.warn(`[eros-eris] semantic force sample persist failed: ${message}`);
       }
     }
 

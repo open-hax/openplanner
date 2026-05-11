@@ -1,4 +1,8 @@
 packages:
-  # Production packages — always built and tested
-  - './app/*'
-  - 'packages/**'
+  - ./app/*
+  - packages/**
+
+onlyBuiltDependencies:
+  - '@discordjs/opus'
+  - lmdb
+  - msgpackr-extract

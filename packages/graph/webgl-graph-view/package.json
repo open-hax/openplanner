@@ -2,7 +2,7 @@
   "name": "@octave-commons/webgl-graph-view",
   "version": "0.3.0",
   "private": false,
-  "liscense":"LGPL-3",
+  "license": "LGPL-3.0-or-later",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

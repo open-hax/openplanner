@@ -7,6 +7,8 @@ type ExportNode = {
   label: string;
   lake?: string;
   nodeType?: string;
+  x?: number;
+  y?: number;
   data?: Record<string, unknown>;
 };
 
@@ -62,6 +64,9 @@ export async function rebuildOpenPlannerGraph(params: {
   projects?: string[];
   includeSemantic?: boolean;
   semanticMinSimilarity?: number;
+  maxNodes?: number;
+  maxEdges?: number;
+  maxSemanticEdges?: number;
 }): Promise<{ seeds: string[] }> {
   const baseUrl = trimBaseUrl(params.openPlannerBaseUrl || "");
   if (!baseUrl) {
@@ -78,6 +83,9 @@ export async function rebuildOpenPlannerGraph(params: {
       qs.set("semanticMinSimilarity", String(params.semanticMinSimilarity));
     }
   }
+  if (typeof params.maxNodes === "number") qs.set("maxNodes", String(Math.max(100, Math.floor(params.maxNodes))));
+  if (typeof params.maxEdges === "number") qs.set("maxEdges", String(Math.max(100, Math.floor(params.maxEdges))));
+  if (typeof params.maxSemanticEdges === "number") qs.set("maxSemanticEdges", String(Math.max(0, Math.floor(params.maxSemanticEdges))));
   const query = `?${qs.toString()}`;
   const payload = await fetchJson<ExportPayload>(`${baseUrl}/v1/graph/export${query}`, params.openPlannerApiKey);
 
@@ -85,10 +93,12 @@ export async function rebuildOpenPlannerGraph(params: {
   const edges = Array.isArray(payload.edges) ? payload.edges : [];
 
   for (const node of nodes) {
+    const hasExportedPosition = typeof node.x === "number" && Number.isFinite(node.x) && typeof node.y === "number" && Number.isFinite(node.y);
     const data = {
       ...(node.data ?? {}),
       lake: node.lake ?? (node.data as any)?.lake,
       node_type: node.nodeType ?? (node.data as any)?.node_type,
+      ...(hasExportedPosition ? { pos: { x: node.x, y: node.y } } : {}),
     } as Record<string, unknown>;
 
     const graphNode: GraphNode = {

@@ -1,9 +1,46 @@
 import type http from "node:http";
 import { buildSchema, graphql } from "graphql";
 import type { ConfigPatch, RuntimeConfig } from "./config.js";
+import type { DaimoiTrailSnapshot } from "./mongo-graph-store.js";
 
 export type GraphQLContext = {
   headers: http.IncomingHttpHeaders;
+};
+
+export type SemanticFieldCell = {
+  id: string;
+  fieldProfile: string;
+  project: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  level: number;
+  ix: number;
+  iy: number;
+  centerX: number;
+  centerY: number;
+  halfExtent: number;
+  mass: number;
+  nodeCount: number;
+  nodeIds: string[];
+  childCellIds: string[];
+  charge: number;
+  updatedAt: string | null;
+  data: Record<string, unknown>;
+};
+
+export type SemanticFieldSample = {
+  source: string;
+  target: string;
+  similarity: number;
+  charge: number;
+  forceKind: string;
+  fieldProfile: string;
+  project: string | null;
+  embeddingModel: string | null;
+  embeddingDimensions: number | null;
+  sourceSystem: string | null;
+  updatedAt: string | null;
+  data: Record<string, unknown>;
 };
 
 export type GraphQLState = {
@@ -142,6 +179,39 @@ export type GraphQLState = {
     data?: unknown;
   }>;
 
+  listDaimoiSnapshots: (filter: {
+    limit: number;
+    minActivation?: number;
+    query?: string;
+    lookbackSeconds?: number;
+  }) => Promise<DaimoiTrailSnapshot[]> | DaimoiTrailSnapshot[];
+
+  listSemanticFieldOverlay: (filter: {
+    fieldProfile?: string;
+    project?: string;
+    cellLimit: number;
+    sampleLimit: number;
+  }) => Promise<{ cells: SemanticFieldCell[]; samples: SemanticFieldSample[] }> | { cells: SemanticFieldCell[]; samples: SemanticFieldSample[] };
+
+  listPresenceNodes: (filter: { class?: string; includeArchived: boolean; limit: number }) => Array<{
+    id: string;
+    kind: string;
+    label: string;
+    external: boolean;
+    loadedByDefault: boolean;
+    layer?: string;
+    data?: unknown;
+  }>;
+
+  listSemanticEdges: (filter: { status?: string; minSimilarity?: number; limit: number }) => Array<{
+    id: string;
+    source: string;
+    target: string;
+    kind: string;
+    layer?: string;
+    data?: Record<string, unknown>;
+  }>;
+
   nodePreview: (id: string, maxBytes: number) =>
     | Promise<{
         id: string;
@@ -223,6 +293,66 @@ export type GraphQLState = {
         data?: unknown;
       };
 
+  upsertPresenceNode: (input: {
+    id: string;
+    class: string;
+    label?: string;
+    resourceKind?: string;
+    saturation?: number;
+    emissionThreshold?: number;
+    refractoryMs?: number;
+    lastEmissionAt?: string | null;
+    archived?: boolean;
+    data?: Record<string, unknown>;
+  }) => Promise<{
+    id: string;
+    kind: string;
+    label: string;
+    external: boolean;
+    loadedByDefault: boolean;
+    layer?: string;
+    data?: unknown;
+  }> | {
+    id: string;
+    kind: string;
+    label: string;
+    external: boolean;
+    loadedByDefault: boolean;
+    layer?: string;
+    data?: unknown;
+  };
+
+  reinforceSemanticEdge: (input: {
+    source: string;
+    target: string;
+    similarity: number;
+    daimoiId?: string;
+    reinforcement?: number;
+    decayHalfLifeMs?: number;
+    now?: string;
+    data?: Record<string, unknown>;
+  }) => Promise<{
+    id: string;
+    source: string;
+    target: string;
+    kind: string;
+    layer?: string;
+    data?: unknown;
+  }> | {
+    id: string;
+    source: string;
+    target: string;
+    kind: string;
+    layer?: string;
+    data?: unknown;
+  };
+
+  decaySemanticEdges: (input: {
+    now?: string;
+    breakBelow?: number;
+    pruneBelow?: number;
+  }) => Promise<{ checked: number; weakened: number; broken: number; pruned: number }> | { checked: number; weakened: number; broken: number; pruned: number };
+
   removeUserNode: (id: string) => Promise<boolean> | boolean;
   removeUserEdge: (id: string) => Promise<boolean> | boolean;
 
@@ -251,6 +381,18 @@ const schema = buildSchema(`
     edges(source: ID, target: ID, kind: String, limit: Int = 200): [Edge!]!
     neighbors(id: ID!, direction: String = "both", kind: String, limit: Int = 200): [Node!]!
     searchNodes(query: String!, limit: Int = 50): [Node!]!
+
+    """Presence nodes: resources, muses, and transient effect/search presences."""
+    presences(class: String, includeArchived: Boolean = false, limit: Int = 200): [PresenceNode!]!
+
+    """Transient semantic-circuit edges, each carrying a required cosine similarity score."""
+    semanticEdges(status: String, minSimilarity: Float, limit: Int = 500): [SemanticEdge!]!
+
+    """Recent daimoi trail observations, exposed as snapshots for simulation-state audit views."""
+    daimoiSnapshots(query: String, minActivation: Float, lookbackSeconds: Int, limit: Int = 200): [DaimoiSnapshot!]!
+
+    """Semantic field cells plus multipole force samples for Barnes-Hut/quadtree audit overlays."""
+    semanticFieldOverlay(fieldProfile: String, project: String, cellLimit: Int = 1000, sampleLimit: Int = 5000): SemanticFieldOverlay!
   }
 
   type Mutation {
@@ -268,6 +410,15 @@ const schema = buildSchema(`
     graphUpsertEdge(input: EdgeInput!): Edge!
     graphRemoveNode(id: ID!): Boolean!
     graphRemoveEdge(id: ID!): Boolean!
+
+    """Create/update a presence node and make it visible in the rendered graph."""
+    presenceUpsert(input: PresenceInput!): PresenceNode!
+
+    """Reinforce a transient semantic edge discovered by daimoi traversal."""
+    semanticEdgeReinforce(input: SemanticEdgeReinforceInput!): SemanticEdge!
+
+    """Apply half-life decay to transient semantic edges and prune broken circuits."""
+    semanticEdgesDecay(input: SemanticEdgesDecayInput): SemanticEdgeDecayResult!
 
     """Bulk-update node positions (stored as data.pos)."""
     layoutUpsertPositions(inputs: [NodePositionInput!]!): Int!
@@ -397,6 +548,99 @@ const schema = buildSchema(`
     dataJson: String
   }
 
+  type PresenceNode {
+    id: ID!
+    class: String!
+    label: String!
+    resourceKind: String
+    saturation: Float!
+    emissionThreshold: Float!
+    refractoryMs: Int!
+    lastEmissionAt: String
+    archived: Boolean!
+    layer: String!
+    dataJson: String
+  }
+
+  type SemanticEdge {
+    id: ID!
+    source: ID!
+    target: ID!
+    similarity: Float!
+    conductance: Float!
+    resistance: Float!
+    status: String!
+    reinforcementCount: Int!
+    lastReinforcedAt: String!
+    decayHalfLifeMs: Int!
+    dataJson: String
+  }
+
+  type SemanticEdgeDecayResult {
+    checked: Int!
+    weakened: Int!
+    broken: Int!
+    pruned: Int!
+  }
+
+  type DaimoiSnapshot {
+    id: ID!
+    queryHash: String!
+    queryText: String!
+    daimoiId: ID!
+    originNodeId: ID!
+    currentNodeId: ID!
+    nodeIds: [ID!]!
+    edgeKeys: [String!]!
+    trail: [ID!]!
+    activation: Float!
+    traversalCost: Float!
+    emittedAt: String!
+    decayHalfLifeSeconds: Float!
+    dataJson: String
+  }
+
+  type SemanticFieldCell {
+    id: ID!
+    fieldProfile: String!
+    project: String
+    embeddingModel: String
+    embeddingDimensions: Int
+    level: Int!
+    ix: Int!
+    iy: Int!
+    centerX: Float!
+    centerY: Float!
+    halfExtent: Float!
+    mass: Float!
+    nodeCount: Int!
+    nodeIds: [ID!]!
+    childCellIds: [ID!]!
+    charge: Float!
+    updatedAt: String
+    dataJson: String
+  }
+
+  type SemanticFieldSample {
+    source: ID!
+    target: ID!
+    similarity: Float!
+    charge: Float!
+    forceKind: String!
+    fieldProfile: String!
+    project: String
+    embeddingModel: String
+    embeddingDimensions: Int
+    sourceSystem: String
+    updatedAt: String
+    dataJson: String
+  }
+
+  type SemanticFieldOverlay {
+    cells: [SemanticFieldCell!]!
+    samples: [SemanticFieldSample!]!
+  }
+
   type NodePreview {
     id: ID!
     kind: String!
@@ -426,6 +670,36 @@ const schema = buildSchema(`
     target: ID!
     kind: String
     dataJson: String
+  }
+
+  input PresenceInput {
+    id: ID!
+    class: String!
+    label: String
+    resourceKind: String
+    saturation: Float
+    emissionThreshold: Float
+    refractoryMs: Int
+    lastEmissionAt: String
+    archived: Boolean
+    dataJson: String
+  }
+
+  input SemanticEdgeReinforceInput {
+    source: ID!
+    target: ID!
+    similarity: Float!
+    daimoiId: ID
+    reinforcement: Float
+    decayHalfLifeMs: Int
+    now: String
+    dataJson: String
+  }
+
+  input SemanticEdgesDecayInput {
+    now: String
+    breakBelow: Float
+    pruneBelow: Float
   }
 
   input NodePositionInput {
@@ -468,6 +742,98 @@ function parseDataJson(dataJson: string | null | undefined): Record<string, unkn
     return parsed as Record<string, unknown>;
   }
   return { value: parsed };
+}
+
+function numberOr(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function dataObject(data: unknown): Record<string, unknown> {
+  return data && typeof data === "object" && !Array.isArray(data) ? data as Record<string, unknown> : {};
+}
+
+function toPresenceApi(node: {
+  id: string;
+  label: string;
+  layer?: string;
+  data?: unknown;
+}) {
+  const data = dataObject(node.data);
+  return {
+    id: node.id,
+    class: String(data.presence_class ?? data.class ?? "transient"),
+    label: node.label,
+    resourceKind: typeof data.resource_kind === "string" ? data.resource_kind : null,
+    saturation: numberOr(data.saturation, 0),
+    emissionThreshold: numberOr(data.emission_threshold, 1),
+    refractoryMs: Math.max(0, Math.floor(numberOr(data.refractory_ms, 1000))),
+    lastEmissionAt: typeof data.last_emission_at === "string" ? data.last_emission_at : null,
+    archived: data.archived === true,
+    layer: node.layer || "presence",
+    dataJson: toDataJson(data),
+  };
+}
+
+function toSemanticEdgeApi(edge: {
+  id: string;
+  source: string;
+  target: string;
+  data?: unknown;
+}) {
+  const data = dataObject(edge.data);
+  const similarity = clamp(numberOr(data.similarity, 0), -1, 1);
+  const conductance = Math.max(0, numberOr(data.conductance, Math.max(0, similarity)));
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    similarity,
+    conductance,
+    resistance: conductance > 0 ? 1 / conductance : 1_000_000_000,
+    status: String(data.status ?? "active"),
+    reinforcementCount: Math.max(0, Math.floor(numberOr(data.reinforcement_count, 0))),
+    lastReinforcedAt: String(data.last_reinforced_at ?? data.created_at ?? new Date(0).toISOString()),
+    decayHalfLifeMs: Math.max(1, Math.floor(numberOr(data.decay_half_life_ms, 60 * 60 * 1000))),
+    dataJson: toDataJson(data),
+  };
+}
+
+function toDaimoiSnapshotApi(snapshot: DaimoiTrailSnapshot) {
+  return {
+    id: snapshot.id,
+    queryHash: snapshot.queryHash,
+    queryText: snapshot.queryText,
+    daimoiId: snapshot.daimoiId,
+    originNodeId: snapshot.originNodeId,
+    currentNodeId: snapshot.currentNodeId,
+    nodeIds: snapshot.nodeIds,
+    edgeKeys: snapshot.edgeKeys,
+    trail: snapshot.trail,
+    activation: snapshot.activation,
+    traversalCost: snapshot.traversalCost,
+    emittedAt: snapshot.emittedAt,
+    decayHalfLifeSeconds: snapshot.decayHalfLifeSeconds,
+    dataJson: toDataJson(snapshot.data),
+  };
+}
+
+function toSemanticFieldCellApi(cell: SemanticFieldCell) {
+  return {
+    ...cell,
+    dataJson: toDataJson(cell.data),
+  };
+}
+
+function toSemanticFieldSampleApi(sample: SemanticFieldSample) {
+  return {
+    ...sample,
+    dataJson: toDataJson(sample.data),
+  };
 }
 
 async function readBody(req: http.IncomingMessage, maxBytes = 2_000_000): Promise<string> {
@@ -633,6 +999,59 @@ export function createGraphQLHandler(state: GraphQLState) {
       }));
     },
 
+    presences: (
+      args: { class?: string | null; includeArchived?: boolean | null; limit?: number },
+      _ctx: GraphQLContext,
+    ) => {
+      const rows = state.listPresenceNodes({
+        class: args.class ?? undefined,
+        includeArchived: args.includeArchived === true,
+        limit: Math.max(1, Math.min(2000, Number(args.limit ?? 200))),
+      });
+      return rows.map(toPresenceApi);
+    },
+
+    semanticEdges: (
+      args: { status?: string | null; minSimilarity?: number | null; limit?: number },
+      _ctx: GraphQLContext,
+    ) => {
+      const rows = state.listSemanticEdges({
+        status: args.status ?? undefined,
+        minSimilarity: args.minSimilarity ?? undefined,
+        limit: Math.max(1, Math.min(5000, Number(args.limit ?? 500))),
+      });
+      return rows.map(toSemanticEdgeApi);
+    },
+
+    daimoiSnapshots: async (
+      args: { query?: string | null; minActivation?: number | null; lookbackSeconds?: number | null; limit?: number },
+      _ctx: GraphQLContext,
+    ) => {
+      const rows = await state.listDaimoiSnapshots({
+        query: args.query ?? undefined,
+        minActivation: args.minActivation ?? undefined,
+        lookbackSeconds: args.lookbackSeconds ?? undefined,
+        limit: Math.max(1, Math.min(2000, Number(args.limit ?? 200))),
+      });
+      return rows.map(toDaimoiSnapshotApi);
+    },
+
+    semanticFieldOverlay: async (
+      args: { fieldProfile?: string | null; project?: string | null; cellLimit?: number | null; sampleLimit?: number | null },
+      _ctx: GraphQLContext,
+    ) => {
+      const overlay = await state.listSemanticFieldOverlay({
+        fieldProfile: args.fieldProfile ?? undefined,
+        project: args.project ?? undefined,
+        cellLimit: Math.max(1, Math.min(10000, Number(args.cellLimit ?? 1000))),
+        sampleLimit: Math.max(1, Math.min(50000, Number(args.sampleLimit ?? 5000))),
+      });
+      return {
+        cells: overlay.cells.map(toSemanticFieldCellApi),
+        samples: overlay.samples.map(toSemanticFieldSampleApi),
+      };
+    },
+
     // --- mutations
     configUpdate: async (args: { patch: ConfigPatch }, ctx: GraphQLContext) => {
       assertAdmin(state, ctx);
@@ -694,6 +1113,49 @@ export function createGraphQLHandler(state: GraphQLState) {
     graphRemoveEdge: async (args: { id: string }, ctx: GraphQLContext) => {
       assertAdmin(state, ctx);
       return await state.removeUserEdge(args.id);
+    },
+
+    presenceUpsert: async (args: { input: { id: string; class: string; label?: string | null; resourceKind?: string | null; saturation?: number | null; emissionThreshold?: number | null; refractoryMs?: number | null; lastEmissionAt?: string | null; archived?: boolean | null; dataJson?: string | null } }, ctx: GraphQLContext) => {
+      assertAdmin(state, ctx);
+      const data = parseDataJson(args.input.dataJson);
+      const node = await state.upsertPresenceNode({
+        id: args.input.id,
+        class: args.input.class,
+        label: args.input.label ?? undefined,
+        resourceKind: args.input.resourceKind ?? undefined,
+        saturation: args.input.saturation ?? undefined,
+        emissionThreshold: args.input.emissionThreshold ?? undefined,
+        refractoryMs: args.input.refractoryMs ?? undefined,
+        lastEmissionAt: args.input.lastEmissionAt ?? undefined,
+        archived: args.input.archived ?? undefined,
+        data,
+      });
+      return toPresenceApi(node);
+    },
+
+    semanticEdgeReinforce: async (args: { input: { source: string; target: string; similarity: number; daimoiId?: string | null; reinforcement?: number | null; decayHalfLifeMs?: number | null; now?: string | null; dataJson?: string | null } }, ctx: GraphQLContext) => {
+      assertAdmin(state, ctx);
+      const data = parseDataJson(args.input.dataJson);
+      const edge = await state.reinforceSemanticEdge({
+        source: args.input.source,
+        target: args.input.target,
+        similarity: args.input.similarity,
+        daimoiId: args.input.daimoiId ?? undefined,
+        reinforcement: args.input.reinforcement ?? undefined,
+        decayHalfLifeMs: args.input.decayHalfLifeMs ?? undefined,
+        now: args.input.now ?? undefined,
+        data,
+      });
+      return toSemanticEdgeApi(edge);
+    },
+
+    semanticEdgesDecay: async (args: { input?: { now?: string | null; breakBelow?: number | null; pruneBelow?: number | null } | null }, ctx: GraphQLContext) => {
+      assertAdmin(state, ctx);
+      return await state.decaySemanticEdges({
+        now: args.input?.now ?? undefined,
+        breakBelow: args.input?.breakBelow ?? undefined,
+        pruneBelow: args.input?.pruneBelow ?? undefined,
+      });
     },
 
     layoutUpsertPositions: async (args: { inputs: Array<{ id: string; x: number; y: number }> }, ctx: GraphQLContext) => {

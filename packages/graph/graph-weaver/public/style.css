@@ -366,8 +366,74 @@ canvas {
   margin-bottom: 0.25rem;
 }
 
-.row input[type="range"] {
+.row input[type="range"],
+.row input[type="search"] {
   width: 100%;
+}
+
+.row input[type="search"] {
+  box-sizing: border-box;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.42rem 0.55rem;
+}
+
+.row.compact {
+  gap: 0.25rem;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.82rem;
+}
+
+.auditDivider {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  margin: 0.35rem 0;
+}
+
+.auditSummary {
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  background: rgba(90, 70, 255, 0.12);
+  border: 1px solid rgba(170, 150, 255, 0.16);
+  color: rgba(226, 220, 255, 0.9);
+  font-size: 0.78rem;
+}
+
+.auditList {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 14rem;
+  overflow: auto;
+}
+
+.auditItem {
+  display: grid;
+  gap: 0.18rem;
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-color: rgba(170, 150, 255, 0.18);
+  background: rgba(74, 54, 190, 0.12);
+}
+
+.auditTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.auditMeta {
+  color: rgba(205, 195, 255, 0.68);
+  font-size: 0.7rem;
 }
 
 .v {

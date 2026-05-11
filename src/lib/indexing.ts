@@ -6,13 +6,13 @@ const HTML_DOCUMENT_RE = /<!doctype html|<html\b|<body\b|<main\b|<article\b/i;
 const HTML_ARTIFACT_LINE_RE = /^\s*<\/?(?:div|span|section|article|main|header|footer|nav|aside|figure|figcaption|form|button|picture|source|template)[^>]*>\s*$/gim;
 const DANGEROUS_BLOCK_RE = /<(script|style|noscript|iframe|object|embed|svg)[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
-const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 32_000;
-const DEFAULT_TARGET_CHUNK_TOKENS = 28_000;
-const DEFAULT_TARGET_CHUNK_CHARS = 80_000;
-const DEFAULT_OVERLAP_CHARS = 1_000;
-const DEFAULT_BATCH_TOKEN_BUDGET = 512_000;
+const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 5_000;
+const DEFAULT_TARGET_CHUNK_TOKENS = 4_000;
+const DEFAULT_TARGET_CHUNK_CHARS = 16_000;
+const DEFAULT_OVERLAP_CHARS = 400;
+const DEFAULT_BATCH_TOKEN_BUDGET = 40_000;
 const DEFAULT_BATCH_ITEM_LIMIT = 256;
-const HARD_MIN_CHUNK_CHARS = 10_000;
+const HARD_MIN_CHUNK_CHARS = 3_000;
 
 const turndown = new TurndownService({
   headingStyle: "atx",
@@ -29,6 +29,8 @@ export type PreparedIndexChunk = {
   text: string;
   chunkIndex: number;
   chunkCount: number;
+  charStart?: number | null;
+  charEnd?: number | null;
 };
 
 export type PreparedIndexDocument = {
@@ -73,13 +75,14 @@ function stripMarkdownHtmlArtifacts(input: string): string {
 }
 
 function htmlToMarkdown(input: string): string {
-  return stripMarkdownHtmlArtifacts(
-    turndown.turndown(
-      String(input || "")
-        .replace(HTML_COMMENT_RE, "\n")
-        .replace(DANGEROUS_BLOCK_RE, "\n"),
-    ),
-  );
+  const cleaned = String(input || "")
+    .replace(HTML_COMMENT_RE, "\n")
+    .replace(DANGEROUS_BLOCK_RE, "\n");
+  try {
+    return stripMarkdownHtmlArtifacts(turndown.turndown(cleaned));
+  } catch {
+    return stripMarkdownHtmlArtifacts(cleaned);
+  }
 }
 
 function extractHtmlCandidate(text: string, extra?: Record<string, unknown>): string | null {
@@ -169,7 +172,8 @@ function chunkText(input: string, targetTokens: number, targetChars: number, ove
     const next = current ? `${current}\n\n${block}` : block;
     if (current && (estimateTokens(next) > targetTokens || next.length > targetChars)) {
       out.push(current.trim());
-      const overlap = overlapChars > 0 ? current.slice(-overlapChars).trim() : "";
+      const maxOverlapChars = Math.max(0, Math.min(overlapChars, targetChars - block.length - 2));
+      const overlap = maxOverlapChars > 0 ? current.slice(-maxOverlapChars).trim() : "";
       current = overlap ? `${overlap}\n\n${block}` : block;
       continue;
     }
@@ -178,6 +182,18 @@ function chunkText(input: string, targetTokens: number, targetChars: number, ove
 
   if (current.trim()) out.push(current.trim());
   return out.filter(Boolean);
+}
+
+function locateChunkOffsets(text: string, chunks: string[]): Array<{ charStart: number | null; charEnd: number | null }> {
+  let searchFrom = 0;
+  return chunks.map((chunk) => {
+    let start = text.indexOf(chunk, searchFrom);
+    if (start < 0) start = text.indexOf(chunk);
+    if (start < 0) return { charStart: null, charEnd: null };
+    const charEnd = start + chunk.length;
+    searchFrom = Math.max(start + 1, charEnd - DEFAULT_OVERLAP_CHARS);
+    return { charStart: start, charEnd };
+  });
 }
 
 export function prepareIndexDocument(params: {
@@ -209,11 +225,14 @@ export function prepareIndexDocument(params: {
     ? chunkText(normalizedText, targetChunkTokens, targetChunkChars, overlapChars)
     : [normalizedText];
 
+  const offsets = locateChunkOffsets(normalizedText, parts);
   const chunks = parts.map((text, index) => ({
     id: parts.length === 1 ? params.parentId : `${params.parentId}#chunk:${String(index).padStart(4, "0")}`,
     text,
     chunkIndex: index,
     chunkCount: parts.length,
+    charStart: offsets[index]?.charStart ?? null,
+    charEnd: offsets[index]?.charEnd ?? null,
   }));
 
   return {
@@ -234,7 +253,7 @@ export function isContextOverflowError(error: unknown): boolean {
   // We treat "input too large" (embed provider / OpenAI-style errors) the same as
   // context overflow, because the fix is the same: split the batch into smaller
   // pieces.
-  return /context window|ollama_context_overflow|exceeds model context window|exceed_context_size|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
+  return /context window|context size has been exceeded|ollama_context_overflow|exceeds model context window|exceed_context_size|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
 }
 
 export function batchPreparedChunks(

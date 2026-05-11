@@ -108,7 +108,7 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
               };
 
               try {
-                const embeddingFunction = embeddingRuntime.hot.getEmbeddingFunction(embeddingScope);
+                const embeddingFunction = embeddingRuntime.hot.getBackgroundEmbeddingFunction(embeddingScope);
                 const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
                 await indexTextInMongoVectors({
                   mongo: app.mongo,

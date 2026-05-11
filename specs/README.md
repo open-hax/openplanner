@@ -15,6 +15,7 @@ Canonical spec registry for the OpenPlanner monorepo.
 | `2026-04-09-atlas-local-deployment-for-production-vector-search.md` | draft | vector-search | P6 |
 | `openplanner-graph-events.md` | active | events | P2 |
 | `openplanner-web-edge-salience-and-backbone-projections.md` | active | graph | P7 |
+| `semantic-gravity-and-daimoi-query-runtime.md` | draft | graph-runtime | P7 |
 
 ### packages/knoxx/specs (68 specs)
 

@@ -79,7 +79,7 @@
     "editor"
   ],
   "author": "Promethean Team",
-  "license": "GPL-3.0-only",
+  "license": "GPL-3.0-or-later",
   "dependencies": {
     "@promethean-os/openplanner-cljs-client": "workspace:*",
     "@promethean-os/opencode-cljs-client": "workspace:*",

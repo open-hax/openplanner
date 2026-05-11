@@ -255,7 +255,7 @@ async function upsertSemanticPackMongo(
       visibility: "internal",
       title: pack.id,
     },
-    embeddingFunction: runtime.compact.getEmbeddingFunction(),
+    embeddingFunction: runtime.compact.getBackgroundEmbeddingFunction(),
   });
 }
 

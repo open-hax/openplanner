@@ -14,6 +14,7 @@ export type SourceRef = Partial<{
 
 export type EventEnvelopeV1 = {
   schema: "openplanner.event.v1";
+  schema_version?: number;
   id: string;
   ts: string; // ISO
   source: string;
@@ -23,6 +24,7 @@ export type EventEnvelopeV1 = {
   attachments?: BlobRef[];
   meta?: Record<string, unknown>;
   extra?: Record<string, unknown>;
+  migration_state?: Record<string, unknown>;
 };
 
 export type EventIngestRequest = { events: EventEnvelopeV1[] };
@@ -78,6 +80,8 @@ export type FtsSearchRequest = {
   session?: string;
   visibility?: DocumentVisibility;
   tier?: SearchTier;
+  quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
+  output_quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
 };
 
 export type VectorSearchRequest = {
@@ -89,6 +93,8 @@ export type VectorSearchRequest = {
   visibility?: DocumentVisibility;
   where?: Record<string, unknown>;
   tier?: SearchTier;
+  quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
+  output_quality?: "good" | "not_bad" | "any" | "good_then_not_bad";
 };
 
 // Translation types

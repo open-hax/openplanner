@@ -86,7 +86,7 @@ export function loadConfig(): OpenPlannerConfig {
     enabled: parseBool(process.env.SEMANTIC_COMPACTION_ENABLED, true),
     minEventCount: parsePositiveInt(process.env.SEMANTIC_COMPACTION_MIN_EVENTS, 1500),
     maxNeighbors: parsePositiveInt(process.env.SEMANTIC_COMPACTION_MAX_NEIGHBORS, 24),
-    maxChars: parsePositiveInt(process.env.SEMANTIC_COMPACTION_CHAR_BUDGET, 32000),
+    maxChars: parsePositiveInt(process.env.SEMANTIC_COMPACTION_CHAR_BUDGET, 16000),
     distanceThreshold: parsePositiveNumber(process.env.SEMANTIC_COMPACTION_DISTANCE_THRESHOLD, 0.35),
     minClusterSize: parsePositiveInt(process.env.SEMANTIC_COMPACTION_MIN_CLUSTER_SIZE, 4),
     maxPacksPerRun: parsePositiveInt(process.env.SEMANTIC_COMPACTION_MAX_PACKS_PER_RUN, 256),

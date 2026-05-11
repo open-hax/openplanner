@@ -18,6 +18,8 @@ import { tenantsRoutes } from "./tenants.js";
 import { exportRoutes } from "./exports.js";
 import { reviewRoutes } from "./reviews.js";
 import { mongoRoutes } from "./mongo.js";
+import { stateRoutes } from "./state.js";
+import { openApiRoutes } from "./openapi.js";
 
 export const v1Routes: FastifyPluginAsync = async (app) => {
   await app.register(healthRoutes);
@@ -39,4 +41,6 @@ export const v1Routes: FastifyPluginAsync = async (app) => {
   await app.register(exportRoutes, { prefix: "/export" });
   await app.register(reviewRoutes, { prefix: "/reviews" });
   await app.register(mongoRoutes, { prefix: "/mongo" });
+  await app.register(stateRoutes);
+  await app.register(openApiRoutes);
 };
