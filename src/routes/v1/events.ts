@@ -25,6 +25,20 @@ function hasIndexableEventText(ev: EventEnvelopeV1): boolean {
   return typeof ev.text === "string" && ev.text.trim().length > 0;
 }
 
+function labelSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 96) || "label";
+}
+
+function graphLabelId(tenantId: string, label: string): string {
+  return `label:${tenantId}:${labelSlug(label)}`;
+}
+
+function eventLabels(extra: Record<string, unknown>): string[] {
+  const labels = (extra.openplanner_labels as any)?.labels;
+  if (!Array.isArray(labels)) return [];
+  return [...new Set(labels.map((label) => String(label ?? "").trim()).filter(Boolean))];
+}
+
 export function shouldIndexEventHotVectors(ev: EventEnvelopeV1): boolean {
   if (!hasIndexableEventText(ev)) return false;
 
@@ -77,7 +91,9 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     }>();
 
     const derivedGraphNodeOps: any[] = [];
+    const graphLabelNodeOps: any[] = [];
     const derivedEventIds = new Set<string>();
+    const queuedGraphLabelIds = new Set<string>();
     const now = new Date();
 
     const queueDerivedGraphNodeEvent = (params: {
@@ -184,6 +200,56 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       });
 
       ids.push(ev.id);
+
+      const labels = eventLabels(extra);
+      for (const label of labels) {
+        const tenantId = String((extra.openplanner_labels as any)?.tenant_id ?? (extra as any).tenant_id ?? "default").trim() || "default";
+        const labelId = graphLabelId(tenantId, label);
+        if (!queuedGraphLabelIds.has(labelId)) {
+          queuedGraphLabelIds.add(labelId);
+          graphLabelNodeOps.push({
+            updateOne: {
+              filter: { label_id: labelId },
+              update: {
+                $set: {
+                  _id: labelId,
+                  label_id: labelId,
+                  label,
+                  emoji: null,
+                  description: `Auto-derived event label: ${label}`,
+                  color: null,
+                  tenant_id: tenantId,
+                  project,
+                  embedding_model: null,
+                  embedding_dimensions: 0,
+                  embedding: null,
+                  created_by: "event-ingest",
+                  updatedAt: now,
+                },
+                $setOnInsert: { createdAt: now },
+              },
+              upsert: true,
+            },
+          });
+        }
+
+        projectedGraphEdges.push({
+          source_node_id: ev.id,
+          target_node_id: labelId,
+          edge_kind: "has_label",
+          layer: null,
+          project,
+          source: ev.source,
+          data: {
+            applied_at: new Date(ev.ts).toISOString(),
+            confidence: 1,
+            label,
+            claim_system: (extra.openplanner_labels as any)?.claim_system ?? null,
+            source_event_id: ev.id,
+          },
+          updated_at: new Date(ev.ts),
+        });
+      }
 
       if (ev.kind === "graph.edge") {
         const sourceNodeId = norm(extra.source_node_id)?.trim() ?? "";
@@ -334,6 +400,44 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
         }
       }
 
+      // Auto-materialize arbitrary event kinds as graph nodes so the graph
+      // export and graph-weaver can see them without requiring every producer
+      // to emit `kind: "graph.node"`. We preserve the original kind in
+      // `extra.node_kind` and use the event id as the node id.
+      if (ev.kind !== "graph.node" && ev.kind !== "graph.edge" && hasIndexableEventText(ev)) {
+        const nodeId = ev.id;
+        const preview = norm(ev.text)?.trim() ?? "";
+        const derivedEventId = `graph.node:derive:${ev.id}`;
+        const label = String(
+          extra.label ?? (sr as any).message ?? (preview.length > 80 ? `${preview.slice(0, 77)}...` : preview) ?? nodeId,
+        ).trim() || nodeId;
+
+        queueDerivedGraphNodeEvent({
+          id: derivedEventId,
+          ts: new Date(ev.ts),
+          project,
+          nodeId,
+          nodeKind: ev.kind,
+          label,
+          preview,
+          extra: {
+            lake: project ?? undefined,
+            entity_key: ev.id,
+            source_event_id: ev.id,
+            source_kind: ev.kind,
+            ...extra,
+          },
+        });
+
+        queueNodeEmbedding({
+          nodeId,
+          sourceEventId: ev.id,
+          project,
+          text: preview,
+          chunkCount: 1,
+        });
+      }
+
       if (shouldIndexEventHotVectors(ev)) {
         eventVectorTasks.push((async () => {
           try {
@@ -380,6 +484,13 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       const batchSize = 1000;
       for (let i = 0; i < derivedGraphNodeOps.length; i += batchSize) {
         await app.mongo.events.bulkWrite(derivedGraphNodeOps.slice(i, i + batchSize), { ordered: false });
+      }
+    }
+
+    if (graphLabelNodeOps.length > 0) {
+      const batchSize = 1000;
+      for (let i = 0; i < graphLabelNodeOps.length; i += batchSize) {
+        await app.mongo.graphLabelNodes.bulkWrite(graphLabelNodeOps.slice(i, i + batchSize), { ordered: false });
       }
     }
 

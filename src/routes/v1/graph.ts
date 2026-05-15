@@ -1559,6 +1559,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
   app.post("/graph/similar", async (req: any, reply) => {
     const q = req.body?.q;
     const k = req.body?.k ?? 20;
+    const where = typeof req.body?.where === "object" && req.body?.where !== null && !Array.isArray(req.body.where)
+      ? req.body.where
+      : undefined;
 
     if (!q || typeof q !== "string") {
       return reply.status(400).send({ error: "q is required" });
@@ -1570,6 +1573,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       tier: "hot",
       q,
       k: Math.max(1, Math.min(200, Number(k))),
+      where,
       getEmbeddingFunctionForModel: (model: string) => embeddingRuntime.hot.getEmbeddingFunctionForModel(model),
     });
 
@@ -1765,6 +1769,58 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         model: e.embedding_model,
         dimensions: e.embedding_dimensions,
         updatedAt: e.updated_at,
+      })),
+      storageBackend: "mongodb",
+    };
+  });
+
+  // Embedding coverage — how many objects have embeddings vs total
+  app.get("/graph/embedding-coverage", async () => {
+    const [
+      totalEvents,
+      totalGraphNodes,
+      totalEmbeddings,
+      embeddingsByModel,
+      nodeKinds,
+      eventKinds,
+    ] = await Promise.all([
+      app.mongo.events.countDocuments({}),
+      app.mongo.events.countDocuments({ kind: "graph.node" }),
+      app.mongo.graphNodeEmbeddings.countDocuments({}),
+      app.mongo.graphNodeEmbeddings.aggregate([
+        { $group: { _id: "$embedding_model", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).toArray(),
+      app.mongo.events.aggregate([
+        { $match: { kind: "graph.node" } },
+        { $group: { _id: "$extra.node_kind", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).toArray(),
+      app.mongo.events.aggregate([
+        { $group: { _id: "$kind", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).toArray(),
+    ]);
+
+    return {
+      ok: true,
+      coverage: {
+        totalEvents,
+        totalGraphNodes,
+        totalEmbeddings,
+        embeddingRate: totalGraphNodes > 0 ? Number((totalEmbeddings / totalGraphNodes).toFixed(4)) : 0,
+      },
+      byModel: embeddingsByModel.map((m: any) => ({
+        model: m._id || "unknown",
+        count: m.count,
+      })),
+      byNodeKind: nodeKinds.map((k: any) => ({
+        kind: k._id || "unknown",
+        count: k.count,
+      })),
+      byEventKind: eventKinds.map((k: any) => ({
+        kind: k._id || "unknown",
+        count: k.count,
       })),
       storageBackend: "mongodb",
     };

@@ -1,17 +1,37 @@
-# Π Fork Tax — openplanner pointer freeze for Knoxx audio work
+# Π Fork Tax Snapshot: open-hax-openplanner
 
-Timestamp: 20260506T231041Z
-Repo: /home/err/devel/orgs/open-hax/openplanner
-Branch: tests/sentance-chunker
-Base HEAD: 1c50cdc
-Tag target: pi-fork-tax-openplanner-knoxx-audio-20260506T231041Z
+- timestamp: 2026-05-15T06:01:45Z
+- repo: /home/err/devel/orgs/open-hax/openplanner
+- branch: tests/sentance-chunker
+- head-before: ff8801ce37736756110de48f90e612922daf29d2
+- origin: git@github.com:open-hax/openplanner.git
+- scope: .
+- note: OpenPlanner integration snapshot including Knoxx pointer after nested fork tax.
 
-## Preserved submodule pointer
-- `packages/agents/knoxx` -> `011a145b352b5a595b7093a0ee73e811f1cda82a` (`Π freeze broadcast studio audio hearing`)
-- Knoxx tag: `pi-fork-tax-broadcast-audio-20260506T231041Z`
+## Dirty summary before commit
 
-## Why this exists
-The working Broadcast Studio audio fix lives in the rank-3 Knoxx submodule. This parent repo commit pins the openplanner submodule pointer so the frozen Knoxx commit is reachable from the openplanner tree.
+```text
+## tests/sentance-chunker...origin/tests/sentance-chunker
+ M package.json
+ M packages/agents/knoxx
+ ? packages/vexx
+ M pnpm-lock.yaml
+ M pnpm-workspace.yaml
+ M receipts.edn
+ M src/routes/v1/events.ts
+ M src/routes/v1/graph.ts
+ M src/routes/v1/jobs.ts
+ M src/routes/v1/mongo.ts
+?? docs/security-audit-exposure-2026-05-12.md
+?? patches/libsodium-wrappers@0.7.16.patch
+```
 
-## Concurrent dirt intentionally not absorbed
-OpenPlanner has unrelated dirty files in graph/routes/embeddings/docker-compose/spec areas. This commit stages only the Knoxx submodule pointer and `.ημ` fork-tax artifacts.
+## Verification plan
+
+- git diff --cached --check after staging
+- push branch and tag
+- create or update GitHub PR
+
+## Concurrent/residual dirt policy
+
+Unrelated dirty paths outside the scope are intentionally left untouched. Nested submodules with local-only dirt that are not part of the requested scope are recorded as residual rather than cleaned.

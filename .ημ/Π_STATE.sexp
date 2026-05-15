@@ -1,9 +1,10 @@
-(fork-tax/state
-  {:timestamp "20260506T231041Z"
-    :repo "/home/err/devel/orgs/open-hax/openplanner"
-    :branch "tests/sentance-chunker"
-    :base-head "1c50cdc"
-    :tag "pi-fork-tax-openplanner-knoxx-audio-20260506T231041Z"
-    :scope :openplanner-knoxx-submodule-pointer
-    :knoxx-submodule-head "011a145b352b5a595b7093a0ee73e811f1cda82a"
-    :concurrent-dirt "unrelated openplanner graph/routes/embeddings/spec changes left unstaged"})
+(fork-tax-snapshot
+  (name "open-hax-openplanner")
+  (timestamp "2026-05-15T06:01:45Z")
+  (repo "/home/err/devel/orgs/open-hax/openplanner")
+  (branch "tests/sentance-chunker")
+  (head-before "ff8801ce37736756110de48f90e612922daf29d2")
+  (origin "git@github.com:open-hax/openplanner.git")
+  (scope ["."])
+  (note "OpenPlanner integration snapshot including Knoxx pointer after nested fork tax.")
+  (status-lines ["## tests/sentance-chunker...origin/tests/sentance-chunker", " M package.json", " M packages/agents/knoxx", " ? packages/vexx", " M pnpm-lock.yaml", " M pnpm-workspace.yaml", " M receipts.edn", " M src/routes/v1/events.ts", " M src/routes/v1/graph.ts", " M src/routes/v1/jobs.ts", " M src/routes/v1/mongo.ts", "?? docs/security-audit-exposure-2026-05-12.md", "?? patches/libsodium-wrappers@0.7.16.patch"]))
