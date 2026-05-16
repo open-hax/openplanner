@@ -1,17 +1,21 @@
-# Π Fork Tax — openplanner pointer freeze for Knoxx audio work
+# Π Fork Tax Snapshot — openplanner
 
-Timestamp: 20260506T231041Z
-Repo: /home/err/devel/orgs/open-hax/openplanner
-Branch: tests/sentance-chunker
-Base HEAD: 1c50cdc
-Tag target: pi-fork-tax-openplanner-knoxx-audio-20260506T231041Z
+- Timestamp: 20260516T185547Z
+- Branch: tests/sentance-chunker
+- Base: a25ff73f3ad5
+- Scope: recursive child pointer/artifact preservation.
 
-## Preserved submodule pointer
-- `packages/agents/knoxx` -> `011a145b352b5a595b7093a0ee73e811f1cda82a` (`Π freeze broadcast studio audio hearing`)
-- Knoxx tag: `pi-fork-tax-broadcast-audio-20260506T231041Z`
+## Included work
 
-## Why this exists
-The working Broadcast Studio audio fix lives in the rank-3 Knoxx submodule. This parent repo commit pins the openplanner submodule pointer so the frozen Knoxx commit is reachable from the openplanner tree.
+- Pinned `packages/agents/knoxx` to pushed fork-tax commit `a770d959`.
+- Preserved WebGL graph view fork-tax artifacts produced in the nested package workspace.
+- Recorded recursive fork-tax handoff artifacts for this OpenPlanner parent layer.
 
-## Concurrent dirt intentionally not absorbed
-OpenPlanner has unrelated dirty files in graph/routes/embeddings/docker-compose/spec areas. This commit stages only the Knoxx submodule pointer and `.ημ` fork-tax artifacts.
+## Verification
+
+- `git diff --cached --check` passed.
+- Child repositories `knoxx` and `webgl-graph-view` were committed, tagged, and pushed first.
+
+## Residual dirt
+
+- No additional OpenPlanner parent dirt selected for this commit.

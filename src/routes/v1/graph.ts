@@ -10,6 +10,14 @@ import {
   planEdgeClaimTransition,
   projectMongoEdgeClaims,
 } from "@open-hax/openplanner-graph-claim-core";
+import {
+  cacheGet,
+  cachePut,
+  createMemoryLruCache,
+  projectionEnvelope,
+  type CacheHandle,
+  type ProjectionEnvelope,
+} from "@open-hax/openplanner-store-cache";
 import { createHash } from "node:crypto";
 import os from "node:os";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphSemanticForceSamples, upsertGraphEdges } from "../../lib/mongodb.js";
@@ -18,6 +26,7 @@ import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
 import { extractTieredVectorHits } from "../../lib/vector-search.js";
 import { formatEmbeddingQueryText, formatEmbeddingPassageText } from "../../lib/embedding-text.js";
 import { prepareIndexDocument } from "../../lib/indexing.js";
+import { counterInc } from "../../lib/metrics.js";
 
 // Simplified graph routes for MongoDB-only backend
 // Full graph functionality requires additional implementation
@@ -45,6 +54,12 @@ type ExportEdge = {
   data?: Record<string, unknown>;
 };
 
+type ExportPayload = {
+  ok: boolean;
+  nodes: ExportNode[];
+  edges: ExportEdge[];
+};
+
 type ViewNode = {
   id: string;
   kind: string;
@@ -60,6 +75,84 @@ type ViewEdge = {
   kind: string;
   dataJson: string | null;
 };
+
+function envInt(name: string, fallback: number, min: number, max: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function graphProjectionCacheKey(kind: string, params: Record<string, unknown>): string {
+  return `openplanner:graph-projection:${kind}:v1:${hashHex(JSON.stringify(params), 40)}`;
+}
+
+async function readCachedProjection<T>(params: {
+  cache: CacheHandle;
+  key: string;
+  projectionName: string;
+  metricKind: string;
+  log?: { warn: (bindings: Record<string, unknown>, message: string) => void };
+}): Promise<T | null> {
+  try {
+    const cached = await cacheGet<ProjectionEnvelope<T>>(params.cache, params.key);
+    if (!cached || cached["projection/name"] !== params.projectionName) {
+      counterInc("openplanner_projection_cache_misses_total", { projection: params.metricKind });
+      return null;
+    }
+    counterInc("openplanner_projection_cache_hits_total", { projection: params.metricKind });
+    return cached["projection/value"] ?? null;
+  } catch (err) {
+    counterInc("openplanner_projection_cache_errors_total", { projection: params.metricKind, operation: "get" });
+    params.log?.warn({ err, cacheKey: params.key, projectionName: params.projectionName }, "graph projection cache get failed");
+    return null;
+  }
+}
+
+async function writeCachedProjection<T>(params: {
+  cache: CacheHandle;
+  key: string;
+  ttlMs: number;
+  projectionName: string;
+  sourceCollection: string;
+  sourceKey: string;
+  value: T;
+  metadata?: Record<string, unknown>;
+  metricKind: string;
+  log?: { warn: (bindings: Record<string, unknown>, message: string) => void };
+}): Promise<void> {
+  try {
+    const envelope = projectionEnvelope<T>({
+      name: params.projectionName,
+      version: 1,
+      sourceStore: "mongodb",
+      sourceCollection: params.sourceCollection,
+      sourceKey: params.sourceKey,
+      value: params.value,
+      metadata: params.metadata,
+    });
+    await cachePut(params.cache, params.key, envelope, params.ttlMs);
+    counterInc("openplanner_projection_cache_writes_total", { projection: params.metricKind });
+  } catch (err) {
+    counterInc("openplanner_projection_cache_errors_total", { projection: params.metricKind, operation: "put" });
+    params.log?.warn({ err, cacheKey: params.key, projectionName: params.projectionName }, "graph projection cache put failed");
+  }
+}
+
+async function resolveWithTimeoutFallback<T>(params: {
+  promise: Promise<T>;
+  timeoutMs: number;
+  fallback: () => T;
+}): Promise<T> {
+  let timer: NodeJS.Timeout | null = null;
+  return await Promise.race([
+    params.promise.finally(() => {
+      if (timer) clearTimeout(timer);
+    }),
+    new Promise<T>((resolve) => {
+      timer = setTimeout(() => resolve(params.fallback()), params.timeoutMs);
+    }),
+  ]);
+}
 
 function inferViewNodeFromId(nodeId: string, position: { x: number; y: number }): ViewNode {
   const [lake = "misc", kind = "node", ...restParts] = String(nodeId).split(":");
@@ -898,8 +991,14 @@ export async function resolveGraphMemorySeedNodes(params: {
 }
 
 export const graphRoutes: FastifyPluginAsync = async (app) => {
-  const graphViewCache = new Map<string, { expiresAt: number; value: unknown }>();
-  const graphViewCacheTtlMs = 15_000;
+  const graphProjectionCache = createMemoryLruCache({
+    maxEntries: envInt("OPENPLANNER_GRAPH_PROJECTION_CACHE_MAX_ENTRIES", 128, 8, 5000),
+    defaultTtlMs: envInt("OPENPLANNER_GRAPH_PROJECTION_CACHE_TTL_MS", 60_000, 1_000, 60 * 60 * 1000),
+  });
+  const graphProjectionInflight = new Map<string, Promise<unknown>>();
+  const graphExportCacheTtlMs = envInt("OPENPLANNER_GRAPH_EXPORT_CACHE_TTL_MS", 120_000, 5_000, 60 * 60 * 1000);
+  const graphViewCacheTtlMs = envInt("OPENPLANNER_GRAPH_VIEW_CACHE_TTL_MS", 60_000, 5_000, 60 * 60 * 1000);
+  const graphViewBuildTimeoutMs = envInt("OPENPLANNER_GRAPH_VIEW_BUILD_TIMEOUT_MS", 8_000, 500, 60_000);
 
   // Graph export for multi-lake graph weaving
   app.get("/graph/export", async (req: any, reply) => {
@@ -910,6 +1009,31 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const maxNodes = Math.max(100, Math.min(60_000, Number(req.query?.maxNodes ?? 12_000)));
     const maxEdges = Math.max(100, Math.min(240_000, Number(req.query?.maxEdges ?? 40_000)));
     const maxSemanticEdges = Math.max(0, Math.min(240_000, Number(req.query?.maxSemanticEdges ?? maxEdges)));
+    const cacheKey = graphProjectionCacheKey("export", {
+      projectsParam,
+      includeLayout,
+      includeSemantic,
+      semanticMinSimilarity,
+      maxNodes,
+      maxEdges,
+      maxSemanticEdges,
+    });
+    const cachedExport = await readCachedProjection<ExportPayload>({
+      cache: graphProjectionCache,
+      key: cacheKey,
+      projectionName: "openplanner.graph/export",
+      metricKind: "graph_export",
+      log: req.log,
+    });
+    if (cachedExport) return cachedExport;
+
+    const pendingExport = graphProjectionInflight.get(cacheKey) as Promise<ExportPayload> | undefined;
+    if (pendingExport) {
+      counterInc("openplanner_projection_cache_inflight_hits_total", { projection: "graph_export" });
+      return await pendingExport;
+    }
+
+    const exportBuild: Promise<ExportPayload> = (async () => {
 
     const projects = projectsParam ? projectsParam.split(",").map((p: string) => p.trim()).filter(Boolean) : [];
     const projectFilter = projects.length > 0 ? { project: { $in: [...projects, null] } } : {};
@@ -1055,7 +1179,38 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    return { ok: true, nodes, edges };
+    const response = { ok: true, nodes, edges } satisfies ExportPayload;
+    await writeCachedProjection({
+      cache: graphProjectionCache,
+      key: cacheKey,
+      ttlMs: graphExportCacheTtlMs,
+      projectionName: "openplanner.graph/export",
+      sourceCollection: "events,graph_edges,graph_semantic_edges,graph_layout_overrides",
+      sourceKey: cacheKey,
+      value: response,
+      metadata: {
+        projects,
+        includeLayout,
+        includeSemantic,
+        semanticMinSimilarity,
+        maxNodes,
+        maxEdges,
+        maxSemanticEdges,
+      },
+      metricKind: "graph_export",
+      log: req.log,
+    });
+    return response;
+    })();
+
+    graphProjectionInflight.set(cacheKey, exportBuild);
+    try {
+      return await exportBuild;
+    } finally {
+      if (graphProjectionInflight.get(cacheKey) === exportBuild) {
+        graphProjectionInflight.delete(cacheKey);
+      }
+    }
   });
 
   // Graph layout upsert endpoint
@@ -1167,7 +1322,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const project = typeof req.body?.project === "string" ? req.body.project.trim() : "";
     const minTargetNodes = Math.min(maxNodes, Math.max(1000, Math.floor(maxNodes * 0.75)));
     const maxAdaptivePoolLimit = Math.max(poolLimit, Math.min(50000, poolLimit * 4));
-    const cacheKey = JSON.stringify({
+    const cacheParams = {
       maxNodes,
       maxEdges,
       poolLimit,
@@ -1177,11 +1332,24 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       rotationCursor,
       project,
       seeds: requestedSeedNodeIds.slice(0, 8),
+    };
+    const cacheKey = graphProjectionCacheKey("view", cacheParams);
+    const cachedView = await readCachedProjection<any>({
+      cache: graphProjectionCache,
+      key: cacheKey,
+      projectionName: "openplanner.graph/view",
+      metricKind: "graph_view",
+      log: req.log,
     });
-    const cachedView = graphViewCache.get(cacheKey);
-    if (cachedView && cachedView.expiresAt > Date.now()) {
-      return cachedView.value;
+    if (cachedView) return cachedView;
+
+    const pendingView = graphProjectionInflight.get(cacheKey) as Promise<any> | undefined;
+    if (pendingView) {
+      counterInc("openplanner_projection_cache_inflight_hits_total", { projection: "graph_view" });
+      return await pendingView;
     }
+
+    const viewBuild: Promise<any> = (async () => {
 
     const projectFilter = project ? { project } : {};
     const [totalLayoutRows, totalNodes, totalEdges, totalSemanticEdges] = await Promise.all([
@@ -1551,14 +1719,90 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
 
     response = bestResponse;
 
-    graphViewCache.set(cacheKey, { expiresAt: Date.now() + graphViewCacheTtlMs, value: response });
+    await writeCachedProjection({
+      cache: graphProjectionCache,
+      key: cacheKey,
+      ttlMs: graphViewCacheTtlMs,
+      projectionName: "openplanner.graph/view",
+      sourceCollection: "events,graph_edges,graph_semantic_edges,graph_layout_overrides",
+      sourceKey: cacheKey,
+      value: response,
+      metadata: cacheParams,
+      metricKind: "graph_view",
+      log: req.log,
+    });
     return response;
+    })();
+
+    graphProjectionInflight.set(cacheKey, viewBuild);
+    void viewBuild.catch((err) => {
+      req.log.warn({ err, cacheKey }, "graph view projection build failed after route fallback");
+    }).finally(() => {
+      if (graphProjectionInflight.get(cacheKey) === viewBuild) {
+        graphProjectionInflight.delete(cacheKey);
+      }
+    });
+
+    try {
+      return await resolveWithTimeoutFallback({
+        promise: viewBuild,
+        timeoutMs: graphViewBuildTimeoutMs,
+        fallback: () => {
+          counterInc("openplanner_projection_cache_timeouts_total", { projection: "graph_view" });
+          const fallbackNodes = requestedSeedNodeIds
+            .slice(0, maxNodes)
+            .map((nodeId: string) => inferViewNodeFromId(nodeId, hashPositionForNodeId(nodeId)));
+          return {
+            ok: true,
+            nodes: fallbackNodes,
+            edges: [],
+            meta: {
+              totalNodes: fallbackNodes.length,
+              totalEdges: 0,
+              sampledNodes: true,
+              sampledEdges: true,
+              shardIndex,
+              shardCount,
+              rotationCursor,
+              degraded: true,
+              reason: "graph_view_build_timeout",
+              timeoutMs: graphViewBuildTimeoutMs,
+            },
+          };
+        },
+      });
+    } catch (err) {
+      counterInc("openplanner_projection_cache_errors_total", { projection: "graph_view", operation: "build" });
+      req.log.warn({ err, cacheKey }, "graph view projection build failed; returning degraded fallback");
+      const fallbackNodes = requestedSeedNodeIds
+        .slice(0, maxNodes)
+        .map((nodeId: string) => inferViewNodeFromId(nodeId, hashPositionForNodeId(nodeId)));
+      return {
+        ok: true,
+        nodes: fallbackNodes,
+        edges: [],
+        meta: {
+          totalNodes: fallbackNodes.length,
+          totalEdges: 0,
+          sampledNodes: true,
+          sampledEdges: true,
+          shardIndex,
+          shardCount,
+          rotationCursor,
+          degraded: true,
+          reason: "graph_view_build_error",
+        },
+      };
+    }
   });
 
   // Similar nodes by vector search
   app.post("/graph/similar", async (req: any, reply) => {
     const q = req.body?.q;
     const k = req.body?.k ?? 20;
+    const where = typeof req.body?.where === "object" && req.body?.where !== null && !Array.isArray(req.body.where)
+      ? req.body.where
+      : undefined;
 
     if (!q || typeof q !== "string") {
       return reply.status(400).send({ error: "q is required" });
@@ -1570,6 +1814,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       tier: "hot",
       q,
       k: Math.max(1, Math.min(200, Number(k))),
+      where,
       getEmbeddingFunctionForModel: (model: string) => embeddingRuntime.hot.getEmbeddingFunctionForModel(model),
     });
 
@@ -1765,6 +2010,58 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         model: e.embedding_model,
         dimensions: e.embedding_dimensions,
         updatedAt: e.updated_at,
+      })),
+      storageBackend: "mongodb",
+    };
+  });
+
+  // Embedding coverage — how many objects have embeddings vs total
+  app.get("/graph/embedding-coverage", async () => {
+    const [
+      totalEvents,
+      totalGraphNodes,
+      totalEmbeddings,
+      embeddingsByModel,
+      nodeKinds,
+      eventKinds,
+    ] = await Promise.all([
+      app.mongo.events.countDocuments({}),
+      app.mongo.events.countDocuments({ kind: "graph.node" }),
+      app.mongo.graphNodeEmbeddings.countDocuments({}),
+      app.mongo.graphNodeEmbeddings.aggregate([
+        { $group: { _id: "$embedding_model", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).toArray(),
+      app.mongo.events.aggregate([
+        { $match: { kind: "graph.node" } },
+        { $group: { _id: "$extra.node_kind", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).toArray(),
+      app.mongo.events.aggregate([
+        { $group: { _id: "$kind", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]).toArray(),
+    ]);
+
+    return {
+      ok: true,
+      coverage: {
+        totalEvents,
+        totalGraphNodes,
+        totalEmbeddings,
+        embeddingRate: totalGraphNodes > 0 ? Number((totalEmbeddings / totalGraphNodes).toFixed(4)) : 0,
+      },
+      byModel: embeddingsByModel.map((m: any) => ({
+        model: m._id || "unknown",
+        count: m.count,
+      })),
+      byNodeKind: nodeKinds.map((k: any) => ({
+        kind: k._id || "unknown",
+        count: k.count,
+      })),
+      byEventKind: eventKinds.map((k: any) => ({
+        kind: k._id || "unknown",
+        count: k.count,
       })),
       storageBackend: "mongodb",
     };

@@ -1,19 +1,8 @@
 (ns openplanner.stores.document-hydration
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [openplanner.stores.cache.boundary :as cache]))
 
 (def document-kinds #{"docs" "code" "config" "data"})
-
-(defprotocol CacheStore
-  (cache-get [this k])
-  (cache-put! [this k v opts])
-  (cache-evict! [this k])
-  (cache-touch! [this k opts])
-  (cache-cleanup! [this])
-  (cache-stats [this]))
-
-(defn- now-ms [] (.now js/Date))
-(defn- promise [v] (js/Promise.resolve v))
-(defn- pthen [v f] (.then (promise v) f))
 
 (defn- obj?
   [x]
@@ -139,210 +128,50 @@
          :metadata meta
          :ts (if (some? ts) (str ts) (.toISOString (js/Date.)))}))
 
-(deftype MemoryLruCache [state max-entries default-ttl-ms]
-  CacheStore
-  (cache-get [_ k]
-    (let [entry (get @state k)
-          now (now-ms)]
-      (cond
-        (nil? entry) nil
-        (and (:expiresAt entry) (< (:expiresAt entry) now))
-        (do (swap! state dissoc k) nil)
-        :else
-        (do (swap! state assoc k (assoc entry :touchedAt now))
-            (:value entry)))))
-
-  (cache-put! [_ k v opts]
-    (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
-          now (now-ms)
-          expires-at (when (pos? ttl-ms) (+ now ttl-ms))]
-      (swap! state assoc k {:value v :createdAt now :touchedAt now :expiresAt expires-at})
-      (when (> (count @state) max-entries)
-        (let [victims (->> @state
-                           (sort-by (comp :touchedAt val))
-                           (take (- (count @state) max-entries))
-                           (map key))]
-          (swap! state #(apply dissoc % victims))))
-      true))
-
-  (cache-evict! [_ k]
-    (let [present? (contains? @state k)]
-      (swap! state dissoc k)
-      present?))
-
-  (cache-touch! [_ k opts]
-    (let [entry (get @state k)]
-      (if-not entry
-        false
-        (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
-              now (now-ms)]
-          (swap! state assoc k (cond-> (assoc entry :touchedAt now)
-                                 (pos? ttl-ms) (assoc :expiresAt (+ now ttl-ms))))
-          true))))
-
-  (cache-cleanup! [_]
-    (let [before (count @state)
-          now (now-ms)]
-      (swap! state (fn [m]
-                     (into {} (remove (fn [[_ entry]]
-                                        (and (:expiresAt entry) (< (:expiresAt entry) now)))
-                                      m))))
-      (- before (count @state))))
-
-  (cache-stats [_]
-    {:type "memory-lru"
-     :size (count @state)
-     :maxEntries max-entries
-     :defaultTtlMs default-ttl-ms}))
-
-(deftype RedisCache [^js client prefix default-ttl-ms]
-  CacheStore
-  (cache-get [_ k]
-    (.get client (str prefix k)))
-
-  (cache-put! [_ k v opts]
-    (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
-          key (str prefix k)]
-      (if (pos? ttl-ms)
-        (.set client key v #js {:PX ttl-ms})
-        (.set client key v))))
-
-  (cache-evict! [_ k]
-    (pthen (.del client (str prefix k)) pos?))
-
-  (cache-touch! [_ k opts]
-    (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)]
-      (if (pos? ttl-ms)
-        (pthen (.pExpire client (str prefix k) ttl-ms) pos?)
-        (promise false))))
-
-  (cache-cleanup! [_]
-    (promise 0))
-
-  (cache-stats [_]
-    {:type "redis"
-     :prefix prefix
-     :defaultTtlMs default-ttl-ms}))
-
-(deftype LmdbTtlCache [^js db prefix default-ttl-ms]
-  CacheStore
-  (cache-get [_ k]
-    (let [key (str prefix k)
-          entry (.get db key)
-          now (now-ms)]
-      (cond
-        (nil? entry) nil
-        (and (jget entry "expiresAt") (< (jget entry "expiresAt") now))
-        (do (.remove db key) nil)
-        :else (jget entry "value"))))
-
-  (cache-put! [_ k v opts]
-    (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
-          now (now-ms)
-          expires-at (when (pos? ttl-ms) (+ now ttl-ms))]
-      (.put db (str prefix k) #js {:value v :createdAt now :touchedAt now :expiresAt expires-at})))
-
-  (cache-evict! [_ k]
-    (.remove db (str prefix k)))
-
-  (cache-touch! [_ k opts]
-    (let [key (str prefix k)
-          entry (.get db key)]
-      (if-not entry
-        false
-        (let [ttl-ms (or (:ttlMs opts) default-ttl-ms)
-              now (now-ms)]
-          (.put db key #js {:value (jget entry "value")
-                            :createdAt (or (jget entry "createdAt") now)
-                            :touchedAt now
-                            :expiresAt (when (pos? ttl-ms) (+ now ttl-ms))})))))
-
-  (cache-cleanup! [_]
-    ;; LMDB key-range cleanup is intentionally left to explicit future compaction.
-    0)
-
-  (cache-stats [_]
-    {:type "lmdb-ttl"
-     :prefix prefix
-     :defaultTtlMs default-ttl-ms}))
-
-(deftype LayeredCache [layers]
-  CacheStore
-  (cache-get [_ k]
-    (letfn [(try-layer [seen remaining]
-              (if (empty? remaining)
-                (promise nil)
-                (let [layer (first remaining)]
-                  (pthen (cache-get layer k)
-                         (fn [v]
-                           (if (some? v)
-                             (do
-                               (doseq [prior seen]
-                                 (cache-put! prior k v nil))
-                               v)
-                             (try-layer (conj seen layer) (rest remaining))))))))]
-      (try-layer [] layers)))
-
-  (cache-put! [_ k v opts]
-    (js/Promise.all (clj->js (map #(cache-put! % k v opts) layers))))
-
-  (cache-evict! [_ k]
-    (js/Promise.all (clj->js (map #(cache-evict! % k) layers))))
-
-  (cache-touch! [_ k opts]
-    (js/Promise.all (clj->js (map #(cache-touch! % k opts) layers))))
-
-  (cache-cleanup! [_]
-    (pthen (js/Promise.all (clj->js (map cache-cleanup! layers)))
-           (fn [xs] (reduce + 0 (js->clj xs)))))
-
-  (cache-stats [_]
-    {:type "layered"
-     :layers (mapv cache-stats layers)}))
-
-(defn- opts-map
-  [opts]
-  (if (obj? opts) (js->clj opts :keywordize-keys true) (or opts {})))
+;; Cache compatibility facade -------------------------------------------------
+;;
+;; Document hydration originally hosted the generic cache protocol/adapters.
+;; The canonical implementation now lives in @open-hax/openplanner-store-cache
+;; under openplanner.stores.cache.*. Keep these exports as a compatibility
+;; facade for existing TypeScript callers while new domain stores import the
+;; cache package directly.
 
 (defn create-memory-lru-cache
-  ([] (create-memory-lru-cache nil))
-  ([opts]
-   (let [opts (opts-map opts)]
-     (MemoryLruCache. (atom {})
-                      (long (or (:maxEntries opts) 512))
-                      (long (or (:defaultTtlMs opts) (* 5 60 60 1000)))))))
+  ([] (cache/create-memory-lru-cache))
+  ([opts] (cache/create-memory-lru-cache opts)))
 
 (defn create-redis-cache
   [opts]
-  (let [client (jget opts "client")
-        prefix (or (jget opts "prefix") "")
-        default-ttl-ms (or (jget opts "defaultTtlMs") (* 5 60 60 1000))]
-    (when-not client
-      (throw (js/Error. "createRedisCache requires a connected Redis client")))
-    (RedisCache. client prefix (long default-ttl-ms))))
+  (cache/create-redis-cache opts))
 
 (defn create-lmdb-cache
   [opts]
-  (let [db (jget opts "db")
-        prefix (or (jget opts "prefix") "")
-        default-ttl-ms (or (jget opts "defaultTtlMs") (* 5 60 60 1000))]
-    (when-not db
-      (throw (js/Error. "createLmdbCache requires an open LMDB database handle")))
-    (LmdbTtlCache. db prefix (long default-ttl-ms))))
+  (cache/create-lmdb-cache opts))
 
 (defn create-layered-cache
   [caches]
-  (LayeredCache. (vec (array-seq caches))))
+  (cache/create-layered-cache caches))
 
-(defn cache-get-js [cache k] (cache-get cache k))
+(defn cache-get-js
+  [cache-handle k]
+  (cache/cache-get-js cache-handle k))
+
 (defn cache-put-js
-  ([cache k v] (cache-put-js cache k v nil))
-  ([cache k v ttl-ms]
-   (cache-put! cache k v (cond-> {} ttl-ms (assoc :ttlMs ttl-ms)))))
-(defn cache-evict-js [cache k] (cache-evict! cache k))
+  ([cache-handle k v] (cache/cache-put-js cache-handle k v))
+  ([cache-handle k v ttl-ms] (cache/cache-put-js cache-handle k v ttl-ms)))
+
+(defn cache-evict-js
+  [cache-handle k]
+  (cache/cache-evict-js cache-handle k))
+
 (defn cache-touch-js
-  ([cache k] (cache-touch-js cache k nil))
-  ([cache k ttl-ms]
-   (cache-touch! cache k (cond-> {} ttl-ms (assoc :ttlMs ttl-ms)))))
-(defn cache-cleanup-js [cache] (cache-cleanup! cache))
-(defn cache-stats-js [cache] (clj->js (cache-stats cache)))
+  ([cache-handle k] (cache/cache-touch-js cache-handle k))
+  ([cache-handle k ttl-ms] (cache/cache-touch-js cache-handle k ttl-ms)))
+
+(defn cache-cleanup-js
+  [cache-handle]
+  (cache/cache-cleanup-js cache-handle))
+
+(defn cache-stats-js
+  [cache-handle]
+  (cache/cache-stats-js cache-handle))

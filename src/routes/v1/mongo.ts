@@ -26,6 +26,9 @@ function sanitizeCollectionName(name: unknown): string | null {
 export const mongoRoutes: FastifyPluginAsync = async (app) => {
   /**
    * List all MongoDB collections with document counts.
+   *
+   * Uses estimatedDocumentCount() which reads collection metadata (O(1))
+   * instead of countDocuments() which performs a full collection scan.
    */
   app.get("/collections", async () => {
     const db = app.mongo.db;
@@ -35,7 +38,7 @@ export const mongoRoutes: FastifyPluginAsync = async (app) => {
       collections.map(async (col) => {
         const name = col.name;
         try {
-          const count = await db.collection(name).countDocuments();
+          const count = await db.collection(name).estimatedDocumentCount();
           return { name, count, type: col.type ?? "collection" };
         } catch {
           return { name, count: -1, type: col.type ?? "collection" };

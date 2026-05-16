@@ -3,6 +3,20 @@ import { JobQueue, type Job } from "../../lib/jobs.js";
 import { paths } from "../../lib/paths.js";
 import { upsertGraphEdges, upsertGraphNodeEmbeddings } from "../../lib/mongodb.js";
 
+function labelSlug(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 96) || "label";
+}
+
+function graphLabelId(tenantId: string, label: string): string {
+  return `label:${tenantId}:${labelSlug(label)}`;
+}
+
+function eventLabels(extra: Record<string, unknown>): string[] {
+  const labels = (extra.openplanner_labels as any)?.labels;
+  if (!Array.isArray(labels)) return [];
+  return [...new Set(labels.map((label) => String(label ?? "").trim()).filter(Boolean))];
+}
+
 export const jobRoutes: FastifyPluginAsync = async (app) => {
   if (!(app as any).jobs) {
     const cfg = (app as any).openplannerConfig;
@@ -475,10 +489,152 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
     })();
   };
 
+  const runBackfillGraphLabelsJob = (job: Job): void => {
+    const body = (job.input as any) ?? {};
+
+    void (async () => {
+      try {
+        await jobs().update(job.id, { status: "running" });
+
+        const mongoBatch = Math.max(100, Math.min(5000, Number(body.mongoBatch ?? 1000)));
+        const writeBatch = Math.max(100, Math.min(5000, Number(body.writeBatch ?? 1000)));
+        const limit = Number.isFinite(Number(body.limit)) ? Math.max(1, Number(body.limit)) : null;
+        const filter = { "extra.openplanner_labels.labels": { $exists: true, $ne: [] } };
+        const total = await app.mongo.events.countDocuments(filter);
+
+        await jobs().update(job.id, {
+          output: { phase: "streaming", completed: 0, total, labels: 0, edges: 0, failed: 0 },
+        });
+
+        const cursor = app.mongo.events
+          .find(filter, {
+            projection: { _id: 1, id: 1, ts: 1, project: 1, source: 1, extra: 1 },
+            batchSize: mongoBatch,
+          })
+          .sort({ _id: 1 });
+
+        let completed = 0;
+        let labels = 0;
+        let edges = 0;
+        let failed = 0;
+        const queuedLabelIds = new Set<string>();
+        let labelOps: any[] = [];
+        let edgeRows: Array<{
+          source_node_id: string;
+          target_node_id: string;
+          edge_kind: string;
+          layer?: string | null;
+          project?: string | null;
+          source?: string | null;
+          data?: Record<string, unknown> | null;
+          updated_at?: Date;
+        }> = [];
+
+        const flush = async (): Promise<void> => {
+          if (labelOps.length > 0) {
+            const rows = labelOps.splice(0, labelOps.length);
+            await app.mongo.graphLabelNodes.bulkWrite(rows, { ordered: false });
+            labels += rows.length;
+          }
+          if (edgeRows.length > 0) {
+            const rows = edgeRows.splice(0, edgeRows.length);
+            await upsertGraphEdges(app.mongo.graphEdges, rows);
+            edges += rows.length;
+          }
+        };
+
+        for await (const event of cursor) {
+          try {
+            const extra = (event.extra ?? {}) as Record<string, unknown>;
+            const eventId = String(event.id ?? event._id ?? "").trim();
+            const eventDate = event.ts instanceof Date ? event.ts : new Date(event.ts ?? Date.now());
+            const tenantId = String((extra.openplanner_labels as any)?.tenant_id ?? (extra as any).tenant_id ?? "default").trim() || "default";
+
+            if (!eventId) throw new Error("event id missing");
+
+            for (const label of eventLabels(extra)) {
+              const labelId = graphLabelId(tenantId, label);
+              if (!queuedLabelIds.has(labelId)) {
+                queuedLabelIds.add(labelId);
+                labelOps.push({
+                  updateOne: {
+                    filter: { label_id: labelId },
+                    update: {
+                      $set: {
+                        _id: labelId,
+                        label_id: labelId,
+                        label,
+                        emoji: null,
+                        description: `Auto-derived event label: ${label}`,
+                        color: null,
+                        tenant_id: tenantId,
+                        project: event.project ?? null,
+                        embedding_model: null,
+                        embedding_dimensions: 0,
+                        embedding: null,
+                        created_by: "backfill.graph-labels",
+                        updatedAt: new Date(),
+                      },
+                      $setOnInsert: { createdAt: new Date() },
+                    },
+                    upsert: true,
+                  },
+                });
+              }
+
+              edgeRows.push({
+                source_node_id: eventId,
+                target_node_id: labelId,
+                edge_kind: "has_label",
+                layer: null,
+                project: event.project ?? null,
+                source: event.source ?? null,
+                data: {
+                  applied_at: eventDate.toISOString(),
+                  confidence: 1,
+                  label,
+                  claim_system: (extra.openplanner_labels as any)?.claim_system ?? null,
+                  source_event_id: eventId,
+                },
+                updated_at: eventDate,
+              });
+            }
+
+            if (labelOps.length + edgeRows.length >= writeBatch) await flush();
+          } catch (_err) {
+            failed += 1;
+          }
+
+          completed += 1;
+          if (completed % 1000 === 0 || completed === total || (limit !== null && completed >= limit)) {
+            console.log(`[graph-labels-backfill] completed=${completed} labels=${labels} edges=${edges} failed=${failed} total=${total}`);
+            await jobs().update(job.id, {
+              output: { phase: "streaming", completed, total, labels, edges, failed },
+            });
+          }
+          if (limit !== null && completed >= limit) break;
+        }
+
+        await flush();
+
+        await jobs().update(job.id, {
+          status: "done",
+          output: { completed, total, labels, edges, failed },
+        });
+      } catch (err: any) {
+        await jobs().update(job.id, {
+          status: "error",
+          error: err?.message ?? String(err),
+        });
+      }
+    })();
+  };
+
   const isRecoverableJobKind = (kind: string): boolean =>
     kind === "backfill.embeddings"
       || kind === "backfill.graph-node-embeddings"
-      || kind === "backfill.graph-edges";
+      || kind === "backfill.graph-edges"
+      || kind === "backfill.graph-labels";
 
   const startRecoverableJob = (job: Job): boolean => {
     if (job.kind === "backfill.embeddings") {
@@ -491,6 +647,10 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
     }
     if (job.kind === "backfill.graph-edges") {
       runBackfillGraphEdgesJob(job);
+      return true;
+    }
+    if (job.kind === "backfill.graph-labels") {
+      runBackfillGraphLabelsJob(job);
       return true;
     }
     return false;
@@ -644,5 +804,14 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
     runBackfillGraphEdgesJob(job);
 
     return { ok: true, job, note: "Graph edge backfill started in background" };
+  });
+
+  // Graph label backfill — materializes extra.openplanner_labels.labels into graph label nodes and has_label edges
+  app.post("/jobs/backfill/graph-labels", async (req) => {
+    const body = (req.body as any) ?? {};
+    const job = await jobs().create("backfill.graph-labels", body);
+    runBackfillGraphLabelsJob(job);
+
+    return { ok: true, job, note: "Graph label backfill started in background" };
   });
 };

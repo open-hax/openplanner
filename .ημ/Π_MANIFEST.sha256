@@ -1,1 +1,6 @@
-011a145b352b5a595b7093a0ee73e811f1cda82a  packages/agents/knoxx  # submodule commit
+git-index   ".\316\267\316\274/\316\240_LAST.md"
+git-index   ".\316\267\316\274/\316\240_STATE.sexp"
+git-index   "packages/graph/webgl-graph-view/.\316\267\316\274/\316\240_LAST.md"
+git-index   "packages/graph/webgl-graph-view/.\316\267\316\274/\316\240_MANIFEST.sha256"
+git-index   "packages/graph/webgl-graph-view/.\316\267\316\274/\316\240_STATE.sexp"
+git-index 160000 a770d959335e6673cede53144d0fd333783107fc 0	packages/agents/knoxx  packages/agents/knoxx
