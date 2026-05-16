@@ -71,6 +71,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     if (!body || !Array.isArray(body.events)) return reply.status(400).send({ error: "expected { events: [...] }" });
 
     const ids: string[] = [];
+    const acceptedEvents: EventEnvelopeV1[] = [];
     const eventVectorTasks: Array<Promise<void>> = [];
     const projectedGraphEdges: Array<{
       source_node_id: string;
@@ -169,6 +170,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
 
     for (const ev of body.events) {
       validateEvent(ev);
+      acceptedEvents.push(ev);
 
       const sr = ev.source_ref ?? {};
       const meta = ev.meta ?? {};
@@ -584,6 +586,15 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     for (const ev of body.events) {
       counterInc("openplanner_events_by_source", { source: ev.source, backend: "mongodb" });
       counterInc("openplanner_events_by_kind", { kind: ev.kind, backend: "mongodb" });
+    }
+
+    const kafkaPublish = app.kafkaEvents.publishRawEvents(acceptedEvents, { requestId: req.id });
+    if (process.env.OPENPLANNER_KAFKA_PUBLISH_MODE === "await") {
+      await kafkaPublish;
+    } else {
+      void kafkaPublish.catch((err) => {
+        app.log.warn({ err, count: acceptedEvents.length }, "Detached kafka raw event publish rejected");
+      });
     }
     
     return {

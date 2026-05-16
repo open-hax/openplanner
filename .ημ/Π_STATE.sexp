@@ -1,10 +1,16 @@
-(fork-tax-snapshot
-  (name "open-hax-openplanner")
-  (timestamp "2026-05-15T06:01:45Z")
-  (repo "/home/err/devel/orgs/open-hax/openplanner")
+(fork-tax-state
+  (repo "openplanner")
   (branch "tests/sentance-chunker")
-  (head-before "ff8801ce37736756110de48f90e612922daf29d2")
-  (origin "git@github.com:open-hax/openplanner.git")
-  (scope ["."])
-  (note "OpenPlanner integration snapshot including Knoxx pointer after nested fork tax.")
-  (status-lines ["## tests/sentance-chunker...origin/tests/sentance-chunker", " M package.json", " M packages/agents/knoxx", " ? packages/vexx", " M pnpm-lock.yaml", " M pnpm-workspace.yaml", " M receipts.edn", " M src/routes/v1/events.ts", " M src/routes/v1/graph.ts", " M src/routes/v1/jobs.ts", " M src/routes/v1/mongo.ts", "?? docs/security-audit-exposure-2026-05-12.md", "?? patches/libsodium-wrappers@0.7.16.patch"]))
+  (base "0bec078ba6bab19df9e973f65f6b48d52c835234")
+  (timestamp "2026-05-16T03:58:00Z")
+  (knoxx-submodule "094273c3")
+  (scope "graph-pressure-relief projection-cache metrics kafka-redpanda clojure-workers")
+  (verification
+    "pnpm exec tsc --noEmit passed"
+    "clojure -M:check passed"
+    "docker compose --profile kafka --profile kafka-replay config --quiet passed"
+    "audit consumer heartbeat observed"
+    "dry-run replay processed 5 messages"
+    "bounded non-dry-run replay [0,1) idempotent")
+  (residual
+    "packages/agents/knoxx has intentionally unabsorbed residual dirt inside the submodule"))

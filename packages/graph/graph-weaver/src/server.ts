@@ -461,6 +461,12 @@ async function main(): Promise<void> {
     config = applyConfigPatch(config, storedConfig);
   }
 
+  const boundedOpenPlannerExportLimit = (envKey: string, currentLimit: number, floor: number): number => {
+    const rawCeiling = Number(process.env[envKey] ?? currentLimit);
+    const ceiling = Number.isFinite(rawCeiling) ? rawCeiling : currentLimit;
+    return Math.max(floor, Math.floor(Math.min(currentLimit, ceiling)));
+  };
+
   let configSaveTimer: ReturnType<typeof setTimeout> | null = null;
   const scheduleSaveConfig = () => {
     if (configSaveTimer) return;
@@ -661,9 +667,9 @@ async function main(): Promise<void> {
                 projects: openPlannerProjects,
                 includeSemantic: includeSemanticEdges,
                 semanticMinSimilarity,
-                maxNodes: config.render.maxRenderNodes,
-                maxEdges: config.render.maxRenderEdges,
-                maxSemanticEdges: config.render.maxRenderEdges,
+                maxNodes: boundedOpenPlannerExportLimit("GRAPH_WEAVER_OPENPLANNER_EXPORT_MAX_NODES", config.render.maxRenderNodes, 200),
+                maxEdges: boundedOpenPlannerExportLimit("GRAPH_WEAVER_OPENPLANNER_EXPORT_MAX_EDGES", config.render.maxRenderEdges, 200),
+                maxSemanticEdges: boundedOpenPlannerExportLimit("GRAPH_WEAVER_OPENPLANNER_EXPORT_MAX_SEMANTIC_EDGES", config.render.maxRenderEdges, 0),
               })
           : localSourceMode === "openplanner-lakes"
             ? await rebuildLakeGraph({

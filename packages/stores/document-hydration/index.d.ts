@@ -1,4 +1,6 @@
-export type Awaitable<T> = T | Promise<T>;
+import type { Awaitable, CacheHandle, CacheStats } from "@open-hax/openplanner-store-cache";
+
+export type { Awaitable, CacheHandle, CacheStats } from "@open-hax/openplanner-store-cache";
 
 export interface DocumentSourceRef {
   sourcePath?: string;
@@ -15,19 +17,6 @@ export interface HydrationResult {
   sourceRef?: DocumentSourceRef;
 }
 
-export interface CacheStats {
-  type: string;
-  size?: number;
-  maxEntries?: number;
-  defaultTtlMs?: number;
-  prefix?: string;
-  layers?: CacheStats[];
-}
-
-export interface CacheHandle {
-  __openplannerCache?: true;
-}
-
 export function documentNeedsHydration(row: Record<string, unknown>): boolean;
 export function documentSourceRef(row: Record<string, unknown>): DocumentSourceRef | null;
 export function documentCacheKey(row: Record<string, unknown>): string | null;
@@ -38,8 +27,8 @@ export function createMemoryLruCache(options?: { maxEntries?: number; defaultTtl
 export function createRedisCache(options: { client: unknown; prefix?: string; defaultTtlMs?: number }): CacheHandle;
 export function createLmdbCache(options: { db: unknown; prefix?: string; defaultTtlMs?: number }): CacheHandle;
 export function createLayeredCache(caches: CacheHandle[]): CacheHandle;
-export function cacheGet(cache: CacheHandle, key: string): Awaitable<string | null>;
-export function cachePut(cache: CacheHandle, key: string, value: string, ttlMs?: number): Awaitable<unknown>;
+export function cacheGet<T = string>(cache: CacheHandle, key: string): Awaitable<T | null>;
+export function cachePut<T = string>(cache: CacheHandle, key: string, value: T, ttlMs?: number): Awaitable<unknown>;
 export function cacheEvict(cache: CacheHandle, key: string): Awaitable<unknown>;
 export function cacheTouch(cache: CacheHandle, key: string, ttlMs?: number): Awaitable<unknown>;
 export function cacheCleanup(cache: CacheHandle): Awaitable<number>;
