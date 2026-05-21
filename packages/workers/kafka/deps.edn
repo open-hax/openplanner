@@ -7,4 +7,5 @@
  :aliases
  {:audit {:main-opts ["-m" "openplanner.kafka.jobs" "audit"]}
   :replay {:main-opts ["-m" "openplanner.kafka.jobs" "replay"]}
+  :graph-edges-backfill {:main-opts ["-m" "openplanner.kafka.jobs" "graph-edges-backfill"]}
   :check {:main-opts ["-m" "openplanner.kafka.jobs" "check"]}}}

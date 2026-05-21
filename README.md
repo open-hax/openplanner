@@ -143,6 +143,24 @@ pnpm -r test
 npm run dev
 ```
 
+## Code Quality
+
+OpenPlanner includes repository-wide code duplication scanning via `jscpd`.
+
+```bash
+# Generate console, HTML, and JSON duplication reports
+pnpm duplication:scan
+
+# Run the CI-suitable duplication gate
+pnpm duplication:check
+```
+
+Reports are written to `reports/jscpd/` and are ignored as regenerable artifacts. The default gate focuses on executable code in `src`, `packages`, `tests`, `scripts`, and `config`, while excluding generated output, vendored dependencies, local virtualenvs, worktrees, lockfiles, sourcemaps, and other noisy artifacts.
+
+The GitHub Actions workflow at `.github/workflows/code-quality.yml` runs the duplication gate on pull requests and pushes to `main`/`master`.
+
+See [`docs/code-quality.md`](docs/code-quality.md) for scanner scope, thresholds, ignored paths, and triage guidance.
+
 ## Submodule Management
 
 ```bash
