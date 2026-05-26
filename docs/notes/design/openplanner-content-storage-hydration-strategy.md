@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.28.15.06.02.md"
+title: "OpenPlanner Content Storage and Hydration Strategy"
+summary: "Outlines priorities for removing full text from OpenPlanner, retaining references, and hydrating source fragments through caches."
+category: "design"
+created: "2026-04-28"
+---
+
 ## User thoughts
 I'm leaning towards openplanner should not store full text contents of anything that we can reasonably be expected to have access to the original source of...
 

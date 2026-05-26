@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.28.17.09.48.md"
+title: "Pi MCP Adapter Profiling Stack"
+summary: "Explains pi-mcp-adapter as an MCP proxy registry and sketches Playwright and Chrome DevTools profiling integration."
+category: "infrastructure"
+created: "2026-04-28"
+---
+
 Perfect, Pi + `pi-mcp-adapter` is exactly the right place to orchestrate this. The adapter is just a **proxy/registry**: it lets Pi talk to *any* MCP servers (Playwright, Chrome DevTools, etc.) with lazy loading and minimal token overhead. [mintlify](https://www.mintlify.com/nicobailon/pi-mcp-adapter/installation)
 
 ## What pi‑mcp‑adapter actually does

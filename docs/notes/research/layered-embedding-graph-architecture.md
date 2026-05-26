@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.26.14.47.46.md"
+title: "Layered Embedding Graph Architecture"
+summary: "Describes a multi-layer embedding architecture with document, sentence, graph-node, deduplication, and instruction-tuned query layers."
+category: "research"
+created: "2026-04-26"
+---
+
 
 The user is describing a multi-layer embedding architecture they wanted to build:
 

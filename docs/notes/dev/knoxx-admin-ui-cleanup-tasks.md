@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.17.14.54.41.md"
+title: "Knoxx Admin UI Cleanup Tasks"
+summary: "Lists UI cleanup tasks for Knoxx admin pages, settings API errors, nav removal, and page compaction."
+category: "dev"
+created: "2026-04-17"
+---
+
 1. remove the legacy admin nav button
 2. The contracts page needs to fill the full vertical length of the page.
 3. move the `Workbecnh` into pseudo

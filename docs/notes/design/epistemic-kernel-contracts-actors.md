@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.17.19.10.00.md"
+title: "Epistemic Kernel Contracts and Actors"
+summary: "Drafts the epistemic primitives, contracts, actors, events, receipts, and judgments for OpenPlanner and Knoxx/Cephalon runtimes."
+category: "design"
+created: "2026-04-17"
+---
+
 # Epistemic Kernel, Contracts, and Actors
 
 > **Status**: draft, internal design note

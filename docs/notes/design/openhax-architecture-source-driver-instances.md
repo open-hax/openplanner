@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.17.22.37.28.md"
+title: "OpenHax Architecture Source Driver Instances"
+summary: "Maps OpenHax and octave-commons repositories to a categorical architecture and calls for concrete source driver instances."
+category: "design"
+created: "2026-04-17"
+---
+
 Aight, another pass:
 https://github.com/open-hax/openplanner
 https://github.com/open-hax/knoxx
