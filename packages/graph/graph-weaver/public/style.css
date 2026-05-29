@@ -46,6 +46,15 @@ body {
   white-space: nowrap;
 }
 
+.status.sync-failed {
+  color: #ffd166;
+  background: rgba(214, 40, 40, 0.18);
+  border: 1px solid rgba(214, 40, 40, 0.55);
+  border-radius: 6px;
+  padding: 0.15rem 0.45rem;
+  font-weight: 600;
+}
+
 .links a {
   color: rgba(255, 255, 255, 0.78);
   text-decoration: none;
