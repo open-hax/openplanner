@@ -3,6 +3,7 @@ import type { FastifyPluginAsync, FastifyInstance } from "fastify";
 import type { WithId, Collection } from "mongodb";
 import type { GardenDocument, EventDocument } from "../../lib/mongodb.js";
 import { renderTranslatedDocument, type TranslationLabelLike, type TranslationSegmentLike } from "../../lib/translation-rendering.js";
+import { renderGardenIndex, renderGardenPage } from "../../lib/garden-renderer.js";
 
 interface PublicDocumentResponse {
   doc_id: string;
@@ -474,8 +475,6 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
   app.get("/public/gardens/:garden_id/html", async (req, reply) => {
     const garden_id = String((req.params as { garden_id: string }).garden_id);
 
-    const { renderGardenIndex } = await import("../../lib/garden-renderer.js");
-
     const garden = await gardens.findOne({ garden_id, status: "active" });
     if (!garden) {
       return reply.status(404).send({ error: "garden not found or inactive" });
@@ -522,8 +521,6 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     const garden_id = String((req.params as { garden_id: string }).garden_id);
     const doc_id_or_path = String((req.params as { doc_id: string }).doc_id);
     const query = (req.query ?? {}) as Record<string, string | undefined>;
-
-    const { renderGardenPage } = await import("../../lib/garden-renderer.js");
 
     const garden = await gardens.findOne({ garden_id, status: "active" });
     if (!garden) {

@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { DocumentPatchRequest, DocumentRecord } from "../../lib/types.js";
 import { buildDocumentFilter, countFieldValues, documentToEvent, getDocumentById, hydrateDocumentRowsForApi, persistAndMaybeIndex, persistEvent, rowToDocument } from "./documents.js";
+import { recalculateGardenStats } from "./gardens.js";
 
 type CmsDocument = {
   doc_id: string;
@@ -49,6 +50,28 @@ type DraftCmsPayload = {
 function tenantProject(tenantId: string | undefined): string {
   const value = String(tenantId ?? "devel").trim();
   return value || "devel";
+}
+
+/** Extract a single count from a `[{ value: n }]`-shaped $facet branch. */
+function facetCount(branch: unknown): number {
+  const rows = Array.isArray(branch) ? branch : [];
+  const first = rows[0] as { value?: unknown } | undefined;
+  return Number(first?.value ?? 0);
+}
+
+/**
+ * Convert a `[{ _id, count }]`-shaped $facet group branch into a
+ * `{ value: count }` map, substituting `fallback` for empty/non-string keys.
+ * Mirrors the semantics of documents.countFieldValues.
+ */
+function facetGroups(branch: unknown, fallback: string): Record<string, number> {
+  const rows = Array.isArray(branch) ? (branch as Array<Record<string, unknown>>) : [];
+  return rows.reduce((acc: Record<string, number>, row) => {
+    const raw = row._id;
+    const key = typeof raw === "string" && raw.trim() ? raw : fallback;
+    acc[key] = Number(row.count ?? 0);
+    return acc;
+  }, {});
 }
 
 function toCmsDocument(document: DocumentRecord, tenantId?: string): CmsDocument {
@@ -287,6 +310,13 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     const id = String((req.params as { id: string }).id);
     const gardenId = String((req.params as { garden_id: string }).garden_id);
     const query = (req.query ?? {}) as Record<string, string | undefined>;
+    const body = (req.body ?? {}) as { published_by?: string };
+    const headers = req.headers as Record<string, string | string[] | undefined>;
+    const headerPublishedBy = headers["x-published-by"];
+    const publishedBy =
+      body.published_by?.trim() ||
+      (typeof headerPublishedBy === "string" ? headerPublishedBy.trim() : "") ||
+      "openplanner-cms";
 
     const existing = await getDocumentById(app, id);
     if (!existing || existing.kind !== "docs") {
@@ -310,12 +340,15 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     const newPublication = {
       garden_id: gardenId,
       published_at: now.toISOString(),
-      published_by: "openplanner-cms",
+      published_by: publishedBy,
       translation_status: "pending" as const,
       translated_languages: [] as string[],
     };
 
     const gardenPublications = [...existingPublications];
+    // Track where this publication lives so later updates target the right slot
+    // rather than blindly assuming it is the last element.
+    const publicationIndex = existingPubIndex >= 0 ? existingPubIndex : gardenPublications.length;
     if (existingPubIndex >= 0) {
       gardenPublications[existingPubIndex] = newPublication;
     } else {
@@ -376,7 +409,7 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
           ...newPublication,
           translation_status: "in_progress" as const,
         };
-        gardenPublications[gardenPublications.length - 1] = updatedPublication;
+        gardenPublications[publicationIndex] = updatedPublication;
 
         await app.mongo.events.updateOne(
           { _id: id },
@@ -389,6 +422,9 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // Refresh garden stats so the new publication is reflected immediately.
+    await recalculateGardenStats(app.mongo, gardenId);
+
     return {
       status: "published",
       doc_id: id,
@@ -400,40 +436,14 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  // Legacy endpoint for backward compatibility
-  app.post("/cms/publish/:id", async (req, reply) => {
-    const id = String((req.params as { id: string }).id);
-    const existing = await getDocumentById(app, id);
-    if (!existing || existing.kind !== "docs") {
-      return reply.status(404).send({ detail: "Document not found" });
-    }
-
-    const metadata = existing.metadata ?? {};
-    const gardenId = typeof metadata.garden_id === "string" ? metadata.garden_id.trim() : "";
-    if (!gardenId) {
-      return reply.status(400).send({ detail: "Use /cms/publish/:id/:garden_id to specify garden" });
-    }
-
-    // Redirect to new endpoint behavior
-    const garden = await app.mongo.gardens.findOne({ garden_id: gardenId, status: "active" });
-    if (!garden) {
-      return reply.status(404).send({ detail: "Garden not found or inactive" });
-    }
-
-    const now = new Date();
-    const published: DocumentRecord = {
-      ...existing,
-      visibility: "public",
-      publishedAt: now.toISOString(),
-      ts: now.toISOString(),
-    };
-
-    const result = await persistAndMaybeIndex(app, documentToEvent(published, existing));
-    if (result.warning) {
-      return reply.status(503).send({ detail: result.warning, persisted: true, indexed: false });
-    }
-
-    return { status: "published", doc_id: id, indexed: result.indexed, garden_id: gardenId };
+  // Deprecated legacy endpoint. Publishing now requires an explicit garden,
+  // so this single-id form is no longer supported. Clients must call
+  // POST /cms/publish/:id/:garden_id instead.
+  app.post("/cms/publish/:id", async (_req, reply) => {
+    return reply.status(400).send({
+      detail: "legacy-endpoint-deprecated",
+      message: "Use POST /cms/publish/:id/:garden_id to publish to a specific garden",
+    });
   });
 
   app.post("/cms/archive/:id", async (req, reply) => {
@@ -533,22 +543,46 @@ export const cmsRoutes: FastifyPluginAsync = async (app) => {
     });
     const projectFilter = buildDocumentFilter({ project: tenantId });
 
-    const [total, projectTotal, byVisibility, byDomain, byKind, bySource] = await Promise.all([
-      app.mongo.events.countDocuments(filter),
-      app.mongo.events.countDocuments(projectFilter),
-      countFieldValues(app.mongo.events, filter, "extra.visibility", "internal"),
-      countFieldValues(app.mongo.events, filter, "extra.domain", "general"),
-      countFieldValues(app.mongo.events, projectFilter, "kind", "docs"),
-      countFieldValues(app.mongo.events, projectFilter, "source", "unknown"),
-    ]);
+    // Collapse what used to be six separate collection round-trips into two
+    // single-pass $facet aggregations (one per match filter). Each facet branch
+    // computes a total and per-field grouping in the same scan.
+    const groupFacet = (fieldPath: string) => [
+      { $group: { _id: `$${fieldPath}`, count: { $sum: 1 } } },
+    ];
+
+    const [docScoped] = (await app.mongo.events
+      .aggregate([
+        { $match: filter },
+        {
+          $facet: {
+            total: [{ $count: "value" }],
+            byVisibility: groupFacet("extra.visibility"),
+            byDomain: groupFacet("extra.domain"),
+          },
+        },
+      ])
+      .toArray()) as Array<Record<string, unknown>>;
+
+    const [projectScoped] = (await app.mongo.events
+      .aggregate([
+        { $match: projectFilter },
+        {
+          $facet: {
+            total: [{ $count: "value" }],
+            byKind: groupFacet("kind"),
+            bySource: groupFacet("source"),
+          },
+        },
+      ])
+      .toArray()) as Array<Record<string, unknown>>;
 
     return {
-      total,
-      project_total: projectTotal,
-      by_visibility: byVisibility,
-      by_domain: byDomain,
-      by_kind: byKind,
-      by_source: bySource,
+      total: facetCount(docScoped?.total),
+      project_total: facetCount(projectScoped?.total),
+      by_visibility: facetGroups(docScoped?.byVisibility, "internal"),
+      by_domain: facetGroups(docScoped?.byDomain, "general"),
+      by_kind: facetGroups(projectScoped?.byKind, "docs"),
+      by_source: facetGroups(projectScoped?.bySource, "unknown"),
     };
   });
 };
