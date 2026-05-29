@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.17.11.36.00.md"
+title: "Octave Commons Repository Links"
+summary: "Collects links to related octave-commons repositories for sentinel, Promethean agents, ecosystem DSL, fork tales, and more."
+category: "research"
+created: "2026-04-17"
+---
+
 https://github.com/octave-commons/sentinel
 https://github.com/octave-commons/promethean-agent-system
 https://github.com/octave-commons/ecosystem-dsl

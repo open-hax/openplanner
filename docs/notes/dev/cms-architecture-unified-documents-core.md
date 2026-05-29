@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.11.13.09.10.md"
+title: "CMS Architecture Unified with Documents Core"
+summary: "Documents the CMS as a thin layer over documents.ts with unified event storage, indexing, gardens, and publication gaps."
+category: "dev"
+created: "2026-04-11"
+---
+
 ## CMS Architecture: ✅ Fully Unified
 
 **CMS is a pure thin view-layer over the `documents.ts` core.**  It imports `documentToEvent`, `getDocumentById`, `persistAndMaybeIndex`, and `rowToDocument` directly from `documents.ts` — there is **zero separate storage**. Every CMS write goes through the exact same `persistAndMaybeIndex` → `upsertEvent` → `mongo.events` + `indexTextInMongoVectors` hot tier pipeline as raw document writes. 

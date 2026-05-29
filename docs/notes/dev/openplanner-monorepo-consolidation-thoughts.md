@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.17.10.48.12.md"
+title: "OpenPlanner Monorepo Consolidation Thoughts"
+summary: "Captures thoughts on consolidating OpenPlanner-related packages, graph-weaver, eros, and cephalon runtime dependencies."
+category: "dev"
+created: "2026-04-17"
+---
+
 but we're talking about openplanner.
 the monorepo stuff in here was kinda hacked on at the end.
 I wanted to get everything into one place because,

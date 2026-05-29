@@ -10,6 +10,8 @@
     "dev:watch:container": "sh ./scripts/dev-watch-container.sh",
     "lint": "eslint --config eslint.config.mjs .",
     "lint:strict": "eslint --config eslint.config.mjs . --max-warnings=0",
+    "duplication:scan": "pnpm dlx jscpd@4.0.5 --config .jscpd.json --threshold 100",
+    "duplication:check": "pnpm dlx jscpd@4.0.5 --config .jscpd.json --threshold 5",
     "lint:migration-risk": "eslint --config eslint.config.mjs src packages tests --format stylish",
     "test": "tsx --tsconfig tsconfig.json",
     "test:e2e:compact-viewgraph": "tsx --tsconfig tsconfig.json tests/e2e-compact-viewgraph.test.mjs",

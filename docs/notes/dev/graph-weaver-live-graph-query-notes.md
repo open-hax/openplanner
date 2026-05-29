@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.13.13.57.07.md"
+title: "Graph Weaver Live Graph Query Notes"
+summary: "Records that graph-weaver is live through graphView and clarifies the correct GraphQL query and vector-search edge model."
+category: "dev"
+created: "2026-04-13"
+---
+
  Signal
 
  Graph is live: 21,823 nodes, 50,031 semantic edges rendered through graph-weaver via graphView. The GraphQL was never

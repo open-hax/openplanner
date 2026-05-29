@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.18.00.10.03.md"
+title: "Intent and Fulfillment Contract Semantics"
+summary: "Explores intent contracts as pre-engagement checks and distinguishes deterministic fulfillment contracts from LLM-judged contracts."
+category: "design"
+created: "2026-04-18"
+---
+
 ## What is an intent?
 An intent is a the inverse of a fulfillment contract, it's executed before the actor actually engages,
 but after the trigger.

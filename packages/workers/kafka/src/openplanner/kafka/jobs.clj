@@ -15,7 +15,7 @@
    (org.apache.kafka.clients.consumer ConsumerConfig KafkaConsumer OffsetAndMetadata)
    (org.apache.kafka.common TopicPartition)
    (org.apache.kafka.common.serialization StringDeserializer)
-   (com.mongodb.client.model UpdateOptions)
+   (com.mongodb.client.model BulkWriteOptions UpdateOneModel UpdateOptions)
    (org.bson Document)))
 
 (defn env
@@ -75,9 +75,13 @@
    :replay-end-offset (env "OPENPLANNER_KAFKA_REPLAY_END_OFFSET" "latest")
    :replay-max-messages (parse-long* (env "OPENPLANNER_KAFKA_REPLAY_MAX_MESSAGES") 1000)
    :replay-log-every (max 1 (parse-long* (env "OPENPLANNER_KAFKA_REPLAY_LOG_EVERY") 100))
+   :graph-edges-backfill-limit (parse-long* (env "OPENPLANNER_GRAPH_EDGES_BACKFILL_LIMIT") 0)
+   :graph-edges-backfill-batch-size (max 1 (parse-long* (env "OPENPLANNER_GRAPH_EDGES_BACKFILL_BATCH_SIZE") 1000))
+   :graph-edges-backfill-log-every (max 1 (parse-long* (env "OPENPLANNER_GRAPH_EDGES_BACKFILL_LOG_EVERY") 1000))
    :mongo-uri (env "MONGODB_URI" "mongodb://localhost:27017")
    :mongo-db (env "MONGODB_DB" "openplanner")
-   :mongo-events (env "MONGODB_EVENTS_COLLECTION" "events")})
+   :mongo-events (env "MONGODB_EVENTS_COLLECTION" "events")
+   :mongo-graph-edges (env "MONGODB_GRAPH_EDGES_COLLECTION" "graph_edges")})
 
 (defn consumer-props
   [{:keys [brokers]} group-id client-id]
@@ -190,15 +194,144 @@
                 (doto (UpdateOptions.) (.upsert true)))))
 
 (defn open-mongo
-  [{:keys [mongo-uri mongo-db mongo-events]}]
+  [{:keys [mongo-uri mongo-db mongo-events mongo-graph-edges]}]
   (let [client (MongoClients/create mongo-uri)
         db (.getDatabase client mongo-db)
-        events (.getCollection ^MongoDatabase db mongo-events)]
-    {:client client :db db :events events}))
+        events (.getCollection ^MongoDatabase db mongo-events)
+        graph-edges (.getCollection ^MongoDatabase db mongo-graph-edges)]
+    {:client client :db db :events events :graph-edges graph-edges}))
 
 (defn close-mongo!
   [{:keys [client]}]
   (when client (.close client)))
+
+(defn nonblank-string
+  [value]
+  (let [s (when-not (nil? value) (str/trim (str value)))]
+    (when-not (str/blank? s) s)))
+
+(defn doc-get
+  [^Document doc k]
+  (when doc (.get doc k)))
+
+(defn event-extra-doc
+  [^Document event]
+  (let [extra (doc-get event "extra")]
+    (when (instance? Document extra) extra)))
+
+(defn graph-edge-row
+  [^Document event]
+  (let [extra (event-extra-doc event)
+        source-node-id (nonblank-string (doc-get extra "source_node_id"))
+        target-node-id (nonblank-string (doc-get extra "target_node_id"))
+        edge-kind (or (nonblank-string (doc-get extra "edge_type"))
+                      (nonblank-string (doc-get extra "edge_kind")))]
+    (when (and source-node-id target-node-id edge-kind (not= source-node-id target-node-id))
+      {:source-node-id source-node-id
+       :target-node-id target-node-id
+       :edge-kind edge-kind
+       :layer (nonblank-string (doc-get extra "layer"))
+       :project (nonblank-string (doc-get event "project"))
+       :source (nonblank-string (doc-get event "source"))
+       :data extra
+       :updated-at (let [ts (doc-get event "ts")]
+                     (if (instance? Date ts) ts (Date.)))})))
+
+(defn graph-edge-upsert-model
+  [{:keys [source-node-id target-node-id edge-kind layer project source data updated-at]}]
+  (let [now (Date.)
+        edge-id (str source-node-id "||" target-node-id "||" edge-kind)
+        set-doc (doto (Document.)
+                  (.append "source_node_id" source-node-id)
+                  (.append "target_node_id" target-node-id)
+                  (.append "edge_kind" edge-kind)
+                  (.append "layer" layer)
+                  (.append "project" project)
+                  (.append "source" source)
+                  (.append "data" data)
+                  (.append "updated_at" updated-at)
+                  (.append "updatedAt" now))
+        insert-doc (doto (Document.)
+                     (.append "createdAt" now))]
+    (UpdateOneModel.
+     (doto (Document.) (.append "_id" edge-id))
+     (doto (Document.)
+       (.append "$set" set-doc)
+       (.append "$setOnInsert" insert-doc))
+     (doto (UpdateOptions.) (.upsert true)))))
+
+(defn flush-graph-edge-rows!
+  [^MongoCollection graph-edges rows]
+  (if (seq rows)
+    (let [ops (ArrayList.)]
+      (doseq [row rows]
+        (.add ops (graph-edge-upsert-model row)))
+      (.bulkWrite graph-edges ops (doto (BulkWriteOptions.) (.ordered false)))
+      (count rows))
+    0))
+
+(defn run-graph-edges-backfill!
+  [{:keys [graph-edges-backfill-limit graph-edges-backfill-batch-size graph-edges-backfill-log-every mongo-db mongo-events mongo-graph-edges] :as cfg}]
+  (let [mongo (open-mongo cfg)]
+    (try
+      (let [events (:events mongo)
+            graph-edges (:graph-edges mongo)
+            total (.countDocuments ^MongoCollection events (doto (Document.) (.append "kind" "graph.edge")))
+            limit (long graph-edges-backfill-limit)
+            effective-total (if (pos? limit) (min total limit) total)
+            cursor (-> events
+                       (.find (doto (Document.) (.append "kind" "graph.edge")))
+                       (.projection (doto (Document.)
+                                      (.append "_id" 1)
+                                      (.append "ts" 1)
+                                      (.append "project" 1)
+                                      (.append "source" 1)
+                                      (.append "extra" 1)))
+                       (.sort (doto (Document.) (.append "_id" 1)))
+                       (.batchSize (int graph-edges-backfill-batch-size)))]
+        (log! :info "clojure graph edges backfill started"
+              {:mongo-db mongo-db
+               :events-collection mongo-events
+               :graph-edges-collection mongo-graph-edges
+               :total total
+               :effective-total effective-total
+               :limit limit
+               :batch-size graph-edges-backfill-batch-size})
+        (loop [iter (.iterator cursor)
+               completed 0
+               stored 0
+               failed 0
+               buffer []]
+          (if (and (.hasNext iter)
+                   (or (not (pos? limit)) (< completed limit)))
+            (let [event (.next iter)
+                  row (graph-edge-row event)
+                  completed* (inc completed)
+                  failed* (if row failed (inc failed))
+                  buffer* (if row (conj buffer row) buffer)
+                  flush? (>= (count buffer*) graph-edges-backfill-batch-size)
+                  stored* (if flush?
+                            (+ stored (flush-graph-edge-rows! graph-edges buffer*))
+                            stored)
+                  buffer** (if flush? [] buffer*)]
+              (when (or (zero? (mod completed* graph-edges-backfill-log-every))
+                        (= completed* effective-total))
+                (log! :info "clojure graph edges backfill progress"
+                      {:completed completed*
+                       :stored stored*
+                       :failed failed*
+                       :total total
+                       :effective-total effective-total}))
+              (recur iter completed* stored* failed* buffer**))
+            (let [stored* (+ stored (flush-graph-edge-rows! graph-edges buffer))]
+              (log! :info "clojure graph edges backfill complete"
+                    {:completed completed
+                     :stored stored*
+                     :failed failed
+                     :total total
+                     :effective-total effective-total})))))
+      (finally
+        (close-mongo! mongo)))))
 
 (defn run-audit!
   [{:keys [enabled topic audit-group-id audit-client-id] :as cfg}]
@@ -369,7 +502,8 @@
         (-> cfg
             (select-keys [:enabled :brokers :topic :replay-dry-run :replay-start-offset :replay-end-offset :replay-max-messages])
             (assoc :mongo-db (:mongo-db cfg)
-                   :mongo-events (:mongo-events cfg)))))
+                   :mongo-events (:mongo-events cfg)
+                   :mongo-graph-edges (:mongo-graph-edges cfg)))))
 
 (defn -main
   [& args]
@@ -378,9 +512,10 @@
     (case mode
       "audit" (run-audit! cfg)
       "replay" (run-replay! cfg)
+      "graph-edges-backfill" (run-graph-edges-backfill! cfg)
       "check" (run-check! cfg)
       (do
         (binding [*out* *err*]
-          (println "usage: clj -M -m openplanner.kafka.jobs [audit|replay|check]"))
+          (println "usage: clj -M -m openplanner.kafka.jobs [audit|replay|graph-edges-backfill|check]"))
         (System/exit 2)))
     (shutdown-agents)))

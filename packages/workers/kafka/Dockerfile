@@ -6,7 +6,7 @@ RUN mkdir -p /tmp/clojure-home/.clojure
 ENV HOME=/tmp/clojure-home
 
 COPY deps.edn ./
-RUN clojure -P -M:audit && clojure -P -M:replay && clojure -P -M:check
+RUN clojure -P -M:audit && clojure -P -M:replay && clojure -P -M:graph-edges-backfill && clojure -P -M:check
 
 COPY src ./src
 COPY README.md ./README.md

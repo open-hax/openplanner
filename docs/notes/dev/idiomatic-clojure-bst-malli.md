@@ -1,3 +1,11 @@
+---
+original_name: "2026.04.28.18.02.51.md"
+title: "Idiomatic Clojure BST with Malli"
+summary: "Shows an idiomatic Clojure binary search tree using plain data, Malli schemas, protocols, records, and instrumentation."
+category: "dev"
+created: "2026-04-28"
+---
+
 
 ## Example of idomatic clojure to use in place of a class
 
