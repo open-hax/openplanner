@@ -26,7 +26,8 @@
 
 (defn valid-cache-key?
   [value]
-  (boolean (core/nonblank value)))
+  (and (string? value)
+       (boolean (core/nonblank value))))
 
 (defn valid-ms?
   [value]
