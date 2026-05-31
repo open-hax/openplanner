@@ -1331,7 +1331,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       shardCount,
       rotationCursor,
       project,
-      seeds: requestedSeedNodeIds.slice(0, 8),
+      seeds: requestedSeedNodeIds,
     };
     const cacheKey = graphProjectionCacheKey("view", cacheParams);
     const cachedView = await readCachedProjection<any>({
