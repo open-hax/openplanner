@@ -8,6 +8,7 @@
     "start": "node dist/main.js",
     "dev": "tsc -w",
     "dev:watch:container": "sh ./scripts/dev-watch-container.sh",
+    "check:no-new-typescript": "node scripts/check-no-new-typescript.mjs",
     "lint": "eslint --config eslint.config.mjs .",
     "lint:strict": "eslint --config eslint.config.mjs . --max-warnings=0",
     "duplication:scan": "pnpm dlx jscpd@4.0.5 --config .jscpd.json --threshold 100",
