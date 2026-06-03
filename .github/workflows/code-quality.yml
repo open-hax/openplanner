@@ -23,7 +23,7 @@ jobs:
       # the inventory gate needs.
       - name: Init GitHub-hosted submodules for inventory
         run: |
-          git config url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
 
       - name: Set up Node.js
@@ -50,7 +50,7 @@ jobs:
       # file:/// submodule breaks recursive checkout on hosted runners.
       - name: Init GitHub-hosted submodules
         run: |
-          git config url."https://github.com/".insteadOf "git@github.com:"
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
           git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
 
       - name: Set up Node.js
