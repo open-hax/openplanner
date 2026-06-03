@@ -225,6 +225,10 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
   }
   const sr = ev.source_ref ?? {};
   const meta = ev.meta ?? {};
+  const extra = (ev.extra as Record<string, unknown> | undefined) ?? {};
+  const labels = Array.isArray((extra.openplanner_labels as any)?.labels)
+    ? [...new Set((extra.openplanner_labels as any).labels.map((label: unknown) => String(label ?? "").trim()).filter(Boolean))]
+    : [];
   const embeddingScope = {
     source: ev.source,
     kind: ev.kind,
@@ -240,8 +244,9 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
     role: meta.role ? String(meta.role) : "",
     model: meta.model ? String(meta.model) : "",
     search_tier: "hot",
-    visibility: (ev.extra as Record<string, unknown> | undefined)?.visibility ?? "internal",
-    title: (ev.extra as Record<string, unknown> | undefined)?.title ?? sr.message ?? ev.id,
+    visibility: extra.visibility ?? "internal",
+    labels,
+    title: extra.title ?? sr.message ?? ev.id,
   } as Record<string, unknown>;
 
   const embeddingRuntime = (app as any).embeddingRuntime;
@@ -252,7 +257,7 @@ async function indexDocument(app: any, ev: EventEnvelopeV1): Promise<boolean> {
     tier: "hot",
     parentId: ev.id,
     text: content,
-    extra: (ev.extra as Record<string, unknown> | undefined) ?? {},
+    extra,
     metadata: { ...metadata, embedding_model: embeddingModel ?? "" },
     embeddingFunction,
   });

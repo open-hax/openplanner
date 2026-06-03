@@ -79,6 +79,20 @@ function toNumberOrNull(value: unknown): number | null {
   return null;
 }
 
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((entry) => String(entry ?? "").trim()).filter(Boolean))];
+}
+
+function parsePositiveIntEnv(name: string): number {
+  const parsed = Number.parseInt(process.env[name] ?? "0", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function ttlExpiryFromNow(ttlSeconds: number): Date | undefined {
+  return ttlSeconds > 0 ? new Date(Date.now() + ttlSeconds * 1000) : undefined;
+}
+
 function nonBlankString(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -294,6 +308,7 @@ function toMetadata(doc: MongoVectorDocument): Record<string, unknown> {
     model: doc.model ?? "",
     visibility: doc.visibility ?? "",
     quality_label: doc.quality_label ?? "",
+    labels: doc.labels ?? [],
     title: doc.title ?? "",
     embedding_model: doc.embedding_model ?? "",
     embedding_dimensions: doc.embedding_dimensions ?? null,
@@ -317,6 +332,34 @@ function toMetadata(doc: MongoVectorDocument): Record<string, unknown> {
     schema_version: doc.schema_version ?? null,
     migration_state: doc.migration_state ?? null,
   };
+}
+
+async function ensureVectorTtlIndex(collection: Collection<MongoVectorDocument>, tier: MongoVectorTier): Promise<void> {
+  const ttlSeconds = tier === "hot"
+    ? parsePositiveIntEnv("MONGODB_EVENTS_TTL_SECONDS")
+    : parsePositiveIntEnv("MONGODB_COMPACTED_TTL_SECONDS");
+  if (ttlSeconds <= 0) return;
+
+  const name = tier === "hot" ? "hot_vectors_ttl" : "compact_vectors_ttl";
+  const existing = (await collection.indexes()).find((index) => index.name === name);
+  if (
+    existing
+    && (
+      existing.expireAfterSeconds !== 0
+      || JSON.stringify(existing.partialFilterExpression ?? {}) !== JSON.stringify({})
+    )
+  ) {
+    await collection.dropIndex(name);
+  }
+
+  await collection.createIndex(
+    { expiresAt: 1 },
+    {
+      expireAfterSeconds: 0,
+      name,
+      background: true,
+    },
+  );
 }
 
 function sanitizeModelName(model: string): string {
@@ -368,7 +411,7 @@ async function waitForQueryableSearchIndex(
   throw new Error(`timed out waiting for vector search index ${indexName} to become queryable (${lastState})`);
 }
 
-async function ensurePartitionSupportIndexes(collection: Collection<MongoVectorDocument>): Promise<void> {
+async function ensurePartitionSupportIndexes(collection: Collection<MongoVectorDocument>, tier: MongoVectorTier): Promise<void> {
   await collection.createIndex({ parent_id: 1, chunk_index: 1 });
   await collection.createIndex({ ts: -1 });
   await collection.createIndex({ source: 1, ts: -1 });
@@ -377,8 +420,10 @@ async function ensurePartitionSupportIndexes(collection: Collection<MongoVectorD
   await collection.createIndex({ session: 1, ts: -1 });
   await collection.createIndex({ visibility: 1, ts: -1 });
   await collection.createIndex({ quality_label: 1, ts: -1 });
+  await collection.createIndex({ labels: 1, ts: -1 });
   await collection.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
   await collection.createIndex({ schema_version: 1, ts: -1 });
+  await ensureVectorTtlIndex(collection, tier);
 }
 
 async function ensurePartitionVectorSearchIndex(
@@ -471,7 +516,7 @@ async function ensureVectorPartition(
   }
 
   const collection = mongo.db.collection<MongoVectorDocument>(collectionName);
-  await ensurePartitionSupportIndexes(collection);
+  await ensurePartitionSupportIndexes(collection, tier);
   await ensurePartitionVectorSearchIndex(mongo, partition);
   return { partition: { ...partition, collectionName }, collection };
 }
@@ -551,6 +596,10 @@ export async function listMongoVectorPartitions(
 function toMongoVectorDocument(entry: MongoVectorEntry, tier: MongoVectorTier, now: Date): MongoVectorDocument {
   const ts = asDate(entry.metadata.ts);
   const sourceTextRedacted = entry.metadata.source_text_redacted === true;
+  const labels = toStringArray(entry.metadata.labels);
+  const ttlSeconds = tier === "hot"
+    ? parsePositiveIntEnv("MONGODB_EVENTS_TTL_SECONDS")
+    : parsePositiveIntEnv("MONGODB_COMPACTED_TTL_SECONDS");
   return {
     _id: entry.id,
     parent_id: entry.parentId,
@@ -566,6 +615,7 @@ function toMongoVectorDocument(entry: MongoVectorEntry, tier: MongoVectorTier, n
     model: toStringOrNull(entry.metadata.model),
     visibility: toStringOrNull(entry.metadata.visibility),
     quality_label: toStringOrNull(entry.metadata.quality_label),
+    labels,
     title: toStringOrNull(entry.metadata.title),
     embedding_model: toStringOrNull(entry.metadata.embedding_model),
     embedding_dimensions: entry.embedding.length,
@@ -587,6 +637,7 @@ function toMongoVectorDocument(entry: MongoVectorEntry, tier: MongoVectorTier, n
     char_end: toNumberOrNull(entry.metadata.char_end),
     schema_version: OPENPLANNER_SCHEMA_TARGETS.vectorChunk,
     migration_state: vectorChunkMigrationState(now),
+    expiresAt: labels.length > 0 ? null : ttlExpiryFromNow(ttlSeconds) ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -693,6 +744,95 @@ export async function deleteMongoVectorEntriesByFilter(
       session,
     );
   });
+}
+
+async function updatePartitionVectorLabels(
+  mongo: MongoConnection,
+  tier: MongoVectorTier,
+  parentId: string,
+  update: Record<string, unknown> | Record<string, unknown>[],
+): Promise<void> {
+  const partitions = await listMongoVectorPartitions(mongo, tier);
+  await Promise.all(partitions.map((partition) => (
+    mongo.db.collection<MongoVectorDocument>(partition.collectionName).updateMany({ parent_id: parentId }, update)
+  )));
+}
+
+export async function addMongoVectorParentLabel(
+  mongo: MongoConnection,
+  parentId: string,
+  label: string,
+): Promise<void> {
+  const normalized = label.trim();
+  if (!normalized) return;
+  const update = [
+    {
+      $set: {
+        labels: {
+          $setUnion: [
+            { $cond: [{ $isArray: "$labels" }, "$labels", []] },
+            [normalized],
+          ],
+        },
+        expiresAt: "$$REMOVE",
+        updatedAt: new Date(),
+      },
+    },
+  ];
+  await Promise.all([
+    mongo.hotVectors.updateMany({ parent_id: parentId }, update),
+    mongo.compactVectors.updateMany({ parent_id: parentId }, update),
+    updatePartitionVectorLabels(mongo, "hot", parentId, update),
+    updatePartitionVectorLabels(mongo, "compact", parentId, update),
+  ]);
+}
+
+export async function removeMongoVectorParentLabel(
+  mongo: MongoConnection,
+  parentId: string,
+  label: string,
+): Promise<void> {
+  const normalized = label.trim();
+  if (!normalized) return;
+  const updateForTier = (tier: MongoVectorTier) => {
+    const ttlSeconds = tier === "hot"
+      ? parsePositiveIntEnv("MONGODB_EVENTS_TTL_SECONDS")
+      : parsePositiveIntEnv("MONGODB_COMPACTED_TTL_SECONDS");
+    const expiresAt = ttlExpiryFromNow(ttlSeconds) ?? null;
+    return [
+      {
+        $set: {
+          labels: {
+            $filter: {
+              input: { $cond: [{ $isArray: "$labels" }, "$labels", []] },
+              as: "existingLabel",
+              cond: { $ne: ["$$existingLabel", normalized] },
+            },
+          },
+          updatedAt: new Date(),
+        },
+      },
+      {
+        $set: {
+          expiresAt: {
+            $cond: [
+              { $gt: [{ $size: "$labels" }, 0] },
+              "$$REMOVE",
+              expiresAt,
+            ],
+          },
+        },
+      },
+    ];
+  };
+  const hotUpdate = updateForTier("hot");
+  const compactUpdate = updateForTier("compact");
+  await Promise.all([
+    mongo.hotVectors.updateMany({ parent_id: parentId }, hotUpdate),
+    mongo.compactVectors.updateMany({ parent_id: parentId }, compactUpdate),
+    updatePartitionVectorLabels(mongo, "hot", parentId, hotUpdate),
+    updatePartitionVectorLabels(mongo, "compact", parentId, compactUpdate),
+  ]);
 }
 
 export async function replaceMongoVectorEntries(

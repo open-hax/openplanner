@@ -269,34 +269,33 @@ export async function renderMarkdown(
 ): Promise<string> {
   configureMarked();
 
-  // Custom renderer for code blocks
+  // Custom renderer for code blocks.
+  //
+  // marked does not support async renderers, so we capture each code block's
+  // raw text/lang into a side array during the synchronous parse and emit an
+  // opaque, index-keyed placeholder token. Afterwards we highlight each block
+  // asynchronously and splice the results back in by index. This avoids the
+  // previous regex (which depended on `[^<]*` over HTML-escaped content and on
+  // String.replace special-pattern semantics for the substituted HTML).
   const renderer = new marked.Renderer();
-  
-  const originalCode = renderer.code;
+  const codeBlocks: Array<{ text: string; lang?: string }> = [];
+
   renderer.code = function({ text, lang }: { text: string; lang?: string }) {
-    // Return a placeholder that we'll replace later
-    // Note: marked doesn't support async renderers directly, so we use sync fallback
-    return `<pre class="shiki-placeholder" data-lang="${lang || 'text'}"><code>${escapeHtml(text)}</code></pre>`;
+    const index = codeBlocks.length;
+    codeBlocks.push({ text, lang });
+    return `<!--SHIKI-PLACEHOLDER-${index}-->`;
   };
 
   // Parse markdown to HTML with custom renderer
   let html = marked.parse(content, { renderer }) as string;
-  
-  // Process code blocks with shiki asynchronously
-  const codeBlockRegex = /<pre class="shiki-placeholder" data-lang="([^"]*)"><code>([^<]*)<\/code><\/pre>/g;
-  const matches = Array.from(html.matchAll(codeBlockRegex));
-  
-  for (const match of matches) {
-    const [fullMatch, lang, encodedCode] = match;
-    const code = encodedCode
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#039;/g, "'");
-    
-    const highlighted = await highlightCode(code, lang, theme);
-    html = html.replace(fullMatch, highlighted);
+
+  // Highlight each captured block, then substitute placeholders by index.
+  // Using split/join with the literal token avoids regex-replacement pitfalls
+  // (e.g. `$&` / `$1` sequences appearing inside highlighted code).
+  for (let index = 0; index < codeBlocks.length; index += 1) {
+    const { text, lang } = codeBlocks[index];
+    const highlighted = await highlightCode(text, lang, theme);
+    html = html.split(`<!--SHIKI-PLACEHOLDER-${index}-->`).join(highlighted);
   }
 
   // Wrap with themed styling
@@ -506,7 +505,7 @@ export async function renderGardenPage(
 /**
  * Render a garden index/landing page
  */
-export function renderGardenIndex(
+export async function renderGardenIndex(
   garden: GardenDocument,
   documents: Array<{
     doc_id: string;
@@ -515,7 +514,7 @@ export function renderGardenIndex(
     language?: string;
   }>,
   options: GardenRenderOptions = {}
-): string {
+): Promise<string> {
   const theme = getThemeName(garden);
   const themeCss = getThemeCss(theme);
   const navHtml = options.includeNav !== false ? renderNav(garden, options) : "";

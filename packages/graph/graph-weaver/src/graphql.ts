@@ -54,6 +54,14 @@ export type GraphQLState = {
     edges: number;
     seeds: number;
     weaver: { frontier: number; inFlight: number };
+    localSync: {
+      ok: boolean;
+      mode: string;
+      lastSuccessfulAt: string | null;
+      lastAttemptAt: string | null;
+      error: string | null;
+      prunedOverlayNodes: number;
+    };
     render: RuntimeConfig["render"];
     scan: RuntimeConfig["scan"];
   };
@@ -429,8 +437,23 @@ const schema = buildSchema(`
     edges: Int!
     seeds: Int!
     weaver: WeaverStatus!
+    localSync: LocalSync!
     render: RenderConfig!
     scan: ScanConfig!
+  }
+
+  """
+  Health of the local-source rebuild (e.g. the OpenPlanner graph export).
+  When ok is false the rendered graph may reflect stale persisted state
+  rather than the current canonical OpenPlanner graph.
+  """
+  type LocalSync {
+    ok: Boolean!
+    mode: String!
+    error: String
+    lastSuccessfulAt: String
+    lastAttemptAt: String
+    prunedOverlayNodes: Int!
   }
 
   type WeaverStatus {

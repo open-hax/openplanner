@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 import os from "node:os";
 import { upsertGraphLayoutOverrides, upsertGraphNodeEmbeddings, upsertGraphSemanticEdges, upsertGraphSemanticForceSamples, upsertGraphEdges } from "../../lib/mongodb.js";
 import type { GraphEdgeClaimDirection, GraphEdgeClaimDocument, GraphEdgeClaimStatus, GraphSemanticFieldCellDocument, GraphViewNodeDocument, GraphViewNodeSourceMetadata } from "../../lib/mongodb.js";
-import { queryMongoVectorsByText } from "../../lib/mongo-vectors.js";
+import { addMongoVectorParentLabel, queryMongoVectorsByText, removeMongoVectorParentLabel } from "../../lib/mongo-vectors.js";
 import { extractTieredVectorHits } from "../../lib/vector-search.js";
 import { formatEmbeddingQueryText, formatEmbeddingPassageText } from "../../lib/embedding-text.js";
 import { prepareIndexDocument } from "../../lib/indexing.js";
@@ -3299,6 +3299,30 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       { upsert: true },
     );
 
+    const labelText = String(label.label ?? labelId).trim() || labelId;
+    const markLabelPipeline = [
+      { $set: { extra: { $cond: [{ $eq: [{ $type: "$extra" }, "object"] }, "$extra", {}] } } },
+      { $set: { "extra.openplanner_labels": { $cond: [{ $eq: [{ $type: "$extra.openplanner_labels" }, "object"] }, "$extra.openplanner_labels", {}] } } },
+      { $set: {
+        "extra.openplanner_labels.labels": {
+          $setUnion: [
+            { $cond: [{ $isArray: "$extra.openplanner_labels.labels" }, "$extra.openplanner_labels.labels", []] },
+            [labelText],
+          ],
+        },
+        "extra.openplanner_labels.updated_at": now,
+        "extra.openplanner_labels.claim_system": "graph-label-v1",
+        expiresAt: "$$REMOVE",
+        updatedAt: now,
+      } },
+    ];
+
+    await Promise.all([
+      app.mongo.events.updateOne({ _id: nodeId }, markLabelPipeline as any),
+      app.mongo.compacted.updateOne({ _id: nodeId }, markLabelPipeline as any),
+      addMongoVectorParentLabel(app.mongo, nodeId, labelText),
+    ]);
+
     return { ok: true, edge };
   });
 
@@ -3310,8 +3334,47 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     if (!labelId) return reply.status(400).send({ error: "label_id_required" });
     if (!nodeId) return reply.status(400).send({ error: "node_id_required" });
 
+    const label = await app.mongo.graphLabelNodes.findOne({ label_id: labelId });
+    const labelText = String(label?.label ?? labelId).trim() || labelId;
+    const now = new Date();
     const edgeId = `has_label:${nodeId}:${labelId}`;
     const result = await app.mongo.graphEdges.deleteOne({ _id: edgeId });
+
+    const unmarkLabelPipeline = (ttlSeconds: number) => {
+      const expiresAt = ttlSeconds > 0 ? new Date(Date.now() + ttlSeconds * 1000) : null;
+      return [
+      { $set: { extra: { $cond: [{ $eq: [{ $type: "$extra" }, "object"] }, "$extra", {}] } } },
+      { $set: { "extra.openplanner_labels": { $cond: [{ $eq: [{ $type: "$extra.openplanner_labels" }, "object"] }, "$extra.openplanner_labels", {}] } } },
+      { $set: {
+        "extra.openplanner_labels.labels": {
+          $filter: {
+            input: { $cond: [{ $isArray: "$extra.openplanner_labels.labels" }, "$extra.openplanner_labels.labels", []] },
+            as: "existingLabel",
+            cond: { $ne: ["$$existingLabel", labelText] },
+          },
+        },
+        "extra.openplanner_labels.updated_at": now,
+        updatedAt: now,
+      } },
+      { $set: {
+        expiresAt: {
+          $cond: [
+            { $gt: [{ $size: "$extra.openplanner_labels.labels" }, 0] },
+            "$$REMOVE",
+            expiresAt,
+          ],
+        },
+      } },
+    ];
+    };
+    const eventsTtlSeconds = Number.parseInt(process.env.MONGODB_EVENTS_TTL_SECONDS ?? "0", 10);
+    const compactedTtlSeconds = Number.parseInt(process.env.MONGODB_COMPACTED_TTL_SECONDS ?? "0", 10);
+
+    await Promise.all([
+      app.mongo.events.updateOne({ _id: nodeId }, unmarkLabelPipeline(Number.isFinite(eventsTtlSeconds) ? eventsTtlSeconds : 0) as any),
+      app.mongo.compacted.updateOne({ _id: nodeId }, unmarkLabelPipeline(Number.isFinite(compactedTtlSeconds) ? compactedTtlSeconds : 0) as any),
+      removeMongoVectorParentLabel(app.mongo, nodeId, labelText),
+    ]);
 
     return { ok: true, removed: result.deletedCount > 0 };
   });

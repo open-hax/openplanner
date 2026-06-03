@@ -1,0 +1,68 @@
+name: Code Quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  no-new-typescript:
+    name: No new TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # The file:/// openplanner-migration-tools submodule breaks recursive
+      # checkout on hosted runners; init only the GitHub-hosted submodules
+      # the inventory gate needs.
+      - name: Init GitHub-hosted submodules for inventory
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Run no-new-TypeScript gate
+        run: pnpm run check:no-new-typescript
+
+  duplication:
+    name: Code duplication
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # file:/// submodule breaks recursive checkout on hosted runners.
+      - name: Init GitHub-hosted submodules
+        run: |
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Run duplication gate
+        run: pnpm duplication:check
