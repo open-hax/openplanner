@@ -20,8 +20,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
-        with:
-          submodules: recursive
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -55,5 +53,5 @@ jobs:
       service: openplanner
       source_repository: ${{ github.repository }}
       source_ref: ${{ github.sha }}
-      checkout_submodules: true
+      checkout_submodules: false
     secrets: inherit
