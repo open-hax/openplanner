@@ -17,8 +17,14 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # The file:/// openplanner-migration-tools submodule breaks recursive
+      # checkout on hosted runners; init only the GitHub-hosted submodules
+      # the inventory gate needs.
+      - name: Init GitHub-hosted submodules for inventory
+        run: |
+          git config url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -40,8 +46,12 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      # file:/// submodule breaks recursive checkout on hosted runners.
+      - name: Init GitHub-hosted submodules
+        run: |
+          git config url."https://github.com/".insteadOf "git@github.com:"
+          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

@@ -86,11 +86,12 @@ jobs:
       - testing-eligibility
     if: ${{ needs.testing-eligibility.outputs.should_deploy == 'true' }}
     steps:
+      # No recursive submodules: the file:/// openplanner-migration-tools
+      # submodule breaks checkout on hosted runners (same as deploy-staging).
       - name: Check out repository
         uses: actions/checkout@v5
         with:
           ref: ${{ needs.testing-eligibility.outputs.pr_head_sha }}
-          submodules: recursive
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -107,10 +108,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # check:no-new-typescript and duplication:check need submodules and
+      # run in the Code Quality workflow instead; mirror deploy-staging's
+      # preflight here.
       - name: Run OpenPlanner quality gates
         run: |
-          pnpm run check:no-new-typescript
-          pnpm duplication:check
           pnpm run build
           pnpm test
 
@@ -126,5 +128,5 @@ jobs:
       service: openplanner
       source_repository: ${{ github.repository }}
       source_ref: ${{ needs.testing-eligibility.outputs.pr_head_sha }}
-      checkout_submodules: true
+      checkout_submodules: false
     secrets: inherit
