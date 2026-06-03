@@ -1,21 +1,42 @@
-# Π Fork Tax Snapshot — openplanner
+# Π handoff — TS→CLJS gate, labels fix, services deploy workflows (openplanner)
 
-- Timestamp: 20260516T185547Z
-- Branch: tests/sentance-chunker
-- Base: a25ff73f3ad5
-- Scope: recursive child pointer/artifact preservation.
+- time: 2026-06-03T20:34:00Z
+- branch: `pi/fork-tax/20260529T022118Z-main-softreset-all-dirt-openplanner`
+- base target: `origin/staging`
+- tag: `Π/20260603T203400Z-openplanner-ts-gate-deploy-workflows`
 
-## Included work
+## Commits in this Π
 
-- Pinned `packages/agents/knoxx` to pushed fork-tax commit `a770d959`.
-- Preserved WebGL graph view fork-tax artifacts produced in the nested package workspace.
-- Recorded recursive fork-tax handoff artifacts for this OpenPlanner parent layer.
+1. `feat: TS-to-CLJS migration roadmap + no-new-TypeScript inventory gate`
+   — scripts/check-no-new-typescript.mjs + 756-entry allowlist, code-quality
+   job, docs/architecture roadmap + inventory, kanban epic/tasks.
+2. `fix(labels): persist reaction labels on vectors and clear TTL expiry`
+3. `ci: deploy workflows via open-hax/services module` — deploy-staging,
+   deploy-production, and label-gated deploy-testing (PR head → shared
+   staging slot via deploy-promethean.yml@main, service: openplanner).
+4. Π process commit — receipts.edn (+8), kanban board snapshots, knoxx
+   submodule pointer → 58629bd1 (pushed on open-hax/knoxx
+   test/coverage-improvement), .ημ artifacts.
+5. Merge of `origin/staging` (its deploy-workflow fixes supersede the local
+   stale copies: no recursive submodule checkout on runners — the
+   `file:///` openplanner-migration-tools submodule breaks it —
+   `checkout_submodules: false` for the service module).
+
+## Known constraints
+
+- `check:no-new-typescript` requires the knoxx submodule checked out
+  (allowlist entries beneath it go stale otherwise); the code-quality job
+  inits GitHub-hosted submodules explicitly, never the `file:///` one.
+- `pull_request_target` workflows execute from the base branch:
+  deploy-testing.yml activates for labeled PRs only after this merges to
+  staging.
 
 ## Verification
 
-- `git diff --cached --check` passed.
-- Child repositories `knoxx` and `webgl-graph-view` were committed, tagged, and pushed first.
+- `node scripts/check-no-new-typescript.mjs` → pass (756/756, local with submodules)
+- `actionlint` deploy-testing/staging/production → clean
+- build/test run in PR CI (staging-preflight gates)
 
-## Residual dirt
+## Concurrent dirt left untouched
 
-- No additional OpenPlanner parent dirt selected for this commit.
+- none in this repo at snapshot time

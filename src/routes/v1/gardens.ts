@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import type { GardenDocument } from "../../lib/mongodb.js";
+import type { GardenDocument, MongoConnection } from "../../lib/mongodb.js";
 
 type GardenStatus = "draft" | "active" | "archived";
 
@@ -95,6 +95,71 @@ function toResponse(doc: GardenDocument): GardenResponse {
   };
 }
 
+interface GardenStats {
+  documents_count: number;
+  translations_count: number;
+  last_published_at?: Date;
+}
+
+/**
+ * Recompute and persist a garden's stats (document count, translation segment
+ * count, last-published timestamp). Returns the freshly computed stats, or null
+ * if the garden does not exist. Shared by the stats route and the CMS publish
+ * workflow so published documents are reflected immediately.
+ */
+export async function recalculateGardenStats(
+  mongo: MongoConnection,
+  garden_id: string
+): Promise<GardenStats | null> {
+  const garden = await mongo.gardens.findOne({ garden_id });
+  if (!garden) return null;
+
+  const documentsCount = await mongo.events.countDocuments({
+    kind: "docs",
+    "extra.metadata.garden_publications.garden_id": garden_id,
+  });
+
+  const translationsCount = await mongo.db
+    .collection("translation_segments")
+    .countDocuments({ garden_id });
+
+  const lastPublished = await mongo.events.findOne(
+    {
+      kind: "docs",
+      "extra.metadata.garden_publications.garden_id": garden_id,
+    },
+    { sort: { ts: -1 } }
+  );
+
+  // events store `ts` as an ISO string; normalize to Date so the stored stats
+  // match the GardenDocument schema and toResponse() can call toISOString().
+  const lastPublishedTs = lastPublished?.ts;
+  const lastPublishedAt =
+    typeof lastPublishedTs === "string" || typeof lastPublishedTs === "number"
+      ? new Date(lastPublishedTs)
+      : lastPublishedTs instanceof Date
+        ? lastPublishedTs
+        : undefined;
+
+  const stats: GardenStats = {
+    documents_count: documentsCount,
+    translations_count: translationsCount,
+    ...(lastPublishedAt ? { last_published_at: lastPublishedAt } : {}),
+  };
+
+  await mongo.gardens.updateOne(
+    { garden_id },
+    {
+      $set: {
+        stats,
+        updatedAt: new Date(),
+      },
+    }
+  );
+
+  return stats;
+}
+
 export const gardenRoutes: FastifyPluginAsync = async (app) => {
   const gardens = app.mongo.gardens;
 
@@ -108,7 +173,13 @@ export const gardenRoutes: FastifyPluginAsync = async (app) => {
     const owner_id = query.owner_id;
 
     const filter: Record<string, unknown> = {};
-    if (status) filter.status = status;
+    if (status) {
+      // Explicit status filter is honored verbatim (e.g. ?status=archived).
+      filter.status = status;
+    } else {
+      // Default listing hides archived gardens (soft-deleted).
+      filter.status = { $ne: "archived" };
+    }
     if (owner_id) filter.owner_id = owner_id;
 
     const docs = await gardens.find(filter).sort({ createdAt: -1 }).toArray();
@@ -175,7 +246,8 @@ export const gardenRoutes: FastifyPluginAsync = async (app) => {
     const garden_id = String((req.params as { id: string }).id);
     const doc = await gardens.findOne({ garden_id });
 
-    if (!doc) {
+    if (!doc || doc.status === "archived") {
+      // Archived gardens are soft-deleted and not retrievable via GET.
       return reply.status(404).send({ error: "garden not found" });
     }
 
@@ -280,46 +352,10 @@ export const gardenRoutes: FastifyPluginAsync = async (app) => {
   app.post("/gardens/:id/stats", async (req, reply) => {
     const garden_id = String((req.params as { id: string }).id);
 
-    const garden = await gardens.findOne({ garden_id });
-    if (!garden) {
+    const stats = await recalculateGardenStats(app.mongo, garden_id);
+    if (!stats) {
       return reply.status(404).send({ error: "garden not found" });
     }
-
-    // Count documents published to this garden
-    const documentsCount = await app.mongo.events.countDocuments({
-      kind: "docs",
-      "extra.metadata.garden_publications.garden_id": garden_id,
-    });
-
-    // Count translation segments for this garden
-    const translationsCount = await app.mongo.db
-      .collection("translation_segments")
-      .countDocuments({ garden_id });
-
-    // Get last published date
-    const lastPublished = await app.mongo.events.findOne(
-      {
-        kind: "docs",
-        "extra.metadata.garden_publications.garden_id": garden_id,
-      },
-      { sort: { ts: -1 } }
-    );
-
-    const stats = {
-      documents_count: documentsCount,
-      translations_count: translationsCount,
-      last_published_at: lastPublished?.ts ?? undefined,
-    };
-
-    await gardens.updateOne(
-      { garden_id },
-      {
-        $set: {
-          stats,
-          updatedAt: new Date(),
-        },
-      }
-    );
 
     return { ok: true, garden_id, stats };
   });

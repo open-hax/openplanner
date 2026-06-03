@@ -14,6 +14,7 @@ Principles:
 ```bash
 clojure -M:audit
 clojure -M:replay
+clojure -M:graph-edges-backfill
 clojure -M:check
 ```
 
@@ -30,5 +31,11 @@ The container image AOT-compiles `openplanner.kafka.jobs` and runs it with `java
 | `OPENPLANNER_KAFKA_REPLAY_START_OFFSET` | `earliest` | replay start offset |
 | `OPENPLANNER_KAFKA_REPLAY_END_OFFSET` | `latest` | replay end offset at worker start |
 | `OPENPLANNER_KAFKA_REPLAY_MAX_MESSAGES` | `1000` | replay safety cap |
+| `OPENPLANNER_GRAPH_EDGES_BACKFILL_LIMIT` | `0` | maximum historical `graph.edge` events to scan; `0` means no limit |
+| `OPENPLANNER_GRAPH_EDGES_BACKFILL_BATCH_SIZE` | `1000` | Mongo bulk upsert batch size for graph edge projection rebuilds |
+| `OPENPLANNER_GRAPH_EDGES_BACKFILL_LOG_EVERY` | `1000` | progress log interval for graph edge backfill |
+| `MONGODB_GRAPH_EDGES_COLLECTION` | `graph_edges` | target graph edge projection collection |
 
 The replay worker currently rebuilds the raw Mongo `events` projection idempotently by event id. Derived graph projection replay comes next.
+
+`graph-edges-backfill` is the first derived projection worker. It scans historical `graph.edge` events from Mongo, extracts `extra.source_node_id`, `extra.target_node_id`, and `extra.edge_type`/`extra.edge_kind`, and idempotently upserts `source||target||kind` rows into `graph_edges`.
