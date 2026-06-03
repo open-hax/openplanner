@@ -471,6 +471,7 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
                 search_tier: "hot",
                 visibility: extra.visibility ?? "internal",
                 quality_label: ((extra.openplanner_labels as any)?.quality ?? ""),
+                labels,
                 title: extra.title ?? (sr as any).message ?? ev.id,
               },
               embeddingFunction,

@@ -97,9 +97,15 @@ function labelId(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-async function updateVectorQualityLabel(app: FastifyInstance, recordId: string, quality: "good" | "bad" | null): Promise<number> {
-  if (!quality) return 0;
-  const update = { $set: { quality_label: quality, updatedAt: new Date() } };
+async function updateVectorReactionLabel(app: FastifyInstance, recordId: string, reactionLabel: string, quality: "good" | "bad" | null): Promise<number> {
+  const update = {
+    $set: {
+      ...(quality ? { quality_label: quality } : {}),
+      updatedAt: new Date(),
+    },
+    $addToSet: { labels: reactionLabel },
+    $unset: { expiresAt: "" },
+  };
   let modified = 0;
   const collections = [app.mongo.hotVectors, app.mongo.compactVectors];
 
@@ -161,9 +167,10 @@ export async function labelsRoutes(app: FastifyInstance) {
           "extra.openplanner_labels.labels": reactionLabel,
         },
         $push: { "extra.openplanner_labels.history": labelEntry },
+        $unset: { expiresAt: "" },
       },
     );
-    const vectorModified = await updateVectorQualityLabel(app, recordId, quality);
+    const vectorModified = await updateVectorReactionLabel(app, recordId, reactionLabel, quality);
 
     // Also create/update graph-native label node and has_label edge
     try {

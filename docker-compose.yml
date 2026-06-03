@@ -167,6 +167,35 @@ services:
       default: {}
       ai-infra: {}
 
+  # One-shot Clojure worker: materialize historical graph.edge events into graph_edges.
+  # Run with: docker compose --profile workers run --rm openplanner-graph-edges-backfill
+  openplanner-graph-edges-backfill:
+    build:
+      context: ./packages/workers/kafka
+      dockerfile: Dockerfile
+    command:
+      - sh
+      - -lc
+      - /opt/java/openjdk/bin/java ${JAVA_OPTS:--XX:TieredStopAtLevel=1} -cp "$(cat .cpcache/runtime.cp)" openplanner.kafka.jobs graph-edges-backfill
+    depends_on:
+      mongodb:
+        condition: service_healthy
+        required: false
+    environment:
+      MONGODB_URI: "${MONGODB_URI:-mongodb://mongodb:27017/openplanner?replicaSet=rs0}"
+      MONGODB_DB: "${MONGODB_DB:-openplanner}"
+      MONGODB_EVENTS_COLLECTION: "${MONGODB_EVENTS_COLLECTION:-events}"
+      MONGODB_GRAPH_EDGES_COLLECTION: "${MONGODB_GRAPH_EDGES_COLLECTION:-graph_edges}"
+      OPENPLANNER_GRAPH_EDGES_BACKFILL_LIMIT: "${OPENPLANNER_GRAPH_EDGES_BACKFILL_LIMIT:-0}"
+      OPENPLANNER_GRAPH_EDGES_BACKFILL_BATCH_SIZE: "${OPENPLANNER_GRAPH_EDGES_BACKFILL_BATCH_SIZE:-1000}"
+      OPENPLANNER_GRAPH_EDGES_BACKFILL_LOG_EVERY: "${OPENPLANNER_GRAPH_EDGES_BACKFILL_LOG_EVERY:-1000}"
+    restart: "no"
+    profiles:
+      - workers
+    networks:
+      default: {}
+      ai-infra: {}
+
   # Prometheus - metrics collection
   prometheus:
     image: prom/prometheus:latest

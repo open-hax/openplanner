@@ -10,6 +10,7 @@ COPY package.json tsconfig.json ./
 COPY pnpm-workspace.yaml .
 COPY pnpm-lock.yaml .
 COPY packages/graph/graph-claim-core/package.json ./packages/graph/graph-claim-core/package.json
+COPY packages/gardens/publication-components/package.json ./packages/gardens/publication-components/package.json
 COPY packages/stores/cache/package.json ./packages/stores/cache/package.json
 COPY packages/stores/document-hydration/package.json ./packages/stores/document-hydration/package.json
 COPY packages/translations/translation-core/package.json ./packages/translations/translation-core/package.json
@@ -19,6 +20,7 @@ RUN pnpm install --no-frozen-lockfile
 
 COPY src ./src
 COPY packages/graph/graph-claim-core ./packages/graph/graph-claim-core
+COPY packages/gardens/publication-components ./packages/gardens/publication-components
 COPY packages/stores/cache ./packages/stores/cache
 COPY packages/stores/document-hydration ./packages/stores/document-hydration
 COPY packages/translations/translation-core ./packages/translations/translation-core

@@ -19,6 +19,66 @@ const DEFAULT_EVENTS_TTL_SECONDS = 0;
 const DEFAULT_COMPACTED_TTL_SECONDS = 0;
 const DEFAULT_GRAPH_NODE_EMBEDDING_DIMENSIONS = 1024;
 
+function parsePositiveIntEnv(name: string): number {
+  const parsed = Number.parseInt(process.env[name] ?? "0", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function ttlExpiryFromNow(ttlSeconds: number): Date | undefined {
+  return ttlSeconds > 0 ? new Date(Date.now() + ttlSeconds * 1000) : undefined;
+}
+
+function labelsFromExtra(extra: unknown): string[] {
+  if (!extra || typeof extra !== "object" || Array.isArray(extra)) return [];
+  const openplannerLabels = (extra as Record<string, unknown>).openplanner_labels;
+  if (!openplannerLabels || typeof openplannerLabels !== "object" || Array.isArray(openplannerLabels)) return [];
+  const labels = (openplannerLabels as Record<string, unknown>).labels;
+  if (!Array.isArray(labels)) return [];
+  return [...new Set(labels.map((label) => String(label ?? "").trim()).filter(Boolean))];
+}
+
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+async function ensureTtlIndex(
+  collection: Collection<any>,
+  keys: Record<string, IndexDirection>,
+  options: {
+    readonly name: string;
+    readonly expireAfterSeconds: number;
+    readonly partialFilterExpression?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const existing = (await collection.indexes()).find((index) => index.name === options.name);
+  const existingPartial = existing?.partialFilterExpression ?? undefined;
+  const requestedPartial = options.partialFilterExpression ?? undefined;
+
+  if (
+    existing
+    && (
+      existing.expireAfterSeconds !== options.expireAfterSeconds
+      || stableJson(existingPartial) !== stableJson(requestedPartial)
+    )
+  ) {
+    await collection.dropIndex(options.name);
+  }
+
+  await collection.createIndex(keys, {
+    expireAfterSeconds: options.expireAfterSeconds,
+    name: options.name,
+    background: true,
+    ...(options.partialFilterExpression ? { partialFilterExpression: options.partialFilterExpression } : {}),
+  });
+}
+
 async function waitForQueryableSearchIndex(
   collection: Collection<any>,
   indexName: string,
@@ -101,6 +161,7 @@ export interface MongoVectorDocument {
   model: string | null;
   visibility: string | null;
   quality_label?: string | null;
+  labels?: string[];
   title: string | null;
   embedding_model: string | null;
   embedding_dimensions: number | null;
@@ -122,6 +183,7 @@ export interface MongoVectorDocument {
   char_end?: number | null;
   schema_version?: number;
   migration_state?: MigrationState | null;
+  expiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -157,6 +219,7 @@ export interface EventDocument {
   extra: unknown | null;
   schema_version?: number;
   migration_state?: MigrationState | null;
+  expiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -176,6 +239,7 @@ export interface CompactedMemoryDocument {
   text: string;
   members: unknown[] | null;
   extra: unknown | null;
+  expiresAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -562,6 +626,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await hotVectors.createIndex({ session: 1, ts: -1 });
   await hotVectors.createIndex({ visibility: 1, ts: -1 });
   await hotVectors.createIndex({ quality_label: 1, ts: -1 });
+  await hotVectors.createIndex({ labels: 1, ts: -1 });
   await hotVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
   await hotVectors.createIndex({ schema_version: 1, ts: -1 });
 
@@ -573,6 +638,7 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   await compactVectors.createIndex({ session: 1, ts: -1 });
   await compactVectors.createIndex({ visibility: 1, ts: -1 });
   await compactVectors.createIndex({ quality_label: 1, ts: -1 });
+  await compactVectors.createIndex({ labels: 1, ts: -1 });
   await compactVectors.createIndex({ embedding_model: 1, embedding_dimensions: 1, ts: -1 });
   await compactVectors.createIndex({ schema_version: 1, ts: -1 });
 
@@ -723,54 +789,54 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   // TTL index for events (auto-expire old signals)
   const eventsTtl = config.eventsTtlSeconds ?? DEFAULT_EVENTS_TTL_SECONDS;
   if (eventsTtl > 0) {
-    // Use createdAt field for TTL - documents expire after N seconds from creation
-    await events.createIndex(
-      { createdAt: 1 },
+    // Only non-labeled documents receive expiresAt; labeled documents keep expiresAt unset.
+    await ensureTtlIndex(
+      events,
+      { expiresAt: 1 },
       { 
-        expireAfterSeconds: eventsTtl,
+        expireAfterSeconds: 0,
         name: "events_ttl",
-        background: true,
       }
     );
-    console.log(`[mongodb] Created TTL index on events (expireAfterSeconds: ${eventsTtl})`);
+    console.log(`[mongodb] Created TTL index on non-labeled events (expireAfterSeconds: ${eventsTtl})`);
   }
 
   // TTL index for compacted_memories (longer retention, optional)
   const compactedTtl = config.compactedTtlSeconds ?? DEFAULT_COMPACTED_TTL_SECONDS;
   if (compactedTtl > 0) {
-    await compacted.createIndex(
-      { createdAt: 1 },
+    await ensureTtlIndex(
+      compacted,
+      { expiresAt: 1 },
       { 
-        expireAfterSeconds: compactedTtl,
+        expireAfterSeconds: 0,
         name: "compacted_ttl",
-        background: true,
       }
     );
-    console.log(`[mongodb] Created TTL index on compacted_memories (expireAfterSeconds: ${compactedTtl})`);
+    console.log(`[mongodb] Created TTL index on non-labeled compacted_memories (expireAfterSeconds: ${compactedTtl})`);
   }
 
   if (eventsTtl > 0) {
-    await hotVectors.createIndex(
-      { createdAt: 1 },
+    await ensureTtlIndex(
+      hotVectors,
+      { expiresAt: 1 },
       {
-        expireAfterSeconds: eventsTtl,
+        expireAfterSeconds: 0,
         name: "hot_vectors_ttl",
-        background: true,
       },
     );
-    console.log(`[mongodb] Created TTL index on hot vectors (expireAfterSeconds: ${eventsTtl})`);
+    console.log(`[mongodb] Created TTL index on non-labeled hot vectors (expireAfterSeconds: ${eventsTtl})`);
   }
 
   if (compactedTtl > 0) {
-    await compactVectors.createIndex(
-      { createdAt: 1 },
+    await ensureTtlIndex(
+      compactVectors,
+      { expiresAt: 1 },
       {
-        expireAfterSeconds: compactedTtl,
+        expireAfterSeconds: 0,
         name: "compact_vectors_ttl",
-        background: true,
       },
     );
-    console.log(`[mongodb] Created TTL index on compact vectors (expireAfterSeconds: ${compactedTtl})`);
+    console.log(`[mongodb] Created TTL index on non-labeled compact vectors (expireAfterSeconds: ${compactedTtl})`);
   }
 
   return {
@@ -851,6 +917,9 @@ export async function upsertEvent(
   const now = new Date();
   const schemaVersion = event.schema_version ?? OPENPLANNER_SCHEMA_TARGETS.event;
   const state = event.migration_state ?? eventMigrationState(now);
+  const ttlSeconds = parsePositiveIntEnv("MONGODB_EVENTS_TTL_SECONDS");
+  const labels = labelsFromExtra(event.extra);
+  const expiresAt = labels.length > 0 ? undefined : ttlExpiryFromNow(ttlSeconds);
   await collection.updateOne(
     { _id: event.id },
     {
@@ -858,8 +927,10 @@ export async function upsertEvent(
         ...event,
         schema_version: schemaVersion,
         migration_state: state,
+        ...(expiresAt ? { expiresAt } : {}),
         updatedAt: now,
       },
+      ...(labels.length > 0 || ttlSeconds <= 0 ? { $unset: { expiresAt: "" } } : {}),
       $setOnInsert: {
         createdAt: now,
       },
@@ -876,13 +947,18 @@ export async function upsertCompactedMemory(
   memory: Omit<CompactedMemoryDocument, "_id" | "createdAt" | "updatedAt">
 ): Promise<void> {
   const now = new Date();
+  const ttlSeconds = parsePositiveIntEnv("MONGODB_COMPACTED_TTL_SECONDS");
+  const labels = labelsFromExtra(memory.extra);
+  const expiresAt = labels.length > 0 ? undefined : ttlExpiryFromNow(ttlSeconds);
   await collection.updateOne(
     { _id: memory.id },
     {
       $set: {
         ...memory,
+        ...(expiresAt ? { expiresAt } : {}),
         updatedAt: now,
       },
+      ...(labels.length > 0 || ttlSeconds <= 0 ? { $unset: { expiresAt: "" } } : {}),
       $setOnInsert: {
         createdAt: now,
       },

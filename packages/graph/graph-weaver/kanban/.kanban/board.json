@@ -1,0 +1,160 @@
+{
+  "generatedAt": "2026-06-01T17:41:45.683Z",
+  "totalTasks": 5,
+  "columns": [
+    {
+      "status": "icebox",
+      "title": "Icebox",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "incoming",
+      "title": "Incoming",
+      "taskCount": 4,
+      "tasks": [
+        {
+          "uuid": "graph-weaver-cljs-build-skeleton",
+          "title": "Create Graph Weaver CLJS build skeleton and ESM exports",
+          "slug": "create-graph-weaver-cljs-build-skeleton-and-esm-exports",
+          "status": "incoming",
+          "priority": "P1",
+          "labels": [
+            "tasks",
+            "3sp",
+            "cljs",
+            "graph-weaver",
+            "shadow-cljs",
+            "esm",
+            "typescript-retirement"
+          ],
+          "createdAt": "2026-06-01T17:40:58Z",
+          "content": "# Create Graph Weaver CLJS build skeleton and ESM exports\n\n## Intent\n\nCreate the minimal ClojureScript build/runtime skeleton for `packages/graph/graph-weaver` so future migration slices can land in CLJS without adding new TypeScript implementation code.\n\nThis is the first implementation-enabling split from `graph-weaver-cljs-fastify-plugin-integration`. It should follow Knoxx backend's CLJS ESM export pattern and make compiled CLJS the authoritative package API.\n\n## Constraints\n\n- Do **not** add new business logic in TypeScript.\n- Do **not** grow `src/server.ts` except for an explicitly temporary shim with a deletion condition.\n- Do **not** place any work under `archive/embedding/src/`.\n- Do **not** change Graph Weaver runtime behavior in this card beyond adding inert/skeletal CLJS entrypoints.\n- Keep package license as GPL-3.0-or-later.\n\n## Current package context\n\nCurrent `package.json` is TypeScript-first:\n\n```json\n{\n  \"main\": \"./dist/server.js\",\n  \"types\": \"./dist/server.d.ts\",\n  \"scripts\": {\n    \"dev\": \"tsx src/server.ts\",\n    \"build\": \"tsc -p tsconfig.json\",\n    \"start\": \"node dist/server.js\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.6.3\",\n    \"tsx\": \"^4.20.6\"\n  }\n}\n```\n\nThis card should introduce the CLJS build shape before deleting TypeScript so later cards can port modules incrementally and verify exports.\n\n## Target files\n\nExpected new/updated files:\n\n```text\npackages/graph/graph-weaver/\n  shadow-cljs.edn\n  deps.edn                    ; if needed for CLJS deps/tooling parity\n  src/cljs/open_hax/graph_weaver/\n    runtime.cljs              ; create-runtime-js placeholder\n    plugin.cljs               ; register-plugin! placeholder\n    standalone.cljs           ; start! placeholder\n    entrypoint.cljs           ; optional standalone init-fn\n    extern/fastify.cljs       ; Fastify boundary helpers, copied/adapted from Knoxx pattern\n  test/cljs/open_hax/graph_weaver/\n    runtime_test.cljs\n```\n\n`package.json` should expose compiled CLJS ESM output as the package API while allowing a temporary compatibility command only if required.\n\n## Public API contract\n\nCompiled CLJS ESM must export these names, even if the first implementation is skeletal:\n\n```text\ncreateGraphWeaverRuntime(opts) -> runtime\nregisterGraphWeaverPlugin(app, opts) -> Promise/thenable\nstartStandalone(opts) -> Promise<{ app, runtime, close }>\n```\n\nThe first skeleton can return explicit \"not implemented yet\" status maps for runtime methods, but it must compile and be importable from Node.\n\n## Knoxx pattern references\n\nReuse patterns from:\n\n- `packages/agents/knoxx/backend/shadow-cljs.edn` — `:target :esm`, `:modules`, JS-callable `:exports`, `:keep-as-import`.\n- `packages/agents/knoxx/backend/src/cljs/knoxx/backend/infra/http_server.cljs` — Fastify construction/lifecycle shape.\n- `packages/agents/knoxx/backend/src/cljs/knoxx/backend/extern/fastify.cljs` — raw Fastify boundary isolation.\n- `packages/agents/knoxx/backend/src/cljs/knoxx/backend/bootstrap.cljs` — separate durable runtime from HTTP app lifecycle.\n\n## Acceptance criteria\n\n- `shadow-cljs.edn` exists for Graph Weaver and builds an ESM artifact under `dist` or a clearly named CLJS output directory.\n- The package exports `createGraphWeaverRuntime`, `registerGraphWeaverPlugin`, and `startStandalone` from compiled CLJS.\n- A Node smoke command can import the compiled ESM and verify those exports are functions.\n- No new TypeScript business logic is introduced.\n- Any TypeScript compatibility shim is tiny, documented in the card/commit, and has a deletion condition.\n- Follow-up migration cards can port pure modules (`graph`, `store`, `layout`, `config`) without needing to revisit build layout.\n\n## Verification plan\n\n```bash\npnpm -C orgs/open-hax/openplanner/packages/graph/graph-weaver build\nnode -e \"import('./orgs/open-hax/openplanner/packages/graph/graph-weaver/dist/app.js').then(m => console.log(Object.keys(m)))\"\n```\n\nAdjust the import path to the final CLJS module path chosen in `shadow-cljs.edn`.",
+          "sourcePath": "/home/err/devel/orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/graph-weaver-cljs-build-skeleton.md"
+        },
+        {
+          "uuid": "orgs-open-hax-openplanner-packages-graph-graph-weaver-kanban-orgs-open-hax-openplanner-packages-graph-graph-weaver-specs-graph-layers-and-storage-md",
+          "title": "Graph Layers and Storage Spec",
+          "slug": "graph-layers-and-storage-spec",
+          "status": "incoming",
+          "priority": "P3",
+          "labels": [
+            "specs",
+            "migrated-spec"
+          ],
+          "createdAt": "2026-05-29T04:01:36.376Z",
+          "content": "> Source: `orgs/open-hax/openplanner/packages/graph/graph-weaver/specs/graph-layers-and-storage.md`\n> Migrated-to-kanban: `orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/graph-layers-and-storage.md`\n\n# Graph Layers and Storage Spec\n\n## Purpose\n\nMake the internal graph layering explicit.\n\n## Graph layers\n\n### 1. Local layer\nProduced by repo scan.\n\nSources:\n- tracked files\n- markdown links\n- JS/TS imports\n- Python imports\n- Clojure requires\n\nCharacteristics:\n- deterministic rebuild from repo state\n- `layer: local`\n- seeds external URLs found in markdown\n\n### 2. Web layer\nProduced by crawler events coming from `graph-weaver-aco`.\n\nCharacteristics:\n- `url:*` nodes\n- outgoing web edges\n- page/error metadata\n- persisted to Mongo under store `web`\n\n### 3. User layer\nProduced by explicit user mutations.\n\nCharacteristics:\n- overlay nodes and edges\n- layout position overrides\n- user-authored graph edits\n- persisted to Mongo under store `user`\n\n### 4. Semantic layer\nProduced by OpenPlanner semantic exports and daimoi reinforcement.\n\nCharacteristics:\n- `layer: semantic`\n- semantic edges are transient circuit edges, not durable truth claims\n- every semantic edge must carry `data.similarity` with the cosine score between connected nodes\n- reinforced edges increase `data.conductance`; unreinforced edges decay by half-life into `broken` and then are pruned\n- durable truth still belongs to OpenPlanner edge claims, not semantic edges\n\n### 5. Presence layer\nProduced by presence GraphQL mutations and future OpenPlanner runtime sync.\n\nCharacteristics:\n- `kind: presence`, `layer: presence`\n- `data.presence_class` is `resource`, `muse`, or `transient`\n- `data.saturation`, `data.emission_threshold`, and `data.refractory_ms` model neuron-like emission\n- resource presences represent CPU cores, NPU, GPU, RAM, or other system resources/processes\n- muse presences represent an LLM actor's autonomic graph interface\n- transient presences represent bounded effects such as memory-tool query emission events\n\n## Merge model\n\nThe runtime merges:\n- `localStore`\n- `webStore`\n- `userStore`\n\nSemantic and presence layers currently persist through `userStore` unless they are\nimported from OpenPlanner export, but they keep their own `layer` values so the\nGraphQL schema and renderer can distinguish them.\n\nMerged graph is cached until invalidated by a dirty mark.\n\n## Storage backends\n\n### In-memory\nAll three layers are active in memory via `GraphStore`.\n\n### MongoDB\n`MongoGraphStore` persists:\n- nodes by `store + id`\n- edges by `store + id`\n- indexes on `store/id`, `store/source`, `store/target`\n\n### Runtime files\nConfig and legacy user graph state live in runtime paths such as:\n- `.opencode/runtime/devel-graph-weaver.config.json`\n- `.opencode/runtime/devel-graph-weaver.user-graph.json`\n\n## Design consequence\n\nThis repo is not a pure cache or a pure derivation engine.\nIt is a layered graph instrument that intentionally combines:\n- rebuildable derivation\n- discovered external state\n- human-authored overlay\n- transient semantic circuits\n- presence-driven intent/resource nodes",
+          "sourcePath": "/home/err/devel/orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/graph-layers-and-storage.md"
+        },
+        {
+          "uuid": "orgs-open-hax-openplanner-packages-graph-graph-weaver-kanban-orgs-open-hax-openplanner-packages-graph-graph-weaver-specs-query-preview-and-mutation-md",
+          "title": "Query, Preview, and Mutation Spec",
+          "slug": "query-preview-and-mutation-spec",
+          "status": "incoming",
+          "priority": "P3",
+          "labels": [
+            "specs",
+            "migrated-spec"
+          ],
+          "createdAt": "2026-05-29T04:01:36.376Z",
+          "content": "> Source: `orgs/open-hax/openplanner/packages/graph/graph-weaver/specs/query-preview-and-mutation.md`\n> Migrated-to-kanban: `orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/query-preview-and-mutation.md`\n\n# Query, Preview, and Mutation Spec\n\n## Purpose\n\nDocument the three kinds of interaction this service supports:\n- inspect\n- preview\n- alter\n\n## Inspect\n\n### Query surfaces\n- status/config\n- graphView\n- node(id)\n- edge(id)\n- edges(filter)\n- neighbors(id)\n- searchNodes(query)\n\nThese all operate against the merged graph view.\n\n## Preview\n\n### File preview\nFor file nodes, the service reads a bounded head of the file and labels it as:\n- markdown\n- code\n- text\n- binary\n- error\n\n### URL preview\nFor URL nodes, the service fetches a bounded preview of the remote resource using the configured timeout.\n\n### Metadata preview\nFor non-file/non-url nodes, the node itself is rendered as JSON code.\n\n## Alter\n\n### Runtime config mutation\n`configUpdate` can change render, crawl, and scan behavior.\nIf weaver config changes, the crawler is restarted.\nIf scan config changes, the rescan timer is reset.\n\n### Graph mutation\nUser layer supports:\n- upsert node\n- upsert edge\n- remove node\n- remove edge\n- bulk layout position updates\n\n### Rescan and reseed\n- `rescanNow` rebuilds local layer and reseeds discovered URLs\n- `weaverSeed` adds URLs to crawler frontier\n\n## Security posture\n\nIf `GRAPH_WEAVER_ADMIN_TOKEN` is set, mutation paths require a bearer token.\nWithout it, the service remains open for local/dev mutation.\n\n## UX reading\n\nThis service is designed to let a human move between:\n- map view\n- object inspection\n- quick previews\n- direct graph intervention\nwithout leaving the same instrument.",
+          "sourcePath": "/home/err/devel/orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/query-preview-and-mutation.md"
+        },
+        {
+          "uuid": "orgs-open-hax-openplanner-packages-graph-graph-weaver-kanban-orgs-open-hax-openplanner-packages-graph-graph-weaver-specs-service-surface-md",
+          "title": "Service Surface Spec",
+          "slug": "service-surface-spec",
+          "status": "incoming",
+          "priority": "P3",
+          "labels": [
+            "specs",
+            "migrated-spec"
+          ],
+          "createdAt": "2026-05-29T04:01:36.375Z",
+          "content": "> Source: `orgs/open-hax/openplanner/packages/graph/graph-weaver/specs/service-surface.md`\n> Migrated-to-kanban: `orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/service-surface.md`\n\n# Service Surface Spec\n\n## Purpose\n\nDescribe the live surfaces this repo exposes today.\n\n## HTTP endpoints\n\n### GraphQL\n- `POST /graphql`\n\nProvides queries and mutations over the merged graph.\n\n### Status\n- `GET /api/status`\n\nReturns:\n- node count\n- edge count\n- seed count\n- weaver frontier / in-flight counts\n- render config\n- scan config\n\n### Graph snapshot\n- `GET /api/graph`\n\nReturns a sampled/layouted graph view suitable for rendering.\n\n### Static/UI\n- `/`\n- `/graphiql`\n- `/app.js`\n- `/style.css`\n- `/vendor/webgl-graph-view/*`\n\n### WebSocket\n- `GET /ws` via upgrade\n\nCurrent behavior: push the literal message `changed` whenever the merged graph becomes dirty.\n\n## GraphQL capabilities\n\nQueries and mutations include:\n- status/config\n- sampled graph view\n- node/edge lookup\n- neighbor and edge listing\n- search\n- node preview\n- rescan\n- weaver seeding\n- config update\n- user node/edge upserts/removals\n- layout position updates\n\n## Design position\n\nThis repo is a **graph workbench service** rather than only a crawler service.\nIt exposes:\n- graph query surfaces\n- graph mutation surfaces\n- a small UI\n- a minimal websocket invalidation signal",
+          "sourcePath": "/home/err/devel/orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/service-surface.md"
+        }
+      ]
+    },
+    {
+      "status": "accepted",
+      "title": "Accepted",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "breakdown",
+      "title": "Breakdown",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "blocked",
+      "title": "Blocked",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "ready",
+      "title": "Ready",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "todo",
+      "title": "Todo",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "in_progress",
+      "title": "In Progress",
+      "taskCount": 1,
+      "tasks": [
+        {
+          "uuid": "graph-weaver-cljs-fastify-plugin-integration",
+          "title": "Rewrite Graph Weaver as CLJS Fastify plugin integration",
+          "slug": "rewrite-graph-weaver-as-cljs-fastify-plugin-integration",
+          "status": "in_progress",
+          "priority": "P1",
+          "labels": [
+            "tasks",
+            "5sp",
+            "cljs",
+            "graph-weaver",
+            "fastify-plugin",
+            "typescript-retirement",
+            "planning"
+          ],
+          "createdAt": "2026-06-01T17:32:14Z",
+          "content": "# Rewrite Graph Weaver as CLJS Fastify plugin integration\n\n## Intent\n\nGraph Weaver should stop being treated as a separate TypeScript application silo. It should become a package-level capability that can be imported by OpenPlanner as a Fastify plugin while still being able to run as a standalone service for isolation, development, or deployment topology choices.\n\nThis is also the first explicit planning slice for the broader OpenPlanner monorepo direction: TypeScript in the OpenPlanner monorepo is legacy and should be rewritten to ClojureScript. Do not add new TypeScript implementation code for this work unless it is a temporary compatibility shim with a removal plan.\n\nKnoxx backend CLJS is the current gold-standard pattern reference for new backend/runtime code.\n\n## Desired architecture\n\n```text\npackages/graph/graph-weaver/\n  src-cljs/ or cljs/\n    plugin.cljs          ; Fastify plugin entrypoint\n    runtime.cljs         ; graph-weaver runtime constructor/state machine\n    standalone.cljs      ; optional standalone server wrapper\n    graphql.cljs         ; GraphQL/query surface, if GraphQL remains the API shape\n    openplanner_source.cljs ; OpenPlanner export/cursor source adapter\n    redis_session.cljs   ; runtime/session coordination where needed\n```\n\nThe same package should support two process topologies:\n\n1. **Imported mode** — OpenPlanner registers the Graph Weaver Fastify plugin in-process.\n2. **Standalone mode** — Graph Weaver starts its own Fastify server and registers the same plugin.\n\nRuntime/session coordination should live in Redis where appropriate so plugin capabilities can run in one process or separate processes without semantic drift.\n\nOpenPlanner/Mongo remains canonical graph truth. Graph Weaver should crawl/paginate OpenPlanner graph exports and accumulate enough local view state to show all nodes progressively, while only refreshing chunks/bounded projections each cycle.\n\n## Boundaries and non-goals\n\n- Do **not** put new work under `orgs/open-hax/openplanner/archive/embedding/src/`.\n- Do **not** add new TypeScript implementation as the target architecture.\n- Do **not** make Redis the durable graph store; Redis is coordination/session/runtime state.\n- Do **not** delete standalone mode; make standalone mode a thin wrapper over the same plugin.\n- Do **not** make Graph Weaver the canonical graph truth; it is a workbench/view/runtime surface over OpenPlanner truth.\n\n## Planning pass\n\n1. Inventory current `packages/graph/graph-weaver/src/*.ts` responsibilities and classify them as:\n   - plugin surface\n   - runtime state\n   - OpenPlanner source adapter\n   - GraphQL/query schema\n   - UI/static asset serving\n   - WebSocket invalidation\n   - standalone-only wiring\n2. Read Knoxx backend CLJS patterns and choose the project-local CLJS shape for Fastify plugin authoring.\n3. Define the CLJS package/build layout and interop boundary for registering a Fastify plugin from OpenPlanner.\n4. Define Redis-backed runtime/session coordination needed for imported vs standalone parity.\n5. Split the migration into small follow-up cards that retire TypeScript files rather than growing them.\n\n## Acceptance criteria\n\n- A written migration plan maps each current Graph Weaver TypeScript module to a CLJS destination or deletion path.\n- The plan identifies the minimal compatibility shim, if any, and its removal condition.\n- The target API exposes a Fastify plugin that OpenPlanner can register in-process.\n- The same package has a standalone runner using the same plugin/runtime.\n- GraphQL/status/graph snapshot/WebSocket/static UI surfaces have an explicit CLJS owner module.\n- Redis usage is limited to runtime/session/process coordination and documented as optional where possible.\n- No new implementation is placed in `archive/embedding/src/`.\n\n## Kanban anchors\n\n- `kanban/monorepo-roadmap.md` — P1B graph-memory coherence and OpenPlanner as canonical graph truth.\n- `packages/graph/graph-weaver/kanban/service-surface.md` — existing GraphQL/status/graph/UI/WebSocket service surface.\n- `packages/graph/graph-weaver/kanban/graph-layers-and-storage.md` — layered graph model and OpenPlanner semantic import.\n- `pseudo/graph-runtime/kanban/decomposition-roadmap.md` — split into clear contracts, not amnesiac fragments.\n\n## Inventory pass 1 — current TypeScript responsibilities\n\nCurrent Graph Weaver TypeScript surface is 15 files / ~5.1k lines. Migration should retire these files by moving responsibilities into CLJS modules, not by expanding the TypeScript surface.\n\n| Current TS module | Main responsibility | CLJS destination | Fate |\n| --- | --- | --- | --- |\n| `src/server.ts` | Monolithic `node:http` server, route dispatch, static files, WebSocket upgrade, runtime state, timers, ACO crawler wiring, config persistence, local/OpenPlanner/lake rebuilds, GraphQL context implementation, signal shutdown | Split into `open-hax.graph-weaver.runtime`, `plugin`, `standalone`, `routes.http`, `routes.websocket`, `static`, `crawler.aco`, `sync.scheduler` | Delete after CLJS standalone runner and Fastify plugin export cover all routes/status/ws/static behavior |\n| `src/graphql.ts` | GraphQL schema string, HTTP handler, root resolvers, auth guard, GraphQL DTO conversion | `open-hax.graph-weaver.graphql.schema`, `graphql.resolvers`, `graphql.http` | Port to CLJS; keep GraphQL schema data/string close to resolvers; no TS shim after port |\n| `src/mongo-graph-store.ts` | Mongo-backed graph persistence, semantic field/daimoi audit reads, indexes, connect/retry lifecycle | `open-hax.graph-weaver.store.mongo`, plus `store.semantic-field`/`store.daimoi` if split | Port to CLJS Mongo interop or replace with OpenPlanner API reads where canonical truth makes direct local store unnecessary |\n| `src/store.ts` | In-memory graph store, search indexes, edge indexes, merge stores | `open-hax.graph-weaver.store.memory` | Port early; pure data structure and best first CLJS unit-test target |\n| `src/openplanner-graph.ts` | Fetch `/v1/graph/export`, normalize exported nodes/edges, push layout upserts back to OpenPlanner | `open-hax.graph-weaver.sources.openplanner` | Port and extend to cursor/paginated crawl; current capped snapshot behavior is insufficient |\n| `src/config.ts` | Env defaults and runtime config patch normalization | `open-hax.graph-weaver.config` | Port as data-first CLJS config; expose JS config object from ESM build for callers |\n| `src/scan.ts` | Local repo scan to graph nodes/edges using git file list and import/link extraction | `open-hax.graph-weaver.sources.repo-scan` | Port or demote behind dev-only feature flag; not central to OpenPlanner canonical graph truth |\n| `src/preview.ts` | File/URL preview, content type/language guessing, binary guards | `open-hax.graph-weaver.preview` | Port; route-level callers should receive CLJS maps and only convert at Fastify boundary |\n| `src/lakes.ts` | Fetch OpenPlanner lakes/gardens and build lake/garden graph nodes | `open-hax.graph-weaver.sources.openplanner-lakes` | Port; likely folds into `sources.openplanner` after paginated export is defined |\n| `src/layout.ts` | Deterministic fallback layout positions | `open-hax.graph-weaver.layout.fallback` | Port as pure functions; keep layout writes going through OpenPlanner layout API |\n| `src/git.ts` | Git root discovery and tracked-file listing | `open-hax.graph-weaver.infra.git` | Port only if repo-scan remains; otherwise delete with repo-scan retirement |\n| `src/imports.ts` | Extract JS/TS, Python, Clojure require/import edges | `open-hax.graph-weaver.sources.imports` | Port only if repo-scan remains; TS import extractor becomes legacy/dev-only |\n| `src/markdown.ts` | Markdown link extraction | `open-hax.graph-weaver.sources.markdown` | Port only if repo-scan remains |\n| `src/persist.ts` | JSON file read/write for local config/user graph state | `open-hax.graph-weaver.infra.persist` | Prefer Redis/OpenPlanner/Mongo-backed state; keep only for standalone dev config if needed |\n| `src/graph.ts` | Graph node/edge/snapshot TS types | `open-hax.graph-weaver.shape.graph` | Replace with Malli/CLJS schema/data specs; no TS type authority |\n\n## Knoxx CLJS pattern references\n\nObserved Knoxx backend patterns to reuse:\n\n- `backend/shadow-cljs.edn` builds `:target :esm` and exports JS-callable functions from CLJS modules.\n- `knoxx.backend.bootstrap/start-http!` separates durable runtime state from HTTP app lifecycle and supports hot reload by rebuilding only the Fastify app.\n- `knoxx.backend.infra.http-server` owns Fastify construction/default plugins while route namespaces register their own routes.\n- `knoxx.backend.extern.fastify` isolates raw Fastify request/reply traversal and converts at the boundary.\n- `knoxx.backend.infra.redis-client` wraps node-redis with small promise-returning helpers and keeps Redis optional when the URL is blank or connection fails.\n\nGraph Weaver should copy these architectural moves, not necessarily the exact namespace names.\n\n## Target CLJS build/API sketch\n\n```edn\n{:source-paths [\"src/cljs\" \"test/cljs\"]\n :builds\n {:app\n  {:target :esm\n   :output-dir \"dist\"\n   :modules\n   {:app\n    {:exports\n     {:createGraphWeaverRuntime open-hax.graph-weaver.runtime/create-runtime-js\n      :registerGraphWeaverPlugin open-hax.graph-weaver.plugin/register-plugin!\n      :startStandalone open-hax.graph-weaver.standalone/start!}}}}}}\n```\n\nRuntime functions should be designed so OpenPlanner can do imported mode without owning Graph Weaver internals:\n\n```text\ncreateGraphWeaverRuntime(opts) -> runtime\nregisterGraphWeaverPlugin(fastifyInstance, { runtime, prefix?, config? }) -> Promise/thenable\nstartStandalone(opts) -> Promise<{ app, runtime, close }>\n```\n\nThe plugin owns route registration for:\n\n- `GET/POST /graphql`\n- `GET /api/status`\n- `GET /api/graph`\n- `POST /api/layout/upsert`\n- `GET /ws` or Fastify websocket equivalent\n- static Graph Weaver UI assets, preferably under a configurable prefix when imported\n\n## Compatibility shim policy\n\nThe only acceptable compatibility layer is a thin package entrypoint that imports compiled CLJS ESM and re-exports the public API for existing package consumers. It must contain no business logic and must be removed once OpenPlanner imports the CLJS exports directly.\n\n`src/server.ts` should not be grown. If a short-lived shim is unavoidable, it should be generated/built output or a tiny non-authoritative wrapper with a deletion issue/card.\n\n## Follow-up cards to split from this plan\n\n1. Create CLJS build skeleton for `packages/graph/graph-weaver` using Knoxx backend ESM export pattern.\n2. Port pure graph shapes/store/layout/config to CLJS with tests.\n3. Port OpenPlanner graph source as paginated/cursor crawl adapter.\n4. Port GraphQL schema/resolvers and Fastify route registration.\n5. Port WebSocket/static UI serving and standalone runner.\n6. Remove TypeScript server/store modules after CLJS parity verification.",
+          "sourcePath": "/home/err/devel/orgs/open-hax/openplanner/packages/graph/graph-weaver/kanban/graph-weaver-cljs-fastify-plugin-integration.md"
+        }
+      ]
+    },
+    {
+      "status": "review",
+      "title": "Review",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "document",
+      "title": "Document",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "done",
+      "title": "Done",
+      "taskCount": 0,
+      "tasks": []
+    },
+    {
+      "status": "rejected",
+      "title": "Rejected",
+      "taskCount": 0,
+      "tasks": []
+    }
+  ]
+}

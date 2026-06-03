@@ -7,6 +7,9 @@ dist.root-owned.*/
 # Coverage reports (regenerable)
 coverage/
 
+# Duplication scan reports (regenerable)
+reports/jscpd/
+
 # Public renderer (CLJS build output)
 public/renderer/
 

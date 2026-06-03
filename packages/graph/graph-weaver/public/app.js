@@ -868,6 +868,7 @@ async function loadStatus() {
         edges
         seeds
         weaver { frontier inFlight }
+        localSync { ok error mode lastAttemptAt }
         render { maxRenderNodes maxRenderEdges }
         scan { maxFileBytes rescanIntervalMs }
       }
@@ -879,7 +880,12 @@ async function loadStatus() {
     lastMeta && (lastMeta.sampledNodes || lastMeta.sampledEdges)
       ? ` · render ${lastRenderCounts.nodes}/${lastMeta.totalNodes} nodes ${lastRenderCounts.edges}/${lastMeta.totalEdges} edges`
       : "";
-  statusEl.textContent = `nodes ${s.nodes} · edges ${s.edges} · seeds ${s.seeds} · weaver frontier ${s.weaver.frontier} · inflight ${s.weaver.inFlight}${sampled}`;
+  const syncWarning =
+    s.localSync && s.localSync.ok === false
+      ? ` · ⚠ STALE: OpenPlanner sync failed${s.localSync.error ? ` (${s.localSync.error})` : ""}`
+      : "";
+  statusEl.textContent = `nodes ${s.nodes} · edges ${s.edges} · seeds ${s.seeds} · weaver frontier ${s.weaver.frontier} · inflight ${s.weaver.inFlight}${sampled}${syncWarning}`;
+  statusEl.classList.toggle("sync-failed", !!(s.localSync && s.localSync.ok === false));
 }
 
 function bindRange(input, labelEl, format = (v) => String(v)) {
