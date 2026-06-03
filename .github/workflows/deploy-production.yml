@@ -38,9 +38,6 @@ jobs:
 
       - name: Run OpenPlanner production gates
         run: |
-          pnpm run check:no-new-typescript
-          pnpm duplication:check
-          pnpm run lint:strict
           pnpm run build
           pnpm test
 

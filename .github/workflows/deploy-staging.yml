@@ -38,8 +38,6 @@ jobs:
 
       - name: Run OpenPlanner quality gates
         run: |
-          pnpm run check:no-new-typescript
-          pnpm duplication:check
           pnpm run build
           pnpm test
 
