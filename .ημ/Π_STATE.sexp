@@ -1,18 +1,22 @@
 (handoff
-  (kind eta-mu-kanban-migration)
-  (time "2026-05-29T04:03:45Z")
-  (batch "/tmp/eta-mu-kanban-batches/agent_open_hax_other.json")
+  (kind fork-tax)
+  (time "2026-06-03T20:34:00Z")
   (repo "openplanner")
-  (verification "eta-mu-beta kanban count --tasks-dir for each board")
-  (boards
-    "kanban"
-    "packages/agents/cephalon/kanban"
-    "packages/agents/cephalon/packages/cephalon-clj/kanban"
-    "packages/agents/cephalon/packages/cephalon-cljs/kanban"
-    "packages/agents/cephalon/packages/cephalon-ts/kanban"
-    "packages/agents/cephalon/recovered/cephalon-clj/kanban"
-    "packages/graph/graph-weaver/kanban"
-    "packages/graph/graph-weaver-aco/kanban"
-    "packages/graph/myrmex/kanban"
-    "pseudo/graph-runtime/kanban"
-  ))
+  (branch "pi/fork-tax/20260529T022118Z-main-softreset-all-dirt-openplanner")
+  (base "origin/staging")
+  (tag "Π/20260603T203400Z-openplanner-ts-gate-deploy-workflows")
+  (commits
+    (ts-cljs-gate "scripts/check-no-new-typescript.mjs + 756-entry allowlist + code-quality job + roadmap/inventory docs + kanban epic/tasks")
+    (labels-fix "labels.ts: reaction labels persisted to vector labels set, expiresAt unset, quality_label optional")
+    (deploy-workflows "deploy-staging/production/testing via open-hax/services deploy-promethean.yml@main; testing is label-gated PR-head -> shared staging slot")
+    (pi-process "receipts +8, board snapshots, knoxx submodule pointer -> 58629bd1 (pushed), .ημ artifacts")
+    (staging-merge "origin/staging merged; staging's no-recursive-submodule deploy fixes kept (file:/// submodule breaks runners)"))
+  (constraints
+    "check:no-new-typescript needs knoxx submodule present; code-quality job inits GitHub-hosted submodules explicitly, never file:///"
+    "pull_request_target runs base-branch workflow defs; deploy-testing activates after merge to staging")
+  (verification
+    (no-new-ts "pass local 756/756 with submodules")
+    (actionlint "clean: deploy-testing/staging/production")
+    (ci "build/test deferred to PR staging-preflight gates"))
+  (concurrent-dirt "none at snapshot time")
+  (destructive-cleanup false))

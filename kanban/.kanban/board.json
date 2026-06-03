@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-05-29T04:01:43.367Z",
-  "totalTasks": 14,
+  "generatedAt": "2026-06-01T19:31:33.802Z",
+  "totalTasks": 16,
   "columns": [
     {
       "status": "icebox",
@@ -11,8 +11,26 @@
     {
       "status": "incoming",
       "title": "Incoming",
-      "taskCount": 14,
+      "taskCount": 15,
       "tasks": [
+        {
+          "uuid": "openplanner-typescript-to-cljs-epic",
+          "title": "Epic: retire TypeScript across the OpenPlanner monorepo",
+          "slug": "epic-retire-typescript-across-the-openplanner-monorepo",
+          "status": "incoming",
+          "priority": "P0",
+          "labels": [
+            "epic",
+            "cljs",
+            "typescript-retirement",
+            "monorepo",
+            "roadmap",
+            "architecture"
+          ],
+          "createdAt": "2026-06-01T18:00:00Z",
+          "content": "# Epic: retire TypeScript across the OpenPlanner monorepo\n\n## Intent\n\nRetire TypeScript as source code across the active OpenPlanner monorepo and move implementation authority to ClojureScript.\n\nKnoxx backend CLJS is the current gold-standard backend/runtime pattern. New migration work should follow its ESM export, Fastify lifecycle, boundary-helper, async, and test patterns where applicable.\n\n## Scope\n\nDetailed roadmap:\n\n- `docs/architecture/typescript-to-cljs-monorepo-roadmap.md`\n\nFull active file inventory:\n\n- `docs/architecture/typescript-to-cljs-file-inventory.md`\n\nInventory summary from the active worktree scan:\n\n| Kind | Count |\n| --- | ---: |\n| source `.ts` | 448 |\n| frontend `.tsx` | 132 |\n| tests/specs | 149 |\n| tooling/config `.ts` | 12 |\n| declarations `.d.ts` | 15 |\n| **Total** | **756** |\n\nThe inventory includes `archive/` and `pseudo/`, but excludes generated/vendor directories and nested `.worktrees/` checkouts.\n\n## Non-negotiables\n\n- Do not add new TypeScript business logic.\n- Do not treat TypeScript compatibility shims as authoritative implementation.\n- Every temporary shim must have an owner and deletion condition.\n- Do not put new implementation under `archive/embedding/src/`.\n- OpenPlanner/Mongo remains canonical graph truth.\n- Redis is runtime/session/process coordination, not durable graph truth.\n- Archive code must be explicitly deleted, moved out of active inventory, or ported; it cannot be silently ignored.\n\n## Blocking order\n\n```text\nT0 freeze/standard\n  -> T1 shared leaves\n  -> T2 root OpenPlanner CLJS runtime/API\n     -> T3 graph tranche\n     -> T5 pseudo/client tools\n     -> T6 agent tranche\n  -> T8 archive disposition\n  -> T9 final sweep\n```\n\nParallel lanes after T1:\n\n```text\nT1 -> T4 signals -> T6 Cephalon\nT1 -> T7 shared UI -> T6 Knoxx frontend\nT1 -> T3 ACO leaf -> T3 Graph Weaver/Myrmex\n```\n\n## Task groups\n\n1. **T0 — Freeze, accounting, and CLJS package standard**\n   - Add no-new-TS gate and migration allowlist.\n   - Standardize CLJS package layout and Node import smoke checks.\n\n2. **T1 — Leaf shared packages and declaration stubs**\n   - Retire low-count shared packages first: logger, test-utils, store-cache, document-hydration, translation-core, graph-claim-core, client declarations, signal contract declarations.\n\n3. **T2 — Root OpenPlanner API/runtime CLJS port**\n   - Port canonical Fastify/Mongo/vector/graph/translation/tenant/event routes before downstream clients and workbenches depend on unstable APIs.\n\n4. **T3 — Graph package tranche**\n   - `graph-weaver-aco` before `graph-weaver`/`myrmex`.\n   - `graph-weaver` becomes importable CLJS Fastify plugin with standalone wrapper.\n   - UI/view packages follow the API/runtime shape.\n\n5. **T4 — Signals/events tranche**\n   - `event` and `sintel` before Cephalon runtime migration.\n\n6. **T5 — Pseudo/service adapters and client tools**\n   - OAuth/Janus leaves first, then clients, then workbench.\n   - Repoint away from archive persistence where canonical OpenPlanner CLJS APIs exist.\n\n7. **T6 — Agent package tranche**\n   - Knoxx package/frontend and Cephalon TS after shared contracts, signals, clients, and UI strategy are stable.\n\n8. **T7 — UI/component leaf packages**\n   - Port or replace shared UI components before high-volume TSX frontend migration.\n\n9. **T8 — Archive disposition and legacy dependency breakage**\n   - Delete, quarantine, or port archive TS with explicit decision records.\n\n10. **T9 — Tooling/config/test final sweep**\n    - Remove `.config.ts`, `.d.ts`, tsconfig/tooling remnants, stale TypeScript dependencies, and allowlist entries.\n\n## Acceptance criteria\n\n- Active inventory count is zero for `.ts`, `.tsx`, `.cts`, `.mts`, and `.d.ts` source files outside generated build output.\n- OpenPlanner root service builds and runs from CLJS.\n- Graph Weaver imported and standalone modes build and run from the same CLJS runtime/plugin.\n- Knoxx frontend and active agent surfaces no longer contain TypeScript/TSX source.\n- Pseudo/archive TypeScript has explicit deletion/quarantine/port disposition.\n- CI rejects unowned new TypeScript files.\n\n## First executable slice\n\nStart with T0 via `openplanner-no-new-typescript-inventory-gate`:\n\n1. Add an inventory script that emits the same grouping as `docs/architecture/typescript-to-cljs-file-inventory.md`.\n2. Add a no-new-TypeScript allowlist file keyed by this epic/task group.\n3. Wire CI so new TS files fail unless the allowlist and roadmap are updated.",
+          "sourcePath": "/home/err/devel/orgs/open-hax/openplanner/kanban/openplanner-typescript-to-cljs-epic.md"
+        },
         {
           "uuid": "orgs-open-hax-openplanner-kanban-orgs-open-hax-openplanner-specs-2026-04-09-atlas-local-deployment-for-production-vector-search-md",
           "title": "Atlas Local Deployment for Production Vector Search",
@@ -262,8 +280,28 @@
     {
       "status": "done",
       "title": "Done",
-      "taskCount": 0,
-      "tasks": []
+      "taskCount": 1,
+      "tasks": [
+        {
+          "uuid": "openplanner-no-new-typescript-inventory-gate",
+          "title": "Add no-new-TypeScript inventory gate and migration allowlist",
+          "slug": "add-no-new-typescript-inventory-gate-and-migration-allowlist",
+          "status": "done",
+          "priority": "P0",
+          "labels": [
+            "tasks",
+            "3sp",
+            "cljs",
+            "typescript-retirement",
+            "ci",
+            "inventory",
+            "guardrail"
+          ],
+          "createdAt": "2026-06-01T18:24:55Z",
+          "content": "# Add no-new-TypeScript inventory gate and migration allowlist\n\n## Intent\n\nMake the OpenPlanner TypeScript-to-CLJS migration enforceable before porting begins. The monorepo currently has 756 active TypeScript-family files in the roadmap inventory. New TypeScript files should fail CI unless explicitly owned by a migration task and recorded in an allowlist.\n\nThis is T0 from `openplanner-typescript-to-cljs-epic`.\n\n## Scope\n\nCreate a repo-local inventory/gate that tracks active source files matching:\n\n```text\n*.ts\n*.tsx\n*.cts\n*.mts\n*.d.ts\n```\n\nUse the same active-source exclusion policy as the roadmap:\n\n- exclude `node_modules/`\n- exclude generated/build dirs: `dist/`, `build/`, `target/`, `.shadow-cljs/`, `.next/`, `coverage/`, `tmp/`, `vendor/`\n- exclude nested `.worktrees/`\n- include `archive/` and `pseudo/` until each has an explicit deletion/quarantine/port disposition\n\n## Proposed files\n\n```text\nscripts/check-no-new-typescript.mjs\nscripts/typescript-inventory-allowlist.json\n```\n\nOptional if CI wiring exists in this repo:\n\n```text\n.github/workflows/no-new-typescript.yml\n```\n\nIf workflow ownership is unclear, add only the script/package command first and create a follow-up CI card.\n\n## Allowlist shape\n\nThe allowlist should be task-owned, not a blind snapshot. Suggested JSON shape:\n\n```json\n{\n  \"generatedAt\": \"2026-06-01T18:24:55Z\",\n  \"policy\": {\n    \"mode\": \"no-new-typescript\",\n    \"epic\": \"openplanner-typescript-to-cljs-epic\"\n  },\n  \"entries\": [\n    {\n      \"path\": \"src/app.ts\",\n      \"owner\": \"T2-root-openplanner-cljs-runtime-api\",\n      \"disposition\": \"port-to-cljs\",\n      \"removalCondition\": \"root OpenPlanner service starts from CLJS\"\n    }\n  ]\n}\n```\n\nThe first implementation may generate the full allowlist from `docs/architecture/typescript-to-cljs-file-inventory.md`, but every entry must include an owner group and disposition.\n\n## Script behavior\n\n`check-no-new-typescript.mjs` should:\n\n1. Walk the repo from its own root, not from the caller's current directory.\n2. Apply the roadmap exclusions exactly.\n3. Find active TypeScript-family files.\n4. Load `scripts/typescript-inventory-allowlist.json`.\n5. Fail if any active TypeScript path is not in the allowlist.\n6. Fail if any allowlisted path no longer exists unless it is marked removed.\n7. Print a grouped report by task owner and package/root.\n8. Support `--update` only if it preserves owner/disposition fields and refuses unowned additions.\n\n## Package command\n\nAdd a package script such as:\n\n```json\n{\n  \"scripts\": {\n    \"check:no-new-typescript\": \"node scripts/check-no-new-typescript.mjs\"\n  }\n}\n```\n\nDo not add TypeScript tooling for this gate; use plain Node JavaScript.\n\n## Acceptance criteria\n\n- Running the gate on the current worktree passes with the initial allowlist.\n- Adding a temporary unlisted `.ts` or `.tsx` file causes the gate to fail.\n- Removing an allowlisted file causes the gate to report stale allowlist state.\n- The report groups remaining TypeScript files by migration owner/task group.\n- The allowlist references `openplanner-typescript-to-cljs-epic` and T0/T1/T2/etc. owner groups.\n- No new TypeScript implementation files are introduced by this work.\n\n## Verification plan\n\n```bash\npnpm -C orgs/open-hax/openplanner run check:no-new-typescript\nprintf 'export const nope = true;\\n' > orgs/open-hax/openplanner/tmp-no-new-ts-test.ts\npnpm -C orgs/open-hax/openplanner run check:no-new-typescript ; test \"$?\" -ne 0\nrm orgs/open-hax/openplanner/tmp-no-new-ts-test.ts\npnpm -C orgs/open-hax/openplanner run check:no-new-typescript\n```\n\nIf the repo does not use `pnpm run` for root scripts, run the Node script directly.\n\n## Roadmap references\n\n- `kanban/openplanner-typescript-to-cljs-epic.md`\n- `docs/architecture/typescript-to-cljs-monorepo-roadmap.md`\n- `docs/architecture/typescript-to-cljs-file-inventory.md`\n\n---\nCI wired: .github/workflows/code-quality.yml now has a No new TypeScript job that runs pnpm run check:no-new-typescript on PRs and pushes to main/master. Validated workflow YAML parse and local gate pass. --tasks-dir orgs/open-hax/openplanner/kanban\n---",
+          "sourcePath": "/home/err/devel/orgs/open-hax/openplanner/kanban/openplanner-no-new-typescript-inventory-gate.md"
+        }
+      ]
     },
     {
       "status": "rejected",
