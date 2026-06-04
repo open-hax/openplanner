@@ -1,6 +1,7 @@
 packages:
   - ./app/*
   - packages/**
+  - ../floxx
 
 allowBuilds:
   '@discordjs/opus': true
