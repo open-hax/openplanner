@@ -8,6 +8,6 @@
 [submodule "packages/stores/migrations/openplanner-migration-tools"]
 	path = packages/stores/migrations/openplanner-migration-tools
 	url = file:///home/err/devel/orgs/open-hax/openplanner-migration-tools
-[submodule "packages/gardens/publication-components"]
-	path = packages/gardens/publication-components
-	url = git@github.com:open-hax/gardens.git
+[submodule "packages/floxx/publication-components"]
+	path = packages/floxx/publication-components
+	url = git@github.com:open-hax/floxx.git
