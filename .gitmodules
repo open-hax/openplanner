@@ -7,3 +7,6 @@
 [submodule "packages/floxx/publication-components"]
 	path = packages/floxx/publication-components
 	url = git@github.com:open-hax/floxx.git
+[submodule "packages/agents/knoxx"]
+	path = packages/agents/knoxx
+	url = git@github.com:open-hax/knoxx.git

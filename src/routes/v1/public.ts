@@ -211,7 +211,7 @@ export const publicRoutes: FastifyPluginAsync = async (app) => {
     if (!/^[a-zA-Z0-9._-]+\.(?:js|css)$/.test(asset)) {
       return reply.status(404).send({ error: "asset not found" });
     }
-    const assetUrl = new URL(`../../../node_modules/@open-hax/garden-publication-components/dist/browser/${asset}`, import.meta.url);
+    const assetUrl = new URL(`../../../node_modules/@open-hax/floxx/dist/browser/${asset}`, import.meta.url);
     const content = await readFile(assetUrl);
     reply.header("cache-control", "no-store");
     reply.type(asset.endsWith(".css") ? "text/css; charset=utf-8" : "application/javascript; charset=utf-8");

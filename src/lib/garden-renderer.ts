@@ -6,8 +6,8 @@
 
 import { marked } from "marked";
 import { codeToHtml, createHighlighter, type Highlighter } from "shiki";
-import { extractPublicationBlocks as extractReactPublicationBlocks } from "@open-hax/garden-publication-components";
-import { renderPublicationBlocksHtml, serializeGardenPublicationProps } from "@open-hax/garden-publication-components/server";
+import { extractPublicationBlocks as extractReactPublicationBlocks } from "@open-hax/floxx";
+import { renderPublicationBlocksHtml, serializeGardenPublicationProps } from "@open-hax/floxx/server";
 import type { GardenDocument } from "./mongodb.js";
 
 export type ThemeName = "monokai" | "night-owl" | "proxy-console";
