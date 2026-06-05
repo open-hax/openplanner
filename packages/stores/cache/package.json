@@ -16,7 +16,9 @@
   "scripts": {
     "build": "shadow-cljs release lib",
     "watch": "shadow-cljs watch lib",
-    "test": "shadow-cljs compile test && node target/test.cjs"
+    "test": "shadow-cljs compile test && node target/test.cjs",
+    "typecheck": "shadow-cljs check lib",
+    "lint": "echo 'No ClojureScript linter configured for this package; run clj-kondo manually if desired'"
   },
   "devDependencies": {
     "shadow-cljs": "^3.3.5"
