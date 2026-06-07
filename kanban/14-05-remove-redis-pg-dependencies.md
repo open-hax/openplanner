@@ -72,3 +72,28 @@ Verification: 578 tests / 0 failures, compile server 0 warnings, clj-kondo at
 pre-existing baseline (5 errors: 3× private-var in model_routes_test, 2× the
 intentionally-broken broken.edn fixture). Code review sub-agent: 3 majors found
 and fixed (above), re-verified green.
+
+## Live-Cutover Fallout (2026-06-07, resolved)
+
+First production-like boot after the cutover surfaced what the test suite could
+not (mock collections, no PG-migrated data):
+
+- The PG→Mongo **data migration had never been run** in the dev environment —
+  the directory collections only held boot-created starter docs. Ran the
+  migrate tool (restored from `3d0aba15^`, empty-table bulkWrite guard added)
+  after clearing the 9 directory-slice collections (boot artifacts with fresh
+  ids collided with PG's authoritative ids on unique slug/email indexes).
+  All 19 tables copied; counts match.
+- knoxx `cdf862fb`: membership-role inserts → upserts (allowlist re-run hit
+  E11000; PG was ON CONFLICT DO NOTHING).
+- knoxx `4a241e71`: two latent 14-04 twin bugs — platform-role lookups used
+  `{$exists false}` which misses PG-migrated explicit-null org_id (E11000
+  crash of policy init), and the credentials list mapv'd an async join
+  without awaiting, dropping every credential (0 Discord gateways).
+- Result: discord_automation gateway binds, bot ready in 3 guilds.
+
+Known leftovers: the migrate tool wrote PG's 1 auth-session row into
+`knoxx_sessions` (agent sessions) instead of `knoxx_policy_sessions` — the
+E15 collection-collision gotcha in the flesh; one stray doc (has token_hash)
+awaiting deletion. Boot-time trigger fires raced the eta-mu model registry
+("No eta-mu model configured for gemma4:31b") — watch the next cron tick.
