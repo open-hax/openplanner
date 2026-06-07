@@ -1346,7 +1346,57 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const pendingView = graphProjectionInflight.get(cacheKey) as Promise<any> | undefined;
     if (pendingView) {
       counterInc("openplanner_projection_cache_inflight_hits_total", { projection: "graph_view" });
-      return await pendingView;
+      try {
+        return await resolveWithTimeoutFallback({
+          promise: pendingView,
+          timeoutMs: graphViewBuildTimeoutMs,
+          fallback: () => {
+            counterInc("openplanner_projection_cache_timeouts_total", { projection: "graph_view" });
+            const fallbackNodes = requestedSeedNodeIds
+              .slice(0, maxNodes)
+              .map((nodeId: string) => inferViewNodeFromId(nodeId, hashPositionForNodeId(nodeId)));
+            return {
+              ok: true,
+              nodes: fallbackNodes,
+              edges: [],
+              meta: {
+                totalNodes: fallbackNodes.length,
+                totalEdges: 0,
+                sampledNodes: true,
+                sampledEdges: true,
+                shardIndex,
+                shardCount,
+                rotationCursor,
+                degraded: true,
+                reason: "graph_view_inflight_timeout",
+                timeoutMs: graphViewBuildTimeoutMs,
+              },
+            };
+          },
+        });
+      } catch (err) {
+        counterInc("openplanner_projection_cache_errors_total", { projection: "graph_view", operation: "build" });
+        req.log.warn({ err, cacheKey }, "graph view inflight projection build failed; returning degraded fallback");
+        const fallbackNodes = requestedSeedNodeIds
+          .slice(0, maxNodes)
+          .map((nodeId: string) => inferViewNodeFromId(nodeId, hashPositionForNodeId(nodeId)));
+        return {
+          ok: true,
+          nodes: fallbackNodes,
+          edges: [],
+          meta: {
+            totalNodes: fallbackNodes.length,
+            totalEdges: 0,
+            sampledNodes: true,
+            sampledEdges: true,
+            shardIndex,
+            shardCount,
+            rotationCursor,
+            degraded: true,
+            reason: "graph_view_inflight_error",
+          },
+        };
+      }
     }
 
     const viewBuild: Promise<any> = (async () => {
