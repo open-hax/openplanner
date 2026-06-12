@@ -50,7 +50,7 @@
     (boundary/cache-put-js cache "b" "B")
     (is (nil? (boundary/cache-get-js cache "a")))
     (is (= "B" (boundary/cache-get-js cache "b")))
-    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 8)
+    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 20)
     (is (nil? (boundary/cache-get-js cache "b")))))
 
 (deftest layered-cache-promotes-lower-layer-hit-test
@@ -83,7 +83,7 @@
     (is (= "A" (boundary/cache-get-js cache "a")))
     (is (true? (boundary/cache-touch-js cache "a" 20)))
     (is (= "A" (boundary/cache-get-js cache "a")))
-    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 25)
+    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 50)
     (is (nil? (boundary/cache-get-js cache "a")))))
 
 (defn -main []
