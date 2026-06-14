@@ -7,11 +7,16 @@
   {:event/type "user.create.success"
    :payload {:userId (:_id user-data)}})
 
-(defn- ^:async find-user-by-username [coll username]
+(defn- ^:async find-user-by-username [coll username credentials]
   (let [result (await (.findOne coll #js {:username username}))]
     (if result
-      {:event/type "user.login.success"
-       :payload {:userId (.-_id result)}}
+      (let [stored-password (.-password result)
+            provided-password (:password credentials)]
+        (if (= stored-password provided-password)
+          {:event/type "user.login.success"
+           :payload {:userId (.-_id result)}}
+          {:event/type "user.login.failure"
+           :payload {:reason "invalid credentials"}}))
       {:event/type "user.login.failure"
        :payload {:reason "user not found"}})))
 
@@ -40,7 +45,7 @@
       (insert-user! coll stored)))
 
   (authenticate [_ credentials]
-    (find-user-by-username (.collection db "knoxx_users") (:username credentials)))
+    (find-user-by-username (.collection db "knoxx_users") (:username credentials) credentials))
 
   (get-user [_ user-id]
     (find-user-by-id (.collection db "knoxx_users") user-id))

@@ -62,25 +62,25 @@ class MongoSessionManagement implements SessionManagement {
   constructor(private app: FastifyInstance) {}
 
   async createSession(opts: any): Promise<any> {
-    const doc = { ...opts, createdAt: new Date(), updatedAt: new Date() };
+    const doc = { ...opts, kind: "session", createdAt: new Date(), updatedAt: new Date() };
     await this.app.mongo.events.insertOne(doc);
     return doc;
   }
 
   async getSession(sessionId: string): Promise<any> {
-    return this.app.mongo.events.findOne({ session: sessionId });
+    return this.app.mongo.events.findOne({ session: sessionId, kind: "session" });
   }
 
   async updateSession(sessionId: string, updates: any): Promise<any> {
     await this.app.mongo.events.updateOne(
-      { session: sessionId },
+      { session: sessionId, kind: "session" },
       { $set: { ...updates, updatedAt: new Date() } }
     );
     return this.getSession(sessionId);
   }
 
   async closeSession(sessionId: string): Promise<void> {
-    await this.app.mongo.events.deleteMany({ session: sessionId });
+    await this.app.mongo.events.deleteMany({ session: sessionId, kind: "session" });
   }
 
   async listSessions(opts: { project?: string; limit: number; offset: number }): Promise<{ rows: any[]; total: number }> {

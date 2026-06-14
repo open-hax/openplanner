@@ -51,16 +51,31 @@
    - devel root files: strip devel prefix (parent of inbox-dir)
    - out-of-root: throws"
   [^string file-path ^string graphics-dir ^string inbox-dir]
-  (let [devel-dir (.dirname path inbox-dir)]
+  (let [abs-file (.resolve path file-path)
+        abs-inbox (.resolve path inbox-dir)
+        devel-dir (.dirname path abs-inbox)
+        abs-graphics (.resolve path graphics-dir)
+        in-inbox? (let [rel (.relative path abs-inbox abs-file)]
+                    (and (not (.startsWith rel ".."))
+                         (not (.isAbsolute path rel))))
+        in-devel? (let [rel (.relative path devel-dir abs-file)]
+                    (and (not (.startsWith rel ".."))
+                         (not (.isAbsolute path rel))))]
     (cond
-      (.startsWith file-path inbox-dir)
-      (.join path graphics-dir (.relative path inbox-dir file-path))
+      in-inbox?
+      (let [target (.resolve path abs-graphics (.relative path abs-inbox abs-file))]
+        (if (.startsWith target abs-graphics)
+          target
+          (throw (js/Error. (str "Resolved target escaped graphics-dir: " abs-file)))))
 
-      (.startsWith file-path devel-dir)
-      (.join path graphics-dir (.relative path devel-dir file-path))
+      in-devel?
+      (let [target (.resolve path abs-graphics (.relative path devel-dir abs-file))]
+        (if (.startsWith target abs-graphics)
+          target
+          (throw (js/Error. (str "Resolved target escaped graphics-dir: " abs-file)))))
 
       :else
-      (throw (js/Error. (str "File outside watch roots: " file-path))))))
+      (throw (js/Error. (str "File outside watch roots: " abs-file))))))
 
 (defn- file-exists?
   "Returns true if path exists (async)."
@@ -143,7 +158,7 @@
   "Build chokidar ignored array: dotfiles + non-SVG files."
   []
   #js [(re-pattern "(^|[\\/\\\\])\\.")  ;; dotfiles
-       (re-pattern ".*((?!\\.svg$)).*$") ;; non-SVG
+       (re-pattern "^(?!.*\\.svg$).*$") ;; non-SVG
        ])
 
 (defn- make-chokidar-opts

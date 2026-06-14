@@ -84,14 +84,19 @@
               (if-not ctx
                 (.send (.code reply 401) (clj->js {:error "Unauthorized"}))
                 (let [actor-id (aget (aget req "params") "id")
+                      requester-id (:auth/actor-id ctx)
+                      requester-caps (set (or (:auth/capabilities ctx) []))
                       body (js->clj (or (aget req "body") #js {}) :keywordize-keys true)
                       capabilities (:capabilities body)]
-                  (-> (db/query
-                       "UPDATE actors SET capabilities = $1, updated_at = NOW() WHERE id = $2"
-                       [(clj->js capabilities) actor-id])
-                      (.then
-                        (fn [_]
-                          (.send reply (clj->js {:ok true})))))))))))))
+                  (if (or (= requester-id actor-id)
+                          (contains? requester-caps :axxium/admin))
+                    (-> (db/query
+                         "UPDATE actors SET capabilities = $1, updated_at = NOW() WHERE id = $2"
+                         [(clj->js capabilities) actor-id])
+                        (.then
+                          (fn [_]
+                            (.send reply (clj->js {:ok true})))))
+                    (.send (.code reply 403) (clj->js {:error "Forbidden"}))))))))
 
 (defn register-actor-routes! [app]
   (register-list-actors-route! app)

@@ -91,7 +91,7 @@
    Returns true if notification was sent, false if skipped."
   [graphics-dir causal-root path & [{:keys [session-id conversation-id]}]]
   (let [cfg (config/cfg)
-        events (await (ledger/read-events graphics-dir causal-root))
+        events (await (ledger/read-events causal-root {:graphics-dir graphics-dir}))
         present-types (into #{} (map :event/type) events)
         missing (into [] (remove present-types) required-review-types)]
     (if (empty? missing)

@@ -85,7 +85,7 @@
                      (db/watch coll pipeline opts)
                      (db/watch coll [] opts))]
     (wire-callback stream id callback)
-    (make-handle stream id filter)))
+    (make-handle id stream filter)))
 
 (defn watch-once
   "Open a temporary watcher that resolves on first matching event or times out.

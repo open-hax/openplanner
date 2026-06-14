@@ -4268,6 +4268,18 @@
       "removalCondition": "root OpenPlanner service and tests run from CLJS"
     },
     {
+      "path": "src/lib/protocol-adapters.ts",
+      "owner": "T2-root-openplanner-cljs-runtime-api",
+      "disposition": "port-to-cljs",
+      "removalCondition": "root OpenPlanner service and tests run from CLJS"
+    },
+    {
+      "path": "src/lib/protocol-factory.ts",
+      "owner": "T2-root-openplanner-cljs-runtime-api",
+      "disposition": "port-to-cljs",
+      "removalCondition": "root OpenPlanner service and tests run from CLJS"
+    },
+    {
       "path": "src/lib/schema-versions.ts",
       "owner": "T2-root-openplanner-cljs-runtime-api",
       "disposition": "port-to-cljs",

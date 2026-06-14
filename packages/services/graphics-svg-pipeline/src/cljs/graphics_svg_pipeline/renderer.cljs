@@ -156,9 +156,9 @@
   "Return a promise that rejects after ms milliseconds."
   [ms label]
   (js/Promise.
-   (fn [_reject]
+   (fn [_resolve reject]
      (js/setTimeout
-      (fn [] (_reject (js/Error. (str "[renderer] " label " timed out after " ms "ms"))))
+      (fn [] (reject (js/Error. (str "[renderer] " label " timed out after " ms "ms"))))
       ms))))
 
 ;; ============================================================================

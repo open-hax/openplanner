@@ -6,6 +6,7 @@
     ["path" :as path]
     [cljs.test :refer [deftest is testing use-fixtures]]
     [clojure.edn :as edn]
+    [clojure.string :as str]
     [graphics-svg-pipeline.ledger :as ledger]))
 
 (def ^:private tmp-dir

@@ -49,7 +49,9 @@
    :password/salt-rounds (env-int "BCRYPT_SALT_ROUNDS" 12)})
 
 (defn get-in-config [ks]
-  (get-in config ks))
+  (if (= 1 (count ks))
+    (get config (first ks))
+    (get-in config ks)))
 
 (defn db-url []
   (let [{:keys [db/host db/port db/name db/user db/password]} config]

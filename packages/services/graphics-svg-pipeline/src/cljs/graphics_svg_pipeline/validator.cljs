@@ -67,7 +67,7 @@
   "True if `elem` is a <script> or <foreignObject>."
   [elem]
   (let [ln (node-local-name elem)]
-    (or (= ln "script") (= ln "foreign-object"))))
+    (or (= ln "script") (= ln "foreignobject"))))
 
 (defn- dangerous-schemes
   "Return true if `s` contains a dangerous URI scheme."

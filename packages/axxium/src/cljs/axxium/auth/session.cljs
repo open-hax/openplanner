@@ -5,12 +5,13 @@
   (:require [axxium.config :as cfg]
             [axxium.db :as db]
             [axxium.auth.token :as token]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            ["node:crypto" :as crypto]))
 
 (def COOKIE-NAME (cfg/get-in-config [:session/cookie-name]))
 
 (defn- hash-token [token]
-  (-> (js/crypto.createHash "sha256")
+  (-> (.createHash crypto "sha256")
       (.update token)
       (.digest "hex")))
 

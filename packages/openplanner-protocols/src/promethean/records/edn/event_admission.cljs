@@ -28,7 +28,9 @@
 (defn- parse-edn-line [line]
   (try
     (reader/read-string line)
-    (catch :default _ nil)))
+    (catch :default err
+      (js/console.warn "[edn-event-admission] failed to parse EDN line:" (pr-str line) err)
+      nil)))
 
 ;; ---------------------------------------------------------------------------
 ;; Async Mutex (simple atom-based lock with queue)
@@ -39,12 +41,18 @@
     {:acquire! (fn []
                  (js/Promise.
                    (fn [resolve _reject]
-                     (let [f (fn []
-                               (swap! state assoc :locked true)
-                               (resolve))]
-                       (if (:locked @state)
-                         (swap! state update :queue conj f)
-                         (f))))))
+                     (let [resolve-now? (atom false)]
+                       (swap! state
+                         (fn [s]
+                           (if (:locked s)
+                             ;; Already locked — enqueue this resolver
+                             (update s :queue conj resolve)
+                             ;; Not locked — acquire immediately
+                             (do (reset! resolve-now? true)
+                                 (assoc s :locked true)))))
+                       ;; Resolve outside swap to avoid races
+                       (when @resolve-now?
+                         (resolve))))))
 
      :release! (fn []
                  (let [next-fn (atom nil)]
@@ -78,14 +86,19 @@
 (defn- ^:async append-to-file! [file-path event-str]
   (await (fsp/appendFile file-path event-str "utf8")))
 
-(defn- ^:async read-file-for-watch [file-path callback]
-  (let [watcher (.watch fs file-path)]
+(defn- ^:async read-file-for-watch [file-path callback filter-spec]
+  (let [watcher (.watch fs file-path)
+        pred (when (seq filter-spec)
+               (fn [event]
+                 (every? (fn [[k v]] (= (get event k) v)) filter-spec)))]
     (.on watcher "change"
          (fn [_event-type _filename]
            (-> (read-events file-path)
                (.then (fn [events]
                         (when (seq events)
-                          (callback (last events)))))
+                          (let [last-event (last events)]
+                            (when (or (nil? pred) (pred last-event))
+                              (callback last-event))))))
                (.catch (fn [e] (js/console.error "EDN watch error:" e))))))
     {:id (str (random-uuid))
      :close! (fn [] (.close watcher))}))
@@ -110,8 +123,20 @@
           (.finally (fn [] ((:release! mutex)))))))
 
   (append-events! [this envelopes]
-    (js/Promise.all
-      (clj->js (mapv #(protocols/append-event! this %) envelopes))))
+    (-> ((:acquire! mutex))
+        (.then (fn [_]
+                 (let [results (atom [])]
+                   (-> (reduce
+                         (fn [acc env]
+                           (.then acc
+                             (fn [_]
+                               (-> (append-to-file! file-path (event->edn-str (ensure-defaults env)))
+                                   (.then (fn [_]
+                                            (swap! results conj (ensure-defaults env))))))))
+                         (js/Promise.resolve nil)
+                         envelopes)
+                       (.then (fn [_] (clj->js @results)))))))
+        (.finally (fn [] ((:release! mutex))))))
 
   (query-events [_ filter-spec]
     (-> (read-events file-path)
@@ -125,7 +150,7 @@
                      (filterv pred events)))))))
 
   (watch-events [_ filter-spec callback]
-    (read-file-for-watch file-path callback)))
+    (read-file-for-watch file-path callback filter-spec)))
 
 ;; ---------------------------------------------------------------------------
 ;; Factory
@@ -136,5 +161,5 @@
    ledger-path should be a directory; events are stored in ledger.edn inside it."
   [ledger-dir]
   (let [file-path (path/join ledger-dir "ledger.edn")]
-    (ensure-dir! ledger-dir)
+    (await (ensure-dir! ledger-dir))
     (->EdnFileEventAdmission file-path (create-mutex))))

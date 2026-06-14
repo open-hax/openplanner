@@ -37,7 +37,7 @@
 (defn ^:async check-completion
   "Check if all 5 required review event types exist for a causal_root."
   [causal-root graphics-dir]
-  (let [events (await (ledger/read-events graphics-dir causal-root))
+  (let [events (await (ledger/read-events causal-root {:graphics-dir graphics-dir}))
         present (into #{} (map :event/type) events)
         missing (into [] (remove present) required-review-types)]
     {:complete? (empty? missing)
