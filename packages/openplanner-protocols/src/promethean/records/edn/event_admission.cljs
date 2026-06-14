@@ -127,9 +127,13 @@
                          (fn [acc env]
                            (.then acc
                              (fn [_]
-                               (-> (append-to-file! file-path (event->edn-str (ensure-defaults env)))
-                                   (.then (fn [_]
-                                            (swap! results conj (ensure-defaults env))))))))
+                               ;; Enrich once so the persisted line and the
+                               ;; returned envelope share the same generated
+                               ;; ids/timestamps/causal-root/session-id.
+                               (let [enriched (ensure-defaults env)]
+                                 (-> (append-to-file! file-path (event->edn-str enriched))
+                                     (.then (fn [_]
+                                              (swap! results conj enriched))))))))
                          (js/Promise.resolve nil)
                          envelopes)
                        (.then (fn [_] (clj->js @results)))))))
@@ -162,4 +166,8 @@
     ;; value as the admission instance, not a promise) and avoids a race where
     ;; the first append fires before the directory exists.
     (.mkdirSync fs ledger-dir #js {:recursive true})
+    ;; Touch ledger.edn so a caller can `watch-events` before the first append —
+    ;; `fs.watch` throws ENOENT on a non-existent target. Opening with the "a"
+    ;; flag creates the file when missing without truncating an existing ledger.
+    (.closeSync fs (.openSync fs file-path "a"))
     (->EdnFileEventAdmission file-path (create-mutex))))

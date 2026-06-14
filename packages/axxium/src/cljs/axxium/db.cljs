@@ -4,8 +4,6 @@
   (:require [axxium.config :as cfg]
             ["pg" :refer [Pool]]))
 
-(def ^:private pg #js {:Pool Pool})
-
 (defonce pool
   (delay
     (let [pool-config #js {:connectionString (cfg/db-url)

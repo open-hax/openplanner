@@ -10,7 +10,7 @@
 
 (defn- env-int [key default]
   (let [v (env key)]
-    (if v (js/parseInt v) default)))
+    (if v (js/parseInt v 10) default)))
 
 (defn- env-bool [key default]
   (let [v (env key)]
@@ -48,10 +48,16 @@
    ;; Password hashing
    :password/salt-rounds (env-int "BCRYPT_SALT_ROUNDS" 12)})
 
-(defn get-in-config [ks]
-  (if (= 1 (count ks))
-    (get config (first ks))
-    (get-in config ks)))
+(defn get-in-config
+  "Retrieve a value from config by keyword key or vector path.
+   Single-key usage: (get-in-config :jwt/secret)
+   Path usage: (get-in-config [:db :nested-key])"
+  [ks]
+  (if (keyword? ks)
+    (get config ks)
+    (if (= 1 (count ks))
+      (get config (first ks))
+      (get-in config ks))))
 
 (defn db-url []
   (let [{:keys [db/host db/port db/name db/user db/password]} config]
