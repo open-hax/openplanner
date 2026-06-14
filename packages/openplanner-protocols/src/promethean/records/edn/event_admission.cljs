@@ -68,9 +68,6 @@
 ;; File operations
 ;; ---------------------------------------------------------------------------
 
-(defn- ^:async ensure-dir! [dir-path]
-  (await (fsp/mkdir dir-path #js {:recursive true})))
-
 (defn- ^:async read-events [file-path]
   (try
     (let [content (await (fsp/readFile file-path "utf8"))
@@ -161,5 +158,8 @@
    ledger-path should be a directory; events are stored in ledger.edn inside it."
   [ledger-dir]
   (let [file-path (path/join ledger-dir "ledger.edn")]
-    (await (ensure-dir! ledger-dir))
+    ;; Synchronous mkdir keeps this factory non-async (callers use the return
+    ;; value as the admission instance, not a promise) and avoids a race where
+    ;; the first append fires before the directory exists.
+    (.mkdirSync fs ledger-dir #js {:recursive true})
     (->EdnFileEventAdmission file-path (create-mutex))))
