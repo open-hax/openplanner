@@ -8,7 +8,12 @@ type MongoMetricCounts = {
   compactVectors: number;
 };
 
-const mongoGaugeRefreshMs = Math.max(5_000, Math.min(10 * 60_000, Number(process.env.OPENPLANNER_METRICS_MONGO_REFRESH_MS ?? 60_000)));
+function parseRefreshMs(value: string | undefined, fallback: number): number {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+const mongoGaugeRefreshMs = Math.max(5_000, Math.min(10 * 60_000, parseRefreshMs(process.env.OPENPLANNER_METRICS_MONGO_REFRESH_MS, 60_000)));
 let lastMongoGaugeRefresh = 0;
 let lastMongoGaugeCounts: MongoMetricCounts | null = null;
 let pendingMongoGaugeRefresh: Promise<MongoMetricCounts> | null = null;
