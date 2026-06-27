@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
-import { upsertEvent, upsertGraphEdges, upsertGraphNodeEmbeddings } from "../../lib/mongodb.js";
+import { createProtocols } from "../../lib/protocol-adapters.js";
+import { upsertGraphEdges, upsertGraphNodeEmbeddings } from "../../lib/mongodb.js";
 import { prepareIndexDocument } from "../../lib/indexing.js";
 import { indexTextInMongoVectors } from "../../lib/mongo-vectors.js";
 import { counterInc } from "../../lib/metrics.js";
@@ -66,6 +67,8 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 }
 
 export const eventRoutes: FastifyPluginAsync = async (app) => {
+  const protocols = createProtocols(app);
+
   app.post<{ Body: EventIngestRequest }>("/events", async (req, reply) => {
     const body = req.body;
     if (!body || !Array.isArray(body.events)) return reply.status(400).send({ error: "expected { events: [...] }" });
@@ -181,8 +184,8 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
       const tags = (meta as any).tags;
       const project = norm((sr as any).project);
 
-      // MongoDB storage
-      await upsertEvent(app.mongo.events, {
+      // Protocol-based event admission
+      await protocols.eventAdmission.appendEvent({
         id: ev.id,
         ts: new Date(ev.ts),
         source: ev.source,
