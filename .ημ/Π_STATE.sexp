@@ -1,40 +1,104 @@
 (fork-tax-state
-  (time "2026-06-14T03:09:30Z")
-  (repo "/home/err/devel/orgs/open-hax/openplanner")
-  (branch "fix/kanban-event-ledger-edn-admission")
+  (time "2026-07-10T20:07:21Z")
+  (repo "/home/err/spaces/openplanner")
+  (branch "main")
   (remote "origin")
-  (status "ready-to-commit")
+  (status "committed")
+  (tag "Π/20260710T200721Z-openplanner-sdk-extraction")
+
+  (purpose
+    "Extract the OpenPlanner data-plane into a reusable workspace package (@open-hax/openplanner-sdk)."
+    "Delete the knoxx and eta-mu-sol submodules (superseded by in-repo SDK)."
+    "Update PRINCIPLE.edn skill-path migration from ~/.pi/agent/skills to ~/.agents/skills."
+    "Add service/ deployment artifacts (compose, k8s, nginx).")
 
   (staged-files
-    "packages/axxium/src/cljs/axxium/auth/session.cljs"
-    "packages/axxium/src/cljs/axxium/config.cljs"
-    "packages/axxium/src/cljs/axxium/routes/actor.cljs"
-    "packages/event-ledger/src/promethean/event_ledger/watcher.cljs"
-    "packages/openplanner-protocols/src/promethean/records/edn/event_admission.cljs"
-    "packages/openplanner-protocols/src/promethean/records/mongo/user_management.cljs"
-    "packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/mcp_server.cljs"
-    "packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/notifier.cljs"
-    "packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/renderer.cljs"
-    "packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/validator.cljs"
-    "packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/watcher.cljs"
-    "packages/services/graphics-svg-pipeline/test/cljs/graphics_svg_pipeline/ledger_test.cljs"
-    "scripts/typescript-inventory-allowlist.json"
+    ".gitmodules"
+    ".ημ/PRINCIPLE.edn"
+    "package.json"
+    "packages/agents/eta-mu-sol"
+    "packages/agents/knoxx"
+    "packages/openplanner-sdk/package.json"
+    "packages/openplanner-sdk/tsconfig.json"
+    "packages/openplanner-sdk/src/config.ts"
+    "packages/openplanner-sdk/src/embedding-cache.ts"
+    "packages/openplanner-sdk/src/embedding-models.ts"
+    "packages/openplanner-sdk/src/embedding-runtime.ts"
+    "packages/openplanner-sdk/src/embedding-text.ts"
+    "packages/openplanner-sdk/src/embeddings.ts"
+    "packages/openplanner-sdk/src/indexing.ts"
+    "packages/openplanner-sdk/src/index.ts"
+    "packages/openplanner-sdk/src/ingest.ts"
+    "packages/openplanner-sdk/src/mongo-browse.ts"
+    "packages/openplanner-sdk/src/mongodb.ts"
+    "packages/openplanner-sdk/src/mongo-vectors.ts"
+    "packages/openplanner-sdk/src/protocol-adapters.ts"
+    "packages/openplanner-sdk/src/schema-versions.ts"
+    "packages/openplanner-sdk/src/sdk.ts"
+    "packages/openplanner-sdk/src/search-core.ts"
+    "packages/openplanner-sdk/src/sentence-split.ts"
+    "packages/openplanner-sdk/src/sessions-core.ts"
+    "packages/openplanner-sdk/src/source-hydration.ts"
+    "packages/openplanner-sdk/src/turndown.d.ts"
+    "packages/openplanner-sdk/src/types.ts"
+    "packages/openplanner-sdk/src/vector-search.ts"
+    "pnpm-lock.yaml"
+    "service/"
+    "src/lib/config.ts"
+    "src/lib/embedding-cache.ts"
+    "src/lib/embedding-models.ts"
+    "src/lib/embedding-runtime.ts"
+    "src/lib/embedding-text.ts"
+    "src/lib/embeddings.ts"
+    "src/lib/indexing.ts"
+    "src/lib/mongodb.ts"
+    "src/lib/mongo-vectors.ts"
     "src/lib/protocol-adapters.ts"
-    "receipts.edn")
+    "src/lib/schema-versions.ts"
+    "src/lib/sentence-split.ts"
+    "src/lib/source-hydration.ts"
+    "src/lib/types.ts"
+    "src/lib/vector-search.ts"
+    "src/routes/v1/events.ts"
+    "src/routes/v1/mongo.ts"
+    "src/routes/v1/search.ts"
+    "src/routes/v1/sessions.ts"
+    "src/types/turndown.d.ts")
 
   (concurrent-dirt
     (entry
-      (path "packages/agents/eta-mu-sol/")
-      (status "untracked-new-project")
-      (action "left-untouched"))
+      (path "service/.env")
+      (status "ignored-local-env")
+      (action "left-untracked"))
     (entry
-      (path "packages/agents/opencode")
-      (status "stale-untracked-entry")
-      (action "left-untouched")))
+      (path "service/runtime-secrets/")
+      (status "ignored-local-secrets")
+      (action "left-untracked"))
+    (entry
+      (path "service/openplanner-lake/")
+      (status "ignored-runtime-data")
+      (action "left-untracked"))
+    (entry
+      (path "service/openplanner-proxx-data/")
+      (status "ignored-runtime-data")
+      (action "left-untracked"))
+    (entry
+      (path "packages/openplanner-sdk/dist/")
+      (status "ignored-build-output")
+      (action "left-untracked")))
 
   (verification
-    (tool "manual-review")
-    (result "19 review comments resolved; CI re-run pending"))
+    (tool "pnpm-install")
+    (result "success"))
+  (verification
+    (tool "pnpm-filter-@open-hax/openplanner-sdk-build")
+    (result "success"))
+  (verification
+    (tool "tsc-noEmit-root")
+    (result "success"))
+  (verification
+    (tool "eslint-scoped-packages-openplanner-sdk-src-and-src-lib")
+    (result "pre-existing-warnings-1903-zero-errors"))
 
   (handoff-artifacts
     ".ημ/Π_LAST.md"
