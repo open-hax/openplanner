@@ -6,7 +6,7 @@ the revision and environment where they were observed.
 
 | Note | Disposition | Summary |
 |---|---|---|
-| [2026.04.13.13.57.07.md](2026.04.13.13.57.07.md) | retain; verification-record candidate | Reports a working graph view, exact node/edge/chunk counts, a Mongo vector-search implementation, removed chunk text, and follow-up risks. The evidence is useful for the referenced revision, but the counts and “DB becomes index, not store” interpretation are not permanent architecture authority. |
+| [Graph Weaver Live Graph Query Notes](dev/graph-weaver-live-graph-query-notes.md) | retain; verification-record candidate | Reports a working graph view, exact node/edge/chunk counts, a Mongo vector-search implementation, removed chunk text, and follow-up risks. The evidence is useful for the referenced revision, but the counts and “DB becomes index, not store” interpretation are not permanent architecture authority. |
 
 ## Interpretation rules
 
