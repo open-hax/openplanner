@@ -33,4 +33,6 @@ export type { SessionsContext, SessionDetailMode } from "./sessions-core.js";
 
 export { listCollectionsResponse, queryCollectionResponse, sanitizeCollectionName } from "./mongo-browse.js";
 
+export { createTranslationStore, TranslationStore } from "./translation-store.js";
+
 export type { EventEnvelopeV1, EventIngestRequest, FtsSearchRequest, VectorSearchRequest } from "./types.js";
