@@ -20,6 +20,7 @@ import { ingestEvents } from "./ingest.js";
 import type { IngestLogger, IngestResult } from "./ingest.js";
 import { ftsSearchWithQuality, vectorSearchWithQuality } from "./search-core.js";
 import type { EventEnvelopeV1, FtsSearchRequest, VectorSearchRequest } from "./types.js";
+import { createTranslationStore, type TranslationStore } from "./translation-store.js";
 
 export interface OpenPlannerSdkOptions {
   /**
@@ -42,6 +43,7 @@ export interface OpenPlannerSdk {
   listSessions(opts: { project?: string; limit: number; offset: number }): Promise<{ rows: any[]; total: number }>;
   getSessionEvents(sessionId: string, opts: Record<string, unknown>): Promise<any[]>;
   listCollections(): Promise<string[]>;
+  translation: TranslationStore;
   close(): Promise<void>;
 }
 
@@ -72,6 +74,7 @@ export async function createOpenPlannerSdk(options: OpenPlannerSdkOptions = {}):
       const collections = await mongo.db.listCollections().toArray();
       return collections.map((c: { name: string }) => c.name).sort();
     },
+    translation: createTranslationStore(mongo.db),
     close: () => closeMongoDB(mongo),
   };
 }
