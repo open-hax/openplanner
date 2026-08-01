@@ -59,6 +59,10 @@ export async function createOpenPlannerSdk(options: OpenPlannerSdkOptions = {}):
   const embeddingRuntime = createEmbeddingRuntime(config);
   const protocols = createProtocols({ mongo });
   const log = options.log;
+  const translation = createTranslationStore(mongo.db, {
+    eventsCollection: config.mongodb.eventsCollection,
+  });
+  await translation.ensureIndexes();
 
   return {
     config,
@@ -74,7 +78,7 @@ export async function createOpenPlannerSdk(options: OpenPlannerSdkOptions = {}):
       const collections = await mongo.db.listCollections().toArray();
       return collections.map((c: { name: string }) => c.name).sort();
     },
-    translation: createTranslationStore(mongo.db),
+    translation,
     close: () => closeMongoDB(mongo),
   };
 }
