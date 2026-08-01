@@ -54,6 +54,7 @@ type BatchDoc = {
   target_lang: string;
   source_lang: string;
   project: string;
+  org_id?: string;
   status: string;
   document_ids: string[];
   completed_documents: string[];
@@ -171,6 +172,7 @@ function graphMemoryPlan(segment: SegmentDoc, correctedText?: string) {
         document_id: segment.document_id,
         domain: segment.domain,
         content_type: segment.content_type,
+        org_id: segment.org_id,
         quality: "approved",
         segment_id: segmentId,
       },
@@ -180,7 +182,7 @@ function graphMemoryPlan(segment: SegmentDoc, correctedText?: string) {
       source: segment.document_id,
       target: nodeId,
       kind: "has_translation",
-      data: { source_lang: segment.source_lang, target_lang: segment.target_lang },
+      data: { source_lang: segment.source_lang, target_lang: segment.target_lang, org_id: segment.org_id },
     },
   };
 }
@@ -227,6 +229,15 @@ function copyFilters(source: Input, keys: string[]): Input {
   return filter;
 }
 
+function scopedFilter(base: Input, source: Input): Input {
+  return { ...base, ...copyFilters(source, ["org_id"]) };
+}
+
+function batchIdentityFilter(batchId: string, source: Input): Input {
+  const oid = objectId(batchId);
+  return scopedFilter(oid ? { _id: oid } : { batch_id: batchId }, source);
+}
+
 export class TranslationStore {
   private readonly segments: Collection<SegmentDoc>;
   private readonly labels: Collection<LabelDoc>;
@@ -244,14 +255,29 @@ export class TranslationStore {
     this.graphEdges = db.collection<Input>("graph_edges");
   }
 
+  private async ensureSegmentUniqueIndex(): Promise<void> {
+    const keys = { org_id: 1, document_id: 1, segment_index: 1, target_lang: 1 } as const;
+    try {
+      const existing = (await this.segments.indexes()).find((index) => index.name === "segment_unique_idx");
+      const existingKeys = existing?.key ?? {};
+      const expectedEntries = Object.entries(keys);
+      const matches = expectedEntries.length === Object.keys(existingKeys).length
+        && expectedEntries.every(([key, value]) => existingKeys[key] === value);
+      if (existing && !matches) await this.segments.dropIndex("segment_unique_idx");
+    } catch (error) {
+      if ((error as { codeName?: string }).codeName !== "NamespaceNotFound") throw error;
+    }
+    await this.segments.createIndex(keys, { unique: true, name: "segment_unique_idx" });
+  }
+
   async ensureIndexes(): Promise<void> {
+    await this.ensureSegmentUniqueIndex();
     await Promise.all([
-      this.segments.createIndex({ document_id: 1, segment_index: 1, target_lang: 1 }, { unique: true, name: "segment_unique_idx" }),
       this.segments.createIndex({ status: 1 }), this.segments.createIndex({ target_lang: 1 }),
       this.segments.createIndex({ garden_id: 1 }), this.segments.createIndex({ org_id: 1 }),
       this.segments.createIndex({ project: 1 }), this.labels.createIndex({ segment_id: 1, created_at: -1 }),
       this.batches.createIndex({ garden_id: 1, target_lang: 1, status: 1 }),
-      this.batches.createIndex({ status: 1, created_at: 1 }),
+      this.batches.createIndex({ org_id: 1, status: 1, created_at: 1 }),
     ]);
   }
 
@@ -270,10 +296,10 @@ export class TranslationStore {
     return { segments: rows.map((row) => segmentView(row, [], countById.get(id(row)) ?? 0)), total, has_more: offset + rows.length < total };
   }
 
-  async segment(segmentId: string) {
+  async segment(segmentId: string, opts: Input = {}) {
     const oid = objectId(segmentId);
     if (!oid) throw new Error("Invalid segment ID");
-    const row = await this.segments.findOne({ _id: oid });
+    const row = await this.segments.findOne(scopedFilter({ _id: oid }, opts));
     if (!row) throw new Error("Segment not found");
     const labels = await this.labels.find({ segment_id: segmentId }).sort({ created_at: -1 }).toArray();
     return segmentView(row, labels);
@@ -300,8 +326,12 @@ export class TranslationStore {
     if (!doc.source_text || !doc.translated_text || !doc.target_lang || !doc.document_id) {
       throw new Error("Missing required fields: source_text, translated_text, target_lang, document_id");
     }
-    const result = await this.segments.findOneAndUpdate(
+    const identity = scopedFilter(
       { document_id: doc.document_id, segment_index: doc.segment_index, target_lang: doc.target_lang },
+      doc as Input,
+    );
+    const result = await this.segments.findOneAndUpdate(
+      identity,
       { $set: doc, $setOnInsert: { created_at: now } },
       { upsert: true, returnDocument: "after", includeResultMetadata: true },
     );
@@ -347,7 +377,8 @@ export class TranslationStore {
   async labelSegment(segmentId: string, payload: Input) {
     const oid = objectId(segmentId);
     if (!oid) throw new Error("Invalid segment ID");
-    const segment = await this.segments.findOne({ _id: oid });
+    const segmentFilter = scopedFilter({ _id: oid }, payload);
+    const segment = await this.segments.findOne(segmentFilter);
     if (!segment) throw new Error("Segment not found");
     for (const key of ["adequacy", "fluency", "terminology", "risk", "overall"]) if (!payload[key]) throw new Error("Missing required label fields");
     const label: LabelDoc = {
@@ -361,7 +392,7 @@ export class TranslationStore {
     };
     const inserted = await this.labels.insertOne(label);
     const newStatus = statusAfterLabel(segment.status, label.overall, label.corrected_text);
-    await this.segments.updateOne({ _id: oid }, { $set: { ...(label.corrected_text ? { translated_text: label.corrected_text } : {}), status: newStatus, updated_at: new Date() } });
+    await this.segments.updateOne(segmentFilter, { $set: { ...(label.corrected_text ? { translated_text: label.corrected_text } : {}), status: newStatus, updated_at: new Date() } });
     const graphMemory = newStatus === "approved" ? await this.upsertGraphMemory(segment, label.corrected_text) : undefined;
     return { ok: true, label: { ...clean(label) as Input, id: inserted.insertedId.toString(), _id: undefined }, new_status: newStatus, graph_memory: graphMemory };
   }
@@ -493,16 +524,18 @@ export class TranslationStore {
     return { documents, total: documents.length };
   }
 
-  async document(documentId: string, targetLang: string) {
-    const event = await this.events.findOne({ _id: documentId });
-    if (!event) throw new Error("Document not found");
+  async document(documentId: string, targetLang: string, opts: Input = {}) {
+    const segmentFilter = scopedFilter({ document_id: documentId, target_lang: targetLang }, opts);
     const segments = await this.segments.aggregate<SegmentDoc>([
-      { $match: { document_id: documentId, target_lang: targetLang } },
+      { $match: segmentFilter },
       { $sort: { segment_index: 1, created_at: -1 } },
       { $group: { _id: "$segment_index", doc: { $first: "$$ROOT" } } },
       { $replaceRoot: { newRoot: "$doc" } },
       { $sort: { segment_index: 1 } },
     ]).toArray();
+    if (!segments.length) throw new Error("Document translation not found");
+    const event = await this.events.findOne({ _id: documentId });
+    if (!event) throw new Error("Document not found");
     const labels = await this.labels.find({ segment_id: { $in: segments.map(id) } }).sort({ created_at: -1 }).toArray();
     const labelsBySegment = new Map<string, LabelDoc[]>();
     for (const label of labels) {
@@ -530,7 +563,8 @@ export class TranslationStore {
 
   async reviewDocument(documentId: string, targetLang: string, payload: Input) {
     if (!["approve", "needs_edit", "reject"].includes(String(payload.overall))) throw new Error("overall must be approve, needs_edit, or reject");
-    const segments = await this.segments.find({ document_id: documentId, target_lang: targetLang }).sort({ segment_index: 1 }).toArray();
+    const segmentFilter = scopedFilter({ document_id: documentId, target_lang: targetLang }, payload);
+    const segments = await this.segments.find(segmentFilter).sort({ segment_index: 1 }).toArray();
     if (!segments.length) throw new Error("No segments found for this document+language pair");
     const overrides = payload.segment_overrides && typeof payload.segment_overrides === "object"
       ? payload.segment_overrides as Record<string, Input>
@@ -558,7 +592,7 @@ export class TranslationStore {
     await this.labels.bulkWrite(plans.map(({ label }) => ({ insertOne: { document: label } })), { ordered: false });
     await this.segments.bulkWrite(plans.map(({ segment, label, nextStatus }) => ({
       updateOne: {
-        filter: { _id: segment._id },
+        filter: scopedFilter({ _id: segment._id }, payload),
         update: { $set: { ...(label.corrected_text ? { translated_text: label.corrected_text } : {}), status: nextStatus, updated_at: new Date() } },
       },
     })), { ordered: false });
@@ -578,7 +612,8 @@ export class TranslationStore {
     if (!payload.garden_id || !payload.target_lang || !documentIds.length) throw new Error("garden_id, target_lang, and document_ids are required");
     const batch: BatchDoc = {
       batch_id: crypto.randomUUID(), garden_id: text(payload.garden_id), target_lang: text(payload.target_lang),
-      source_lang: text(payload.source_lang, "en"), project: text(payload.project, "devel"), status: "queued",
+      source_lang: text(payload.source_lang, "en"), project: text(payload.project, "devel"),
+      org_id: text(payload.org_id) || undefined, status: "queued",
       document_ids: documentIds, completed_documents: [], failed_documents: [], created_at: new Date(),
     };
     const inserted = await this.batches.insertOne(batch);
@@ -586,23 +621,22 @@ export class TranslationStore {
   }
 
   async listBatches(opts: Input = {}) {
-    const filter = copyFilters(opts, ["garden_id", "target_lang", "status"]);
+    const filter = copyFilters(opts, ["garden_id", "target_lang", "status", "org_id"]);
     const rows = await this.batches.find(filter).sort({ created_at: -1 }).limit(50).toArray();
     return { batches: rows.map((row) => ({ ...clean(row) as Input, id: id(row), _id: undefined })) };
   }
 
-  async nextBatch() {
+  async nextBatch(opts: Input = {}) {
     const row = await this.batches.findOneAndUpdate(
-      { status: "queued" },
+      scopedFilter({ status: "queued" }, opts),
       { $set: { status: "processing", started_at: new Date(), updated_at: new Date() }, $inc: { attempts: 1 } },
       { sort: { created_at: 1 }, returnDocument: "after" },
     );
     return { batch: row ? { ...clean(row) as Input, id: id(row), _id: undefined } : null };
   }
 
-  async batch(batchId: string) {
-    const oid = objectId(batchId);
-    const row = await this.batches.findOne(oid ? { _id: oid } : { batch_id: batchId });
+  async batch(batchId: string, opts: Input = {}) {
+    const row = await this.batches.findOne(batchIdentityFilter(batchId, opts));
     if (!row) throw new Error("Batch not found");
     return { ...clean(row) as Input, id: id(row), _id: undefined };
   }
@@ -613,8 +647,7 @@ export class TranslationStore {
     if (payload.status === "processing") Object.assign(set, { started_at: now, ...(payload.agent_session_id ? { agent_session_id: payload.agent_session_id } : {}), ...(payload.agent_conversation_id ? { agent_conversation_id: payload.agent_conversation_id } : {}), ...(payload.agent_run_id ? { agent_run_id: payload.agent_run_id } : {}) });
     if (["complete", "partial", "failed"].includes(String(payload.status))) Object.assign(set, { completed_at: now, ...(payload.error ? { error: payload.error } : {}) });
     const push: Input = { ...(payload.completed_document ? { completed_documents: payload.completed_document } : {}), ...(payload.failed_document ? { failed_documents: payload.failed_document } : {}) };
-    const oid = objectId(batchId);
-    const result = await this.batches.updateOne(oid ? { _id: oid } : { batch_id: batchId }, { $set: set, ...(Object.keys(push).length ? { $push: push } : {}) });
+    const result = await this.batches.updateOne(batchIdentityFilter(batchId, payload), { $set: set, ...(Object.keys(push).length ? { $push: push } : {}) });
     if (!result.matchedCount) throw new Error("Batch not found");
     return { ok: true, batch_id: batchId, status: payload.status };
   }
