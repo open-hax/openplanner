@@ -7,7 +7,7 @@
   (:require [openplanner.stores.cache.core :as core]))
 
 (def cache-backends
-  #{:memory :redis :lmdb :mongo :postgresql :chromadb :duckdb :sqlite})
+  #{:memory :lmdb :mongo :postgresql :chromadb :duckdb :sqlite})
 
 (def cache-entry-contract
   {:contract/name :openplanner.stores.cache/cache-entry
@@ -26,7 +26,8 @@
 
 (defn valid-cache-key?
   [value]
-  (boolean (core/nonblank value)))
+  (and (string? value)
+       (boolean (core/nonblank value))))
 
 (defn valid-ms?
   [value]
