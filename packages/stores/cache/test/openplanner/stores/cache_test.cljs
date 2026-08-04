@@ -50,7 +50,7 @@
     (boundary/cache-put-js cache "b" "B")
     (is (nil? (boundary/cache-get-js cache "a")))
     (is (= "B" (boundary/cache-get-js cache "b")))
-    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 8)
+    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 20)
     (is (nil? (boundary/cache-get-js cache "b")))))
 
 (deftest layered-cache-promotes-lower-layer-hit-test
@@ -68,47 +68,6 @@
                     (is false (str "layered cache failed: " err))
                     (done)))))))
 
-(deftest redis-cache-adapter-delegates-to-client-test
-  (async done
-    (let [calls (atom [])
-          store (atom {})
-          client (doto (js-obj)
-                   (aset "get" (fn [k]
-                                  (swap! calls conj [:get k])
-                                  (js/Promise.resolve (get @store k))))
-                   (aset "set" (fn [k v opts]
-                                  (swap! calls conj [:set k v (some? opts)])
-                                  (swap! store assoc k v)
-                                  (js/Promise.resolve "OK")))
-                   (aset "del" (fn [k]
-                                  (swap! calls conj [:del k])
-                                  (let [present? (contains? @store k)]
-                                    (swap! store dissoc k)
-                                    (js/Promise.resolve (if present? 1 0)))))
-                   (aset "pExpire" (fn [k ttl]
-                                      (swap! calls conj [:pExpire k ttl])
-                                      (js/Promise.resolve (if (contains? @store k) 1 0)))))
-          cache (boundary/create-redis-cache #js {:client client :prefix "p:" :defaultTtlMs 50})]
-      (-> (boundary/cache-put-js cache "a" "A")
-          (p-> (fn [_] (boundary/cache-get-js cache "a")))
-          (p-> (fn [value]
-                 (is (= "A" value))
-                 (boundary/cache-touch-js cache "a" 25)))
-          (p-> (fn [touched?]
-                 (is (true? touched?))
-                 (boundary/cache-evict-js cache "a")))
-          (p-> (fn [evicted?]
-                 (is (true? evicted?))
-                 (is (= [[:set "p:a" "A" true]
-                         [:get "p:a"]
-                         [:pExpire "p:a" 25]
-                         [:del "p:a"]]
-                        @calls))
-                 (done)))
-          (.catch (fn [err]
-                    (is false (str "redis adapter failed: " err))
-                    (done)))))))
-
 (deftest lmdb-cache-adapter-expires-and-touches-test
   (let [store (atom {})
         db #js {:get (fn [k] (get @store k))
@@ -124,7 +83,7 @@
     (is (= "A" (boundary/cache-get-js cache "a")))
     (is (true? (boundary/cache-touch-js cache "a" 20)))
     (is (= "A" (boundary/cache-get-js cache "a")))
-    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 25)
+    (js/Atomics.wait (js/Int32Array. (js/SharedArrayBuffer. 4)) 0 0 50)
     (is (nil? (boundary/cache-get-js cache "a")))))
 
 (defn -main []

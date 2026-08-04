@@ -140,10 +140,6 @@
   ([] (cache/create-memory-lru-cache))
   ([opts] (cache/create-memory-lru-cache opts)))
 
-(defn create-redis-cache
-  [opts]
-  (cache/create-redis-cache opts))
-
 (defn create-lmdb-cache
   [opts]
   (cache/create-lmdb-cache opts))
