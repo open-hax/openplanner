@@ -590,10 +590,15 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const kafkaPublish = app.kafkaEvents.publishRawEvents(acceptedEvents, { requestId: req.id });
+    const handleKafkaResult = (result: { ok: boolean; topic?: string; error?: string }) => {
+      if (!result.ok) {
+        req.log.warn({ topic: result.topic, error: result.error }, "Kafka raw event publish returned ok:false");
+      }
+    };
     if (process.env.OPENPLANNER_KAFKA_PUBLISH_MODE === "await") {
-      await kafkaPublish;
+      handleKafkaResult(await kafkaPublish);
     } else {
-      void kafkaPublish.catch((err) => {
+      void kafkaPublish.then(handleKafkaResult).catch((err) => {
         app.log.warn({ err, count: acceptedEvents.length }, "Detached kafka raw event publish rejected");
       });
     }
