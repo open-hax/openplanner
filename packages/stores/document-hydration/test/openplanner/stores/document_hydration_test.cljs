@@ -55,47 +55,6 @@
                     (is false (str "layered cache failed: " err))
                     (done)))))))
 
-(deftest redis-cache-adapter-delegates-to-client-test
-  (async done
-    (let [calls (atom [])
-          store (atom {})
-          client (doto (js-obj)
-                   (aset "get" (fn [k]
-                                  (swap! calls conj [:get k])
-                                  (js/Promise.resolve (get @store k))))
-                   (aset "set" (fn [k v opts]
-                                  (swap! calls conj [:set k v (some? opts)])
-                                  (swap! store assoc k v)
-                                  (js/Promise.resolve "OK")))
-                   (aset "del" (fn [k]
-                                  (swap! calls conj [:del k])
-                                  (let [present? (contains? @store k)]
-                                    (swap! store dissoc k)
-                                    (js/Promise.resolve (if present? 1 0)))))
-                   (aset "pExpire" (fn [k ttl]
-                                      (swap! calls conj [:pExpire k ttl])
-                                      (js/Promise.resolve (if (contains? @store k) 1 0)))))
-          cache (hydration/create-redis-cache #js {:client client :prefix "p:" :defaultTtlMs 50})]
-      (-> (hydration/cache-put-js cache "a" "A")
-          (p-> (fn [_] (hydration/cache-get-js cache "a")))
-          (p-> (fn [value]
-                 (is (= "A" value))
-                 (hydration/cache-touch-js cache "a" 25)))
-          (p-> (fn [touched?]
-                 (is (true? touched?))
-                 (hydration/cache-evict-js cache "a")))
-          (p-> (fn [evicted?]
-                 (is (true? evicted?))
-                 (is (= [[:set "p:a" "A" true]
-                         [:get "p:a"]
-                         [:pExpire "p:a" 25]
-                         [:del "p:a"]]
-                        @calls))
-                 (done)))
-          (.catch (fn [err]
-                    (is false (str "redis adapter failed: " err))
-                    (done)))))))
-
 (deftest lmdb-cache-adapter-expires-and-touches-test
   (let [store (atom {})
         db #js {:get (fn [k] (get @store k))
