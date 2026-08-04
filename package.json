@@ -41,7 +41,6 @@
     "pino": "^9.0.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "redis": "^4.6.0",
     "sentence-splitter": "^5.0.1",
     "shiki": "^3.2.0",
     "stream-chain": "^3.4.0",
@@ -75,7 +74,8 @@
   "pnpm": {
     "overrides": {
       "hono": "^4.12.18"
-    }
+    },
+    "patchedDependencies": {}
   },
   "license": "GPL-3.0-or-later"
 }
