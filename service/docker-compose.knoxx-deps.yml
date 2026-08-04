@@ -1,0 +1,49 @@
+# Minimal knoxx dependency stack for VPS host-mode runtime.
+# Runs knoxx-postgres and knoxx-redis bound to localhost so PM2
+# host services can reach them at 127.0.0.1:5432 and 127.0.0.1:6379.
+#
+# Usage from ~/devel/services/openplanner:
+#   docker compose -f docker-compose.knoxx-deps.yml up -d
+
+name: knoxx-deps
+
+services:
+  knoxx-postgres:
+    image: postgres:16-bookworm
+    ports:
+      - "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:REDACTED_SECRET}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:REDACTED_SECRET}
+      POSTGRES_DB: ${POSTGRES_DB:-knoxx}
+    volumes:
+      - knoxx-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:REDACTED_SECRET} -d ${POSTGRES_DB:-knoxx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  knoxx-redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    expose:
+      - "6379"
+    volumes:
+      - knoxx-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  knoxx-postgres-data:
+  knoxx-redis-data:

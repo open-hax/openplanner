@@ -1,0 +1,37 @@
+{
+  "name": "@open-hax/openplanner-sdk",
+  "version": "0.1.0",
+  "description": "OpenPlanner data-plane SDK: direct MongoDB adapter with self-sourced embeddings. The REST API and internal consumers (knoxx) share this library; no HTTP hop required.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js",
+      "default": "./dist/*.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@open-hax/openplanner-document-hydration": "workspace:*",
+    "lmdb": "^3.4.2",
+    "mongodb": "^7.1.1",
+    "sentence-splitter": "^5.0.1",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.4.0"
+  },
+  "license": "LGPL-3.0-or-later"
+}

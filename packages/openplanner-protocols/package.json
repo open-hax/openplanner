@@ -1,0 +1,21 @@
+{
+  "name": "@promethean-os/openplanner-protocols",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "index.d.ts",
+  "files": [
+    "dist",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "compile:lib": "shadow-cljs compile lib",
+    "compile:test": "shadow-cljs compile test",
+    "test": "node target/test.cjs",
+    "lint": "clj-kondo --lint src test"
+  },
+  "dependencies": {
+    "shadow-cljs": "^3.0.0",
+    "socket.io-client": "^4.8.3"
+  }
+}
