@@ -2027,7 +2027,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     ] = await Promise.all([
       app.mongo.events.countDocuments({}),
       app.mongo.events.countDocuments({ kind: "graph.node" }),
-      app.mongo.graphNodeEmbeddings.countDocuments({}),
+      app.mongo.graphNodeEmbeddings
+        .distinct("node_id", { embedding: { $exists: true, $ne: [] } })
+        .then((ids: string[]) => ids.length),
       app.mongo.graphNodeEmbeddings.aggregate([
         { $group: { _id: "$embedding_model", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
