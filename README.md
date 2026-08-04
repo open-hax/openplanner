@@ -1,5 +1,8 @@
 # OpenPlanner - Graph Stack Monorepo
 
+> **Roadmap:** [`ROADMAP.md`](ROADMAP.md) — this repo's slice. The hub, with the
+> seam, ownership table and sequencing rule, is [eta-mu/ROADMAP.md](https://github.com/open-hax/eta-mu/blob/main/ROADMAP.md).
+
 > **Built with [GLM-5](https://z.ai)** — OpenPlanner uses GLM-5 by default for all agent operations.
 
 OpenPlanner was made possible by the **[z.ai](https://z.ai) startup ecosystem** and its ongoing support of the **[Ussyverse](https://ussy.cloud)**. This project would not exist without GLM-5's speed, throughput, and sustained access during a period of widespread API restriction.
