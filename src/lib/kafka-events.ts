@@ -176,6 +176,9 @@ export class OpenPlannerKafkaEventBus {
   }
 
   async close(): Promise<void> {
+    if (this.connectPromise) {
+      try { await this.connectPromise; } catch {}
+    }
     if (!this.producer) return;
     try {
       await this.producer.disconnect();
