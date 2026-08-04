@@ -1,0 +1,262 @@
+# VPS deployment stack for a small federated OpenPlanner + Proxx cloud REDACTED_SECRET.
+#
+# Usage on the VPS from ~/devel/services/openplanner:
+#   docker compose -f docker-compose.vps.yml --env-file .env.vps up -d --build
+#
+# This intentionally runs a compact service set: Proxx API/relay, Proxx Postgres,
+# OpenPlanner API, and MongoDB. Local Proxx should connect to this Proxx relay via
+# FEDERATION_BRIDGE_RELAY_URL and can lease credentials to this cloud REDACTED_SECRET.
+
+name: open-hax-cloud-REDACTED_SECRET
+
+services:
+  proxx-init-data:
+    image: busybox:1.36
+    user: "0:0" # init container; allowed REDACTED_SECRET for one-time volume permission fix
+    command: ["sh", "-lc", "mkdir -p /app/data && chown -R 1000:1000 /app/data"]
+    volumes:
+      - ./cloud/proxx-data:/app/data
+
+  proxx-db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: ${PROXX_POSTGRES_DB:-REDACTED_SECRET}
+      POSTGRES_USER: ${PROXX_POSTGRES_USER:-REDACTED_SECRET}
+      POSTGRES_PASSWORD: ${PROXX_POSTGRES_PASSWORD:?PROXX_POSTGRES_PASSWORD is required}
+    volumes:
+      - proxx-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - ai-infra
+
+  proxx:
+    build:
+      context: ../../orgs/open-hax/proxx
+      dockerfile: Dockerfile
+    user: "${DOCKER_USER:-1000:1000}"
+    depends_on:
+      proxx-init-data:
+        condition: service_completed_successfully
+      proxx-db:
+        condition: service_healthy
+    ports:
+      - "0.0.0.0:${PROXY_PORT:-8789}:8789"
+      - "127.0.0.1:${PROXY_WEB_PORT:-5174}:5174"
+    environment:
+      NODE_ENV: production
+      PROXY_HOST: 0.0.0.0
+      PROXY_PORT: "8789"
+      PORT: "8789"
+      PROXY_AUTH_TOKEN: ${PROXY_AUTH_TOKEN:?PROXY_AUTH_TOKEN is required}
+      PROXY_KEYS_FILE: /workspace/service-config/seeds/keys.json
+      PROXY_MODELS_FILE: /workspace/service-config/models.json
+      PROXY_REQUEST_LOGS_FILE: /app/data/request-logs.jsonl
+      PROXY_REQUEST_LOGS_MAX_ENTRIES: ${PROXY_REQUEST_LOGS_MAX_ENTRIES:-25000}
+      PROXY_REQUEST_LOGS_FLUSH_MS: ${PROXY_REQUEST_LOGS_FLUSH_MS:-2000}
+      PROXY_PROMPT_AFFINITY_FLUSH_MS: ${PROXY_PROMPT_AFFINITY_FLUSH_MS:-500}
+      PROXX_EVENT_STORE_TTL_MS: ${PROXX_EVENT_STORE_TTL_MS:-3600000}
+      PROXX_EVENT_STORE_TTL_SWEEP_MS: ${PROXX_EVENT_STORE_TTL_SWEEP_MS:-300000}
+      PROXX_CLJS_RUNTIME_REQUIRED: ${PROXX_CLJS_RUNTIME_REQUIRED:-true}
+      PROXX_CLJS_POLICY_SHADOW: ${PROXX_CLJS_POLICY_SHADOW:-true}
+      PROXX_CLJS_POLICY_AUTHORITATIVE: ${PROXX_CLJS_POLICY_AUTHORITATIVE:-true}
+      PROXX_CLJS_POLICY_MANIFEST: /etc/proxx/policies/runtime/00-manifest.edn
+      DATABASE_URL: postgresql://${PROXX_POSTGRES_USER:-REDACTED_SECRET}:${PROXX_POSTGRES_PASSWORD}@proxx-db:5432/${PROXX_POSTGRES_DB:-REDACTED_SECRET}
+      SESSION_SECRET: ${PROXX_SESSION_SECRET:?PROXX_SESSION_SECRET is required}
+      PROXY_ALLOW_UNAUTHENTICATED: ${PROXY_ALLOW_UNAUTHENTICATED:-false}
+      UPSTREAM_PROVIDER_ID: ${UPSTREAM_PROVIDER_ID:-openai}
+      DISABLED_PROVIDER_IDS: ${DISABLED_PROVIDER_IDS:-}
+      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:-https://chatgpt.com/backend-api}
+      OPENAI_PROVIDER_ID: ${OPENAI_PROVIDER_ID:-openai}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://chatgpt.com/backend-api}
+      OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-https://api.openai.com}
+      OPENAI_OAUTH_CLIENT_ID: ${OPENAI_OAUTH_CLIENT_ID:-app_EMoamEEZ73f0CkXaXp7hrann}
+      OPENAI_OAUTH_CLIENT_SECRET: ${OPENAI_OAUTH_CLIENT_SECRET:-}
+      OPENAI_OAUTH_ISSUER: ${OPENAI_OAUTH_ISSUER:-https://auth.openai.com}
+      OPENAI_OAUTH_SCOPES: ${OPENAI_OAUTH_SCOPES:-openid profile email offline_access}
+      OPENAI_IMAGES_UPSTREAM_MODE: ${OPENAI_IMAGES_UPSTREAM_MODE:-auto}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+      ZAI_PROVIDER_ID: ${ZAI_PROVIDER_ID:-zai}
+      ZAI_BASE_URL: ${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4}
+      UPSTREAM_CHAT_COMPLETIONS_PATH: ${UPSTREAM_CHAT_COMPLETIONS_PATH:-/v1/chat/completions}
+      OPENAI_CHAT_COMPLETIONS_PATH: ${OPENAI_CHAT_COMPLETIONS_PATH:-/codex/responses/compact}
+      UPSTREAM_RESPONSES_PATH: ${UPSTREAM_RESPONSES_PATH:-/v1/responses}
+      OPENAI_RESPONSES_PATH: ${OPENAI_RESPONSES_PATH:-/codex/responses}
+      UPSTREAM_MESSAGES_PATH: ${UPSTREAM_MESSAGES_PATH:-/v1/messages}
+      UPSTREAM_MESSAGES_MODEL_PREFIXES: ${UPSTREAM_MESSAGES_MODEL_PREFIXES:-claude-}
+      UPSTREAM_RESPONSES_MODEL_PREFIXES: ${UPSTREAM_RESPONSES_MODEL_PREFIXES:-gpt-}
+      OPENAI_MODEL_PREFIXES: ${OPENAI_MODEL_PREFIXES:-openai/,openai:}
+      OLLAMA_CHAT_PATH: ${OLLAMA_CHAT_PATH:-/api/chat}
+      OLLAMA_MODEL_PREFIXES: ${OLLAMA_MODEL_PREFIXES:-ollama/,ollama:,ollama-lan/,ollama-lan:}
+      PROXY_KEY_RELOAD_MS: ${PROXY_KEY_RELOAD_MS:-5000}
+      PROXY_KEY_COOLDOWN_MS: ${PROXY_KEY_COOLDOWN_MS:-30000}
+      UPSTREAM_REQUEST_TIMEOUT_MS: ${UPSTREAM_REQUEST_TIMEOUT_MS:-900000}
+      UPSTREAM_STREAM_BOOTSTRAP_TIMEOUT_MS: ${UPSTREAM_STREAM_BOOTSTRAP_TIMEOUT_MS:-900000}
+      NODE_OPTIONS: ${NODE_OPTIONS:---max-old-space-size=2048}
+      EMBED_MAX_BATCH_ITEMS: ${EMBED_MAX_BATCH_ITEMS:-32}
+      EMBED_MAX_INPUT_CHARS: ${EMBED_MAX_INPUT_CHARS:-100000}
+      CHROMA_URL: ${CHROMA_URL:-}
+      CHROMA_COLLECTION: ${CHROMA_COLLECTION:-}
+      HOST_DASHBOARD_SELF_ID: ${HOST_DASHBOARD_SELF_ID:-vps-104-130-159-19}
+      HOST_DASHBOARD_TARGETS_JSON: ${HOST_DASHBOARD_TARGETS_JSON:-}
+      FEDERATION_SELF_NODE_ID: ${FEDERATION_SELF_NODE_ID:-cloud-vps-104-130-159-19}
+      FEDERATION_SELF_GROUP_ID: ${FEDERATION_SELF_GROUP_ID:-cloud-vps}
+      FEDERATION_SELF_CLUSTER_ID: ${FEDERATION_SELF_CLUSTER_ID:-cloud-proxx}
+      FEDERATION_SELF_PEER_DID: ${FEDERATION_SELF_PEER_DID:-did:web:104.130.159.19:proxx}
+      FEDERATION_SELF_PUBLIC_BASE_URL: ${FEDERATION_SELF_PUBLIC_BASE_URL:-http://104.130.159.19:8789}
+      FEDERATION_DEFAULT_OWNER_SUBJECT: ${FEDERATION_DEFAULT_OWNER_SUBJECT:-did:web:proxx.local}
+      FEDERATION_REQUEST_TIMEOUT_MS: ${FEDERATION_REQUEST_TIMEOUT_MS:-30000}
+    volumes:
+      - ../proxx/models.json:/workspace/service-config/models.json:ro
+      - ../proxx/seeds:/workspace/service-config/seeds:ro
+      - ../proxx/policies:/etc/proxx/policies:ro
+      - ./cloud/proxx-data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "REDACTED_SECRET", "-e", "Promise.all([fetch('http://127.0.0.1:8789/health',{headers:{Authorization:'Bearer '+(process.env.PROXY_AUTH_TOKEN||'')}}), fetch('http://127.0.0.1:5174')]).then(([proxyResponse, webResponse]) => { if (!proxyResponse.ok || !webResponse.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      ai-infra:
+        aliases:
+          - proxx
+          - cloud-proxx
+
+  openplanner-init-data:
+    image: busybox:1.36
+    user: "0:0" # init container; allowed REDACTED_SECRET for one-time volume permission fix
+    command: ["sh", "-lc", "mkdir -p /app/openplanner-lake && chown -R 1000:1000 /app/openplanner-lake"]
+    volumes:
+      - ./cloud/openplanner-lake:/app/openplanner-lake
+
+  openplanner-mongodb:
+    image: mongo:8.0
+    command: ["mongod", "--wiredTigerCacheSizeGB", "1"]
+    volumes:
+      - openplanner-mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - ai-infra
+
+  openplanner:
+    build:
+      context: ../../orgs/open-hax/openplanner
+      dockerfile: Dockerfile
+    user: "${DOCKER_USER:-1000:1000}"
+    depends_on:
+      openplanner-init-data:
+        condition: service_completed_successfully
+      openplanner-mongodb:
+        condition: service_healthy
+      proxx:
+        condition: service_healthy
+    ports:
+      - "0.0.0.0:${OPENPLANNER_PORT:-7777}:7777"
+    environment:
+      NODE_ENV: production
+      OPENPLANNER_HOST: 0.0.0.0
+      OPENPLANNER_PORT: "7777"
+      OPENPLANNER_API_KEY: ${OPENPLANNER_API_KEY:?OPENPLANNER_API_KEY is required}
+      OPENPLANNER_DATA_DIR: /app/openplanner-lake
+      OPENPLANNER_STORAGE_BACKEND: mongodb
+      OPENPLANNER_KAFKA_ENABLED: "false"
+      MONGODB_URI: mongodb://openplanner-mongodb:27017/${MONGODB_DB:-openplanner}
+      MONGODB_DB: ${MONGODB_DB:-openplanner}
+      MONGODB_EVENTS_COLLECTION: ${MONGODB_EVENTS_COLLECTION:-events}
+      MONGODB_COMPACTED_COLLECTION: ${MONGODB_COMPACTED_COLLECTION:-compacted_memories}
+      MONGODB_VECTOR_HOT_COLLECTION: ${MONGODB_VECTOR_HOT_COLLECTION:-event_chunks}
+      MONGODB_VECTOR_COMPACT_COLLECTION: ${MONGODB_VECTOR_COMPACT_COLLECTION:-compacted_vectors}
+      MONGODB_GRAPH_LAYOUT_COLLECTION: ${MONGODB_GRAPH_LAYOUT_COLLECTION:-graph_layout_overrides}
+      MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION: ${MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION:-graph_REDACTED_SECRET_embeddings}
+      MONGODB_EVENTS_TTL_SECONDS: ${OPENPLANNER_NON_LABELED_EVENTS_TTL_SECONDS:-604800}
+      MONGODB_COMPACTED_TTL_SECONDS: ${OPENPLANNER_NON_LABELED_COMPACTED_TTL_SECONDS:-2592000}
+      SEMANTIC_COMPACTION_ENABLED: ${SEMANTIC_COMPACTION_ENABLED:-false}
+      EMBED_PROVIDER_BASE_URL: ${OPENPLANNER_PROXX_BASE_URL:-http://proxx:8789}
+      EMBED_PROVIDER_API_KEY: ${OPENPLANNER_PROXX_AUTH_TOKEN:-${PROXY_AUTH_TOKEN}}
+      EMBED_PROVIDER_MODEL: ${EMBED_PROVIDER_MODEL:-nomic-embed-text}
+      EMBED_PROVIDER_COMPACT_MODEL: ${EMBED_PROVIDER_COMPACT_MODEL:-nomic-embed-text}
+      EMBED_PROVIDER_DIMENSIONS: ${EMBED_PROVIDER_DIMENSIONS:-768}
+      EMBED_PROVIDER_BATCH_WINDOW_MS: ${EMBED_PROVIDER_BATCH_WINDOW_MS:-10}
+      EMBED_PROVIDER_MAX_BATCH_ITEMS: ${EMBED_PROVIDER_MAX_BATCH_ITEMS:-16}
+      EMBED_PROVIDER_CACHE_PATH: /app/openplanner-lake/cache/embed-provider-cache.jsonl
+      OPENPLANNER_SOURCE_ROOT: /app/workspace/devel
+      OPENPLANNER_HYDRATION_CACHE_TTL_MS: ${OPENPLANNER_HYDRATION_CACHE_TTL_MS:-3600000}
+      GRAPH_SEMANTIC_EDGE_DECAY_INTERVAL_MS: ${GRAPH_SEMANTIC_EDGE_DECAY_INTERVAL_MS:-3600000}
+      GRAPH_SEMANTIC_EDGE_DECAY_LIMIT: ${GRAPH_SEMANTIC_EDGE_DECAY_LIMIT:-250}
+    volumes:
+      - ./cloud/openplanner-lake:/app/openplanner-lake
+    healthcheck:
+      test: ["CMD", "REDACTED_SECRET", "-e", "fetch('http://127.0.0.1:7777/v1/health',{headers:{Authorization:'Bearer '+(process.env.OPENPLANNER_API_KEY||'')}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      ai-infra:
+        aliases:
+          - openplanner
+          - cloud-openplanner
+
+  knoxx-postgres:
+    image: postgres:16-bookworm
+    ports:
+      - "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:REDACTED_SECRET}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:REDACTED_SECRET}
+      POSTGRES_DB: ${POSTGRES_DB:-knoxx}
+    volumes:
+      - knoxx-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:REDACTED_SECRET} -d ${POSTGRES_DB:-knoxx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  knoxx-redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    expose:
+      - "6379"
+    volumes:
+      - knoxx-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  ai-infra:
+    name: ai-infra
+
+volumes:
+  proxx-db-data:
+  openplanner-mongodb-data:
+  knoxx-postgres-data:
+  knoxx-redis-data:

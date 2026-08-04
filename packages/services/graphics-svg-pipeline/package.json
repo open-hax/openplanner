@@ -1,0 +1,22 @@
+{
+  "name": "@open-hax/graphics-svg-pipeline",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "shadow-cljs release server",
+    "watch": "shadow-cljs watch server-dev",
+    "start": "node dist/server.js",
+    "test": "shadow-cljs compile test"
+  },
+  "dependencies": {
+    "@promethean-os/event-ledger": "file:../../event-ledger",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "puppeteer-core": "^24.0.0",
+    "@xmldom/xmldom": "^0.9.10",
+    "chokidar": "^4.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "shadow-cljs": "^3.4.10"
+  }
+}
