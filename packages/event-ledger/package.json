@@ -1,0 +1,30 @@
+{
+  "name": "@promethean-os/event-ledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "index.d.ts"
+  ],
+  "scripts": {
+    "build": "shadow-cljs release lib",
+    "watch": "shadow-cljs watch lib",
+    "test": "shadow-cljs compile test && node target/test.cjs",
+    "lint": "clj-kondo --lint src/ test/"
+  },
+  "devDependencies": {
+    "shadow-cljs": "^3.4.10"
+  },
+  "license": "GPL-3.0-or-later"
+}
