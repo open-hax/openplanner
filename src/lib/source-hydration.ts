@@ -1,14 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { open } from "lmdb";
-import { createClient } from "redis";
 import {
   cacheGet,
   cachePut,
   createLayeredCache,
   createLmdbCache,
   createMemoryLruCache,
-  createRedisCache,
   documentCacheKey,
   documentNeedsHydration,
   hydrateDocumentRow,
@@ -37,13 +35,6 @@ function nonBlankString(value: unknown): string | undefined {
 async function createHydrationCache(): Promise<CacheHandle> {
   const ttlMs = Number(process.env.OPENPLANNER_HYDRATION_CACHE_TTL_MS ?? 5 * 60 * 60 * 1000);
   const layers: CacheHandle[] = [createMemoryLruCache({ maxEntries: 1024, defaultTtlMs: ttlMs })];
-
-  const redisUrl = process.env.OPENPLANNER_HYDRATION_REDIS_URL;
-  if (redisUrl) {
-    const client = createClient({ url: redisUrl });
-    await client.connect();
-    layers.push(createRedisCache({ client, prefix: "hydration:", defaultTtlMs: ttlMs }));
-  }
 
   const lmdbPath = process.env.OPENPLANNER_HYDRATION_LMDB_PATH;
   if (lmdbPath) {
