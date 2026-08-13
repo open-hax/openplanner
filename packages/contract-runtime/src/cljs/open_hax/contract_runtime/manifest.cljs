@@ -46,7 +46,10 @@
    [:model :model/id]
    [:model-family :model-family/id]
    [:runtime-feature :runtime-feature/id]
-   [:sub-agent :sub-agent/id]])
+   [:sub-agent :sub-agent/id]
+   [:document :document/id]
+   [:garden :garden/id]
+   [:publication :publication/id]])
 
 (def kind->id-key
   (into {} kind-id-keys))
