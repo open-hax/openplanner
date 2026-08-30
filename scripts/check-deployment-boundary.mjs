@@ -18,7 +18,18 @@ const retiredEntryPoints = [
   "service/cloud/nginx/promethean.conf",
   "service/ecosystem.vps.config.cjs",
 ];
-const activeRoots = [".github/workflows", "service", "packages"];
+const activePathspecs = [
+  ".github/workflows",
+  "service",
+  "packages",
+  "scripts",
+  ".env",
+  ".env.example",
+  "Dockerfile",
+  "docker-compose.yml",
+  "nginx.conf",
+  "prometheus.yml",
+];
 const rules = [
   ["retired Services workflow", /deploy-promethean\.ya?ml/],
   ["legacy VPS address", /\b104\.130\.159\.19\b/],
@@ -45,13 +56,16 @@ async function exists(relativePath) {
   }
 }
 
-async function trackedFilesBelow(relativeRoots) {
+async function trackedFilesBelow(pathspecs) {
   const { stdout } = await execFileAsync(
     "git",
-    ["ls-files", "-z", "--", ...relativeRoots],
+    ["ls-files", "-z", "--", ...pathspecs],
     { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
   );
-  return stdout.split("\0").filter(Boolean).sort();
+  return stdout
+    .split("\0")
+    .filter((relativePath) => relativePath && relativePath !== "scripts/check-deployment-boundary.mjs")
+    .sort();
 }
 
 function violations(relativePath, text) {
@@ -102,7 +116,7 @@ async function scan() {
       found.push({ relativePath, line: 1, name: "retired deploy entry point exists", source: relativePath });
     }
   }
-  for (const relativePath of await trackedFilesBelow(activeRoots)) {
+  for (const relativePath of await trackedFilesBelow(activePathspecs)) {
     if (!(await exists(relativePath))) continue;
     if (!(await lstat(path.join(repositoryRoot, relativePath))).isFile()) continue;
     const text = await readFile(path.join(repositoryRoot, relativePath), "utf8");
