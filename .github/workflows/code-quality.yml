@@ -24,7 +24,7 @@ jobs:
       - name: Init GitHub-hosted submodules for inventory
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
+          git submodule update --init --depth 1 packages/vexx
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -51,7 +51,7 @@ jobs:
       - name: Init GitHub-hosted submodules
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
+          git submodule update --init --depth 1 packages/vexx
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
