@@ -72,11 +72,5 @@
     "typescript-eslint": "^8.59.1",
     "ws": "^8.20.0"
   },
-  "pnpm": {
-    "overrides": {
-      "hono": "^4.12.18"
-    },
-    "patchedDependencies": {}
-  },
   "license": "GPL-3.0-or-later"
 }
