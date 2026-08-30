@@ -1,20 +1,24 @@
 #!/usr/bin/env node
 
-import { access, readFile, readdir } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { constants } from "node:fs";
+import { access, lstat, readFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const execFileAsync = promisify(execFile);
 const retiredEntryPoints = [
   ".github/workflows/deploy-testing.yml",
+  "packages/axxium/.github/workflows/deploy.yml",
   "service/docker-compose.knoxx.yml",
   "service/docker-compose.vps.yml",
   "service/docker-compose.legacy.yml",
   "service/cloud/nginx/promethean.conf",
   "service/ecosystem.vps.config.cjs",
 ];
-const activeRoots = [".github/workflows", "service"];
+const activeRoots = [".github/workflows", "service", "packages"];
 const rules = [
   ["retired Services workflow", /deploy-promethean\.ya?ml/],
   ["legacy VPS address", /\b104\.130\.159\.19\b/],
@@ -33,14 +37,13 @@ async function exists(relativePath) {
   }
 }
 
-async function filesBelow(relativeRoot) {
-  if (!(await exists(relativeRoot))) return [];
-  const absoluteRoot = path.join(repositoryRoot, relativeRoot);
-  const entries = await readdir(absoluteRoot, { withFileTypes: true, recursive: true });
-  return entries
-    .filter((entry) => entry.isFile())
-    .map((entry) => path.relative(repositoryRoot, path.join(entry.parentPath, entry.name)))
-    .sort();
+async function trackedFilesBelow(relativeRoots) {
+  const { stdout } = await execFileAsync(
+    "git",
+    ["ls-files", "-z", "--", ...relativeRoots],
+    { cwd: repositoryRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024 },
+  );
+  return stdout.split("\0").filter(Boolean).sort();
 }
 
 function violations(relativePath, text) {
@@ -89,11 +92,11 @@ async function scan() {
       found.push({ relativePath, line: 1, name: "retired deploy entry point exists", source: relativePath });
     }
   }
-  for (const relativeRoot of activeRoots) {
-    for (const relativePath of await filesBelow(relativeRoot)) {
-      const text = await readFile(path.join(repositoryRoot, relativePath), "utf8");
-      found.push(...violations(relativePath, text));
-    }
+  for (const relativePath of await trackedFilesBelow(activeRoots)) {
+    if (!(await exists(relativePath))) continue;
+    if (!(await lstat(path.join(repositoryRoot, relativePath))).isFile()) continue;
+    const text = await readFile(path.join(repositoryRoot, relativePath), "utf8");
+    found.push(...violations(relativePath, text));
   }
   if (found.length > 0) {
     for (const item of found) {
