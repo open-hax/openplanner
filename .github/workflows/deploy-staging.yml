@@ -1,4 +1,8 @@
-name: Deploy Staging
+name: Staging Release Preflight
+
+# The retired VPS lane had a shared staging slot. Keep the application gate,
+# but do not imply that a passing run deploys anything. Production deployment
+# is centralized in open-hax/services on the declared DigitalOcean host.
 
 on:
   push:
@@ -9,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: openplanner-staging
+  group: openplanner-staging-preflight
   cancel-in-progress: true
 
 jobs:
@@ -46,15 +50,3 @@ jobs:
         run: |
           pnpm run build
           pnpm test
-
-  deploy-staging:
-    name: deploy-staging
-    needs: staging-preflight
-    uses: open-hax/services/.github/workflows/deploy-promethean.yml@main
-    with:
-      environment: staging
-      service: openplanner
-      source_repository: ${{ github.repository }}
-      source_ref: ${{ github.sha }}
-      checkout_submodules: false
-    secrets: inherit

@@ -2,7 +2,6 @@
   "JavaScript/CLJS conversion boundary for cache stores."
   (:require [openplanner.stores.cache.adapters.lmdb :as lmdb]
             [openplanner.stores.cache.adapters.memory :as memory]
-            [openplanner.stores.cache.adapters.redis :as redis]
             [openplanner.stores.cache.core :as core]
             [openplanner.stores.cache.layered :as layered]
             [openplanner.stores.cache.protocol :as cache]
@@ -11,10 +10,6 @@
 (defn create-memory-lru-cache
   ([] (create-memory-lru-cache nil))
   ([opts] (memory/create-memory-lru-cache opts)))
-
-(defn create-redis-cache
-  [opts]
-  (redis/create-redis-cache opts))
 
 (defn create-lmdb-cache
   [opts]
