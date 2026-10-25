@@ -28,4 +28,3 @@ jobs:
       dry-run: ${{ github.event.inputs.dry_run == 'true' }}
       max-writes: 50
       write-delay-ms: 1000
-    secrets: inherit
