@@ -106,5 +106,12 @@
       (is (false? (:exact-source-quote result)))
       (is (false? (:joint-grounded-quote result))))))
 
+(deftest bounded-transport-policy-does-not-grant-execution
+  (is (= law/deadline-ms (:deadline-ms law/transport-bounds)))
+  (is (= [11434] (:forbidden-ports law/transport-bounds)))
+  (is (= "127.0.0.1" (:host law/transport-bounds)))
+  (is (<= (:max-line-bytes law/transport-bounds) (:max-response-bytes law/transport-bounds)))
+  (is (<= (:max-visible-bytes law/transport-bounds) (:max-response-bytes law/transport-bounds))))
+
 (let [result (run-tests)]
   (System/exit (if (zero? (+ (:fail result) (:error result))) 0 1)))

@@ -90,3 +90,11 @@
             :gold-support-visible (visible-gold? case)
             :elapsed-ms elapsed-ms :first-visible-ms first-visible-ms}
            (when (and complete? timing?) (quality case response)))))
+
+
+;; Transport bounds are policy data. The Python adapter enforces these over I/O;
+;; this does not admit a worker or grant model/cloud execution authority.
+(def transport-bounds
+  {:deadline-ms deadline-ms :max-request-bytes 65536 :max-response-bytes 65536
+   :max-line-bytes 16384 :max-events 1024 :max-visible-bytes 16384 :max-json-depth 32
+   :host "127.0.0.1" :path "/api/chat" :forbidden-ports [11434]})

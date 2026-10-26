@@ -1,6 +1,6 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 {:protocol/id "e4b-quote-v2.1"
- :status :prepared-fixture-and-law
+ :status :fake-stream-transport-tested-worker-pending
  :production-adoption false
  :question "Does one fixed extraction-first instruction improve source-bound exact quotation under identical retrieved context?"
  :model {:name "gemma4:e4b"
@@ -36,7 +36,10 @@
  :resource-admission {:minimum-free-ram :model-bytes-plus-2-gib
                       :maximum-load1 :half-logical-cpus :other-resident-models 0
                       :model-cache :read-only :owned-worker-required true}
- :execution-gaps [:owned-worker-and-streaming-adapter :token-budget-retention-proof
+ :transport {:version "quote-stream-v1" :state :tested-with-owned-fake-http-only
+             :bounds-source "research.e4b-quote-law/transport-bounds"
+             :live-inference-cli false :ownership-proof false}
+ :execution-gaps [:owned-worker-controller :token-budget-retention-proof
                   :fresh-resource-admission :independent-review-before-execution]
  :cloud {:allocations-this-stage 0 :campaign "colab-gemma-2026-10-25"
          :total-cap 30 :existing-reservations 4

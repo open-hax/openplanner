@@ -3,8 +3,8 @@
 
 This research candidate freezes a prompt comparison, private source excerpts and
 portable scoring/admission laws. It has not run model inference and is not a
-production capability. The model transport and isolated worker launcher remain
-unimplemented. See `protocol.edn` for the explicit remaining execution gaps.
+production capability. The bounded HTTP stream transport has passed synthetic endpoint tests; the
+isolated model worker/controller and token-retention proof remain unimplemented. See `protocol.edn` for the explicit remaining execution gaps.
 
 The experiment asks whether one fixed extraction-first system instruction
 improves source-bound exact quotation. Both prompts receive identical question,
@@ -28,14 +28,15 @@ condition order. A smoke is an execution check, not a two-case quality claim.
 No prompt is adapted from validation or locked output.
 
 `src/research/e4b_quote_law.cljc` owns fixture admission, resource admission,
-fixed request parameters and response scoring. Python only handles frozen files,
-SHA-256 checks and the BB process boundary. The CLI takes one JSON operation on
-stdin and returns one JSON result. No adapter here calls Google, MongoDB or a
-model server, allocates compute, writes model weights, or modifies production.
+fixed request parameters and response scoring. Python handles frozen files, SHA-256 checks, the BB process boundary and bounded
+HTTP/NDJSON I/O. The CLI takes one JSON operation on
+stdin and returns one JSON result. The fixture/validation commands and synthetic stream tests do not contact Google,
+MongoDB or a model server, allocate compute, write model weights, or modify production.
 
 ```sh
 bb docs/research/e4b-quote-v2/law_test.clj
 clj-kondo --lint docs/research/e4b-quote-v2
+python3 -B docs/research/e4b-quote-v2/stream_test.py
 python3 docs/research/e4b-quote-v2/validate_fixture.py PRIVATE_FIXTURE \
   --expected-sha256 83ecc2b40e95ca273c47b13225462f04d1148ca1ee78fcf28992c9f1b59a0408
 ```
@@ -71,3 +72,39 @@ admission; any future cloud job needs the existing budget law, fresh telemetry,
 explicit owned-runtime bounds and verified cleanup. No GPU admission exists in
 the current cloud pilot. Production remains held pending the broader gates and
 explicit human adoption authority.
+
+
+## Bounded stream transport
+
+`stream_adapter.py` is an I/O primitive, not an inference command or worker
+ownership proof. There is no live CLI. Tests create their own ephemeral fake
+HTTP servers; the adapter permits numeric IPv4 loopback `/api/chat` only and
+always rejects the shared port 11434, credentials in URLs, redirects and remote
+targets. A future controller must prove the endpoint belongs to its bounded
+worker, verify model/context identity and obtain fresh admission before use.
+A loopback address alone does not establish ownership.
+
+Bounds come from the CLJC `transport-bounds` data, exposed through the BB CLI's
+`transport-bounds` operation. The adapter uses nonblocking connection setup and
+an absolute deadline/cancellation watchdog that shuts down its own socket during
+stalled headers, stalled bodies or continuously arriving fragments. Final JSON
+parsing is included in usable-output timing. It records facts and sends no
+answer-quality judgement; the existing CLJC scorer handles that separately.
+
+The normal profile allows 20 seconds, 64 KiB request/decoded response bodies,
+16 KiB lines and retained visible text, 1,024 events, and JSON nesting depth 32.
+A framing read may consume one extra byte to detect a limit violation; retained
+visible text never exceeds its cap. The response-body cap is not an HTTP-header
+or total network traffic quota; Python's HTTP header limits and the absolute
+socket deadline also apply. Duplicate keys, nonfinite numbers (including float
+overflow), invalid UTF-8 and malformed framing are rejected. Non-object or
+malformed final answer JSON remains unqualified by the scorer.
+
+Synthetic tests lower deadlines without changing the frozen model profile.
+They verify socket closure and watchdog termination after completion, timeout
+and cancellation, and exercise chunked transfer, UTF-8 boundaries, size/depth
+caps and cleanup errors. First visible time means the first nonempty received
+content fragment, matching the earlier probe's definition. Raw provider timing
+fields are retained as provider claims, not independently verified timings.
+These tests are not model, context-retention, native retrieval or production
+qualification, and do not authorize cloud allocation.
