@@ -1,28 +1,31 @@
+import type { SdkArray, SdkMutable } from "./mongo-vector-data.js";
+
 export type SearchTier = "hot" | "compact";
 
 type RawQueryResult = Partial<{
-  ids: string[][];
-  documents: Array<Array<string | null> | null>;
-  metadatas: Array<Array<Record<string, unknown> | null> | null>;
-  distances: Array<Array<number | null> | null>;
+  readonly ids: readonly (readonly string[])[];
+  readonly documents: ReadonlyArray<ReadonlyArray<string | null> | null>;
+  readonly metadatas: ReadonlyArray<ReadonlyArray<Record<string, unknown> | null> | null>;
+  readonly distances: ReadonlyArray<ReadonlyArray<number | null> | null>;
 }>;
 
-export type TieredVectorHit = {
-  id: string;
-  tier: SearchTier;
-  rank: number;
-  document?: string;
-  metadata: Record<string, unknown>;
-  distance?: number;
-};
+// Preserve the existing mutable SDK boundary; internal ranking records are readonly.
+export type TieredVectorHit = SdkMutable<{
+  readonly id: string;
+  readonly tier: SearchTier;
+  readonly rank: number;
+  readonly document?: string;
+  readonly metadata: Record<string, unknown>;
+  readonly distance?: number;
+}>;
 
-function firstNestedArray<T>(value: unknown): T[] {
+function firstNestedArray<T>(value: unknown): readonly T[] {
   if (!Array.isArray(value) || value.length === 0) return [];
   const first = value[0];
-  return Array.isArray(first) ? (first as T[]) : [];
+  return Array.isArray(first) ? (first as readonly T[]) : [];
 }
 
-export function extractTieredVectorHits(result: unknown, tier: SearchTier): TieredVectorHit[] {
+export function extractTieredVectorHits(result: unknown, tier: SearchTier): SdkArray<TieredVectorHit> {
   const payload = (result ?? {}) as RawQueryResult;
   const ids = firstNestedArray<string>(payload.ids);
   const documents = firstNestedArray<string | null>(payload.documents);
@@ -39,58 +42,50 @@ export function extractTieredVectorHits(result: unknown, tier: SearchTier): Tier
   }));
 }
 
+type RankedHit = Readonly<TieredVectorHit> & {
+  readonly fusedScore: number;
+  readonly bestDistance: number;
+  readonly searchTiers: ReadonlySet<SearchTier>;
+};
+
+function parentIdOf(hit: Readonly<TieredVectorHit>): string {
+  const parentId = hit.metadata.parent_id;
+  return typeof parentId === "string" && parentId.length > 0 ? parentId : hit.id;
+}
+
+function combineHit(existing: RankedHit | undefined, hit: Readonly<TieredVectorHit>): RankedHit {
+  const parentId = parentIdOf(hit);
+  const reciprocalRank = 1 / (60 + hit.rank + 1);
+  const nextDistance = typeof hit.distance === "number" ? hit.distance : Number.POSITIVE_INFINITY;
+  const metadata = { ...hit.metadata, parent_id: parentId, best_match_id: hit.id };
+  if (!existing) {
+    return { ...hit, id: parentId, metadata, fusedScore: reciprocalRank,
+      bestDistance: nextDistance, searchTiers: new Set([hit.tier]) };
+  }
+  const improved = nextDistance < existing.bestDistance ? {
+    bestDistance: nextDistance,
+    distance: hit.distance,
+    document: hit.document || existing.document,
+    metadata: { ...existing.metadata, ...metadata },
+    tier: hit.tier,
+  } : {};
+  return { ...existing, fusedScore: existing.fusedScore + reciprocalRank,
+    searchTiers: new Set([...existing.searchTiers, hit.tier]), ...improved };
+}
+
 export function mergeTieredVectorHits(
   hitsByTier: ReadonlyArray<ReadonlyArray<TieredVectorHit>>,
   limit: number,
 ): Record<string, unknown> {
-  const rrfK = 60;
-  const byId = new Map<string, TieredVectorHit & {
-    fusedScore: number;
-    bestDistance: number;
-    searchTiers: Set<SearchTier>;
-  }>();
-
-  for (const hits of hitsByTier) {
-    for (const hit of hits) {
-      const parentId = typeof hit.metadata.parent_id === "string" && hit.metadata.parent_id.length > 0
-        ? hit.metadata.parent_id
-        : hit.id;
-      const existing = byId.get(parentId);
-      const reciprocalRank = 1 / (rrfK + hit.rank + 1);
-      const nextDistance = typeof hit.distance === "number" ? hit.distance : Number.POSITIVE_INFINITY;
-      const hitMetadata = {
-        ...hit.metadata,
-        parent_id: parentId,
-        best_match_id: hit.id,
-      };
-
-      if (!existing) {
-        byId.set(parentId, {
-          ...hit,
-          id: parentId,
-          metadata: hitMetadata,
-          fusedScore: reciprocalRank,
-          bestDistance: nextDistance,
-          searchTiers: new Set<SearchTier>([hit.tier]),
-        });
-        continue;
-      }
-
-      existing.fusedScore += reciprocalRank;
-      existing.searchTiers.add(hit.tier);
-
-      if (nextDistance < existing.bestDistance) {
-        existing.bestDistance = nextDistance;
-        existing.distance = hit.distance;
-        if (hit.document) existing.document = hit.document;
-        existing.metadata = { ...existing.metadata, ...hitMetadata };
-        existing.tier = hit.tier;
-      }
-    }
-  }
+  const byId = hitsByTier.reduce((groups, hits) => hits.reduce((current, hit) => {
+    const parentId = parentIdOf(hit);
+    current.set(parentId, combineHit(current.get(parentId), hit));
+    return current;
+  }, groups), new Map<string, RankedHit>());
 
   const merged = [...byId.values()]
-    .sort((left, right) => right.fusedScore - left.fusedScore || left.bestDistance - right.bestDistance || left.id.localeCompare(right.id))
+    .sort((left, right) => right.fusedScore - left.fusedScore
+      || left.bestDistance - right.bestDistance || left.id.localeCompare(right.id))
     .slice(0, Math.max(1, limit));
 
   return {

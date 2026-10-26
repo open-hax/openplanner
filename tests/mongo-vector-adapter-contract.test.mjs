@@ -145,6 +145,8 @@ test('batch indexing continues after synchronous embedding failure and preserves
 test('public SDK declaration boundary still accepts existing mutable consumers', () => {
   const virtual = path.resolve('tests/sdk-public-mutation-compatibility.ts');
   const source = `
+    import {extractTieredVectorHits} from '../packages/openplanner-sdk/dist/vector-search.js';
+    import type {TieredVectorHit} from '../packages/openplanner-sdk/dist/vector-search.js';
     import type {MongoVectorEntry, BatchIndexConfig} from '../packages/openplanner-sdk/dist/mongo-vectors.js';
     import {queryMongoVectorsByText, listMongoVectorPartitions, batchIndexTextsInMongoVectors}
       from '../packages/openplanner-sdk/dist/mongo-vectors.js';
@@ -152,6 +154,9 @@ test('public SDK declaration boundary still accepts existing mutable consumers',
       query: Awaited<ReturnType<typeof queryMongoVectorsByText>>,
       partitions: Awaited<ReturnType<typeof listMongoVectorPartitions>>,
       batch: Awaited<ReturnType<typeof batchIndexTextsInMongoVectors>>) {
+      const hits: TieredVectorHit[] = extractTieredVectorHits({}, 'hot');
+      hits.push({id: 'id', tier: 'hot', rank: 0, metadata: {}});
+      hits[0].id = 'changed'; hits[0].rank = 2; hits[0].metadata = {};
       entry.id = 'changed'; entry.embedding.push(1); const vector: number[] = entry.embedding;
       config.concurrency = 4; query.ids[0].sort(); query.documents[0].push('doc');
       query.metadatas[0].push(null); query.distances[0].push(null); query.ids = [['id']];
