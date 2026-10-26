@@ -1,0 +1,43 @@
+;; SPDX-License-Identifier: GPL-3.0-or-later
+{:protocol/id "e4b-quote-v2.1"
+ :status :prepared-fixture-and-law
+ :production-adoption false
+ :question "Does one fixed extraction-first instruction improve source-bound exact quotation under identical retrieved context?"
+ :model {:name "gemma4:e4b"
+         :digest "c6eb396dbd5992bbe3f5cdb947e8bbc0ee413d7c17e2beaae69f5d569cf982eb"
+         :quantization "Q4_K_M" :bytes 9608350718}
+ :fixture {:sha256 "83ecc2b40e95ca273c47b13225462f04d1148ca1ee78fcf28992c9f1b59a0408"
+           :private true :cases 8 :development 4 :validation 4 :locked 0
+           :categories [:lyrics :lore] :gold-support-visible 5
+           :source-case-sha256 "26e865c3ad83d20e0d9d3c480bfbfe91448c6bdb1ed7b755f395d10c7bacf065"
+           :corpus-sha256 "a68eed7a9f139456c84976db1e1dc4e1001dbb66c87d29a9f911a4add14b1bf1"
+           :labels :analyst-provisional :smoke-ids ["lyrics-04" "lore-01"]}
+ :retrieval {:prefix :raw :dimensions 512 :lexical-fusion 0.5
+             :source "creative-corpus" :project "workspace"
+             :top-sources 5 :excerpt-prefix-characters 1500
+             :change-during-experiment false}
+ :conditions ["baseline" "extract-first"]
+ :order {:counterbalance :within-each-split :retries 0 :adaptive-prompts false}
+ :inference {:mode :owned-cpu-worker :shared-production-server false
+             :temperature 0 :seed 123 :num-predict 256 :num-ctx 4096 :num-gpu 0
+             :thinking false :format :json :complete-deadline-ms 20000
+             :warmup-deadline-ms 90000 :worker-hard-deadline-ms 720000
+             :tokenization-and-no-truncation-check :required-before-inference}
+ :metrics [:cold-load-ms :first-visible-ms :complete-usable-ms :complete-within-deadline
+           :gold-source-selected :exact-source-quote :anchor-in-quote
+           :joint-grounded-quote :abstained :gold-support-visible]
+ :interpretation {:incomplete-output :quality-unscored
+                  :gold-anchor :frozen-source-span-not-exclusive-correct-quotation
+                  :joint-grounded-quote :gold-source-and-exact-substring
+                  :answer-semantic-correctness :requires-separate-review
+                  :context-support-missing :separate-retrieval-gap
+                  :cross-host-latency :hardware-confounded
+                  :comparison-to-old-pilot :not-a-controlled-performance-comparison}
+ :resource-admission {:minimum-free-ram :model-bytes-plus-2-gib
+                      :maximum-load1 :half-logical-cpus :other-resident-models 0
+                      :model-cache :read-only :owned-worker-required true}
+ :execution-gaps [:owned-worker-and-streaming-adapter :token-budget-retention-proof
+                  :fresh-resource-admission :independent-review-before-execution]
+ :cloud {:allocations-this-stage 0 :campaign "colab-gemma-2026-10-25"
+         :total-cap 30 :existing-reservations 4
+         :new-admission :existing-campaign-law-only :gpu-admission :absent}}
