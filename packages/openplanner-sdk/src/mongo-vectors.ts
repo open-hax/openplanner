@@ -946,6 +946,7 @@ async function queryPartitionWithNativeVectorSearch(params: {
   queryEmbedding: number[];
   k: number;
   where?: Record<string, unknown>;
+  readonly exact?: boolean;
 }): Promise<Array<{ doc: MongoVectorDocument; score: number }>> {
   const filter = buildMongoFilter(params.where);
   const pipeline: Record<string, unknown>[] = [
@@ -954,7 +955,7 @@ async function queryPartitionWithNativeVectorSearch(params: {
         index: params.partition.searchIndexName,
         path: "embedding",
         queryVector: params.queryEmbedding,
-        numCandidates: Math.max(params.k * 20, 100),
+        ...(params.exact ? { exact: true } : { numCandidates: Math.max(params.k * 20, 100) }),
         limit: Math.max(params.k * 20, 100),
         ...(Object.keys(filter).length > 0 ? { filter } : {}),
       },
@@ -1001,7 +1002,8 @@ async function queryPartitionWithNativeVectorSearch(params: {
     },
   ];
 
-  const rows = await params.collection.aggregate(pipeline).toArray() as Array<MongoVectorDocument & { score?: number }>;
+  const options = params.exact ? { maxTimeMS: 5000 } : {};
+  const rows = await params.collection.aggregate(pipeline, options).toArray() as Array<MongoVectorDocument & { score?: number }>;
   const rescored = await queryPartitionWithVexxTopK({
     candidates: rows,
     queryEmbedding: params.queryEmbedding,
@@ -1044,6 +1046,30 @@ async function queryPartitionWithCosineScan(params: {
     .slice(0, Math.max(1, params.k));
 }
 
+async function queryPartitionWithRecovery(
+  params: Parameters<typeof queryPartitionWithNativeVectorSearch>[0],
+): ReturnType<typeof queryPartitionWithNativeVectorSearch> {
+  if (params.partition.searchIndexStatus !== "ready") return queryPartitionWithCosineScan(params);
+  const rows = await queryPartitionWithNativeVectorSearch(params).catch(() => null);
+  if (rows === null) return queryPartitionWithCosineScan(params);
+  if (rows.length > 0) return rows;
+
+  // A successful empty ANN response is not evidence of an empty filtered partition.
+  const matching = await params.collection.findOne(buildMongoFilter(params.where), {
+    projection: { _id: 1 }, maxTimeMS: 1000,
+  });
+  if (!matching) return rows;
+
+  // Keep index, model partition, query vector and authorization filters unchanged.
+  // Recovery errors must escape: the older bounded recent-document scan cannot
+  // establish that an unhealthy populated index has no relevant memories.
+  const exactRows = await queryPartitionWithNativeVectorSearch({ ...params, exact: true });
+  if (exactRows.length === 0) {
+    throw new Error(`vector search returned empty ANN and exact results for nonempty filtered partition ${params.partition.collectionName}`);
+  }
+  return exactRows;
+}
+
 export async function queryMongoVectorsByText(params: {
   mongo: MongoConnection;
   tier: MongoVectorTier;
@@ -1075,32 +1101,13 @@ export async function queryMongoVectorsByText(params: {
     }
     if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) continue;
 
-    let partitionRows: Array<{ doc: MongoVectorDocument; score: number }>;
-    if (partition.searchIndexStatus === "ready") {
-      try {
-        partitionRows = await queryPartitionWithNativeVectorSearch({
-          collection,
-          partition,
-          queryEmbedding,
-          k: params.k,
-          where: params.where,
-        });
-      } catch {
-        partitionRows = await queryPartitionWithCosineScan({
-          collection,
-          queryEmbedding,
-          k: params.k,
-          where: params.where,
-        });
-      }
-    } else {
-      partitionRows = await queryPartitionWithCosineScan({
-        collection,
-        queryEmbedding,
-        k: params.k,
-        where: params.where,
-      });
-    }
+    const partitionRows = await queryPartitionWithRecovery({
+      collection,
+      partition,
+      queryEmbedding,
+      k: params.k,
+      where: params.where,
+    });
 
     rows.push(...partitionRows);
   }
