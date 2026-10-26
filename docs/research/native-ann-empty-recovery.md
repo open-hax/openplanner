@@ -42,7 +42,7 @@ No new Colab allocation is required for local database failure isolation. The
 existing campaign remains charged4 of30 conservative reservation units; it must
 not be reinitialized if remote compute becomes necessary.
 
-## Observed candidate verification
+## Initial candidate verification (before gate repair)
 
 The compiled candidate SHA-256 is
 `a8711517eedcfab97997ede0b62f99ffbbc5fdab8173b6a131583eb2ae56fc84`.
@@ -114,7 +114,7 @@ these are fixed research inputs rather than public package assets.
 
 ```sh
 python3 /home/err/.local/share/promethean/research/colab-gemma-20261025/ann-followup/verify_host.py stealth
-ssh -o BatchMode=yes -o ForwardAgent=no yoga python3 /home/err/.local/share/promethean/research/colab-gemma-20261025/ann-followup/verify_host.py yoga
+ssh -o BatchMode=yes -o ForwardAgent=no yoga-agent-codex 'sudo -n -u err python3 /home/err/.local/share/promethean/research/colab-gemma-20261025/ann-followup/verify_host_gate.py yoga'
 ```
 
 Reports `native-stealth.json` and `native-yoga.json` retain server version,
@@ -125,3 +125,12 @@ quote fidelity, native Yoga embedding generation, or production actor behavior.
 
 The same Colab campaign state remains in place with4 reserved units of30 and
 no new allocation for this investigation. Production adoption remains disabled.
+
+
+## Gate-repair continuation, October 26
+
+The subsequent [gate-repair report](ann-gate-repair-2026-10-26.md) supersedes the
+initial SDK lint and inventory status above. The refactored adapter is strictly
+clean, inventory passes, 34 tests and the full root build pass, and both hosts
+verified the same five-file compiled adapter. Whole-repository strict lint still
+fails on 7,814 warnings outside this adapter. Production remains held.

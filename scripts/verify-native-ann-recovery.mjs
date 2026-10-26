@@ -17,7 +17,11 @@ assert.equal(input.records.length, 4638);
 assert.equal(input.cases.length, 24);
 const baseline = (await import('../packages/openplanner-sdk/dist/mongo-vectors.baseline.js')).queryMongoVectorsByText;
 const hash = path => crypto.createHash('sha256').update(fs.readFileSync(new URL(path, import.meta.url))).digest('hex');
-const output = { database: input.database, candidate_sha256: hash('../packages/openplanner-sdk/dist/mongo-vectors.js'),
+const candidateFiles = Object.fromEntries([
+  'mongo-vector-data.js', 'mongo-vector-partitions.js', 'mongo-vector-query.js', 'mongo-vector-write.js', 'mongo-vectors.js',
+].map(name => [name, hash(`../packages/openplanner-sdk/dist/${name}`)]));
+const candidateHash = crypto.createHash('sha256').update(JSON.stringify(candidateFiles)).digest('hex');
+const output = { database: input.database, candidate_sha256: candidateHash, candidate_files: candidateFiles,
   baseline_sha256: hash('../packages/openplanner-sdk/dist/mongo-vectors.baseline.js'), rows: [] };
 const client = new MongoClient(input.uri, { serverSelectionTimeoutMS: 10000 });
 let owned = false;
