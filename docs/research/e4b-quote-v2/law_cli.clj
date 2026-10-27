@@ -13,4 +13,6 @@
               "score" (law/score (:case input) transport)
               "transport-bounds" law/transport-bounds
               "worker-test-plan" (law/worker-test-plan (:mode input))
+              "retention-profile" law/retention-profile
+              "retention" (law/retention-decision (:facts input))
               (throw (ex-info "Unknown quote experiment operation" {:operation operation}))))))

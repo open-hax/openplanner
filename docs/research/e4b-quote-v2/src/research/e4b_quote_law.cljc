@@ -111,3 +111,32 @@
                 "MemoryMax=64M" "MemorySwapMax=0" "TasksMax=8" "CPUQuota=25%"
                 "NoNewPrivileges=yes" "UMask=0077"
                 "StandardOutput=null" "StandardError=null"]})
+
+(def retention-profile
+  {:id "e4b-token-retention-v1" :renderer-upstream-version "0.32.5"
+   :ollama-source "eec8e0b9458b8a01be0c216a9cc53eefde24ef50"
+   :renderer "gemma4-small" :native-header-tag "b10091"
+   :model-digest model-digest :context-tokens 4096 :output-reserve 256
+   :native-extra-reserve 1 :frames 16 :vocab-only true
+   :minimum-available-bytes (* 768 1024 1024)
+   :native-address-space-bytes (* 512 1024 1024) :native-cpu-seconds 15
+   :wall-seconds 20 :model-execution false :production-adoption false})
+
+(defn retention-decision [{:keys [profile-verified model-verified requests-verified
+                                  available-bytes frames]}]
+  (let [valid-frame? (fn [{:keys [prompt-tokens completion-tokens token-ids-equal full-roundtrip
+                                source-payload-preserved]}]
+                       (and (integer? prompt-tokens) (pos? prompt-tokens)
+                            (= prompt-tokens completion-tokens)
+                            (true? token-ids-equal) (true? full-roundtrip)
+                            (true? source-payload-preserved)
+                            (<= (+ prompt-tokens (:output-reserve retention-profile)
+                                   (:native-extra-reserve retention-profile))
+                                (:context-tokens retention-profile))))]
+    {:retain-full-context (boolean (and (true? profile-verified) (true? model-verified)
+                                        (true? requests-verified)
+                                        (finite-nonnegative? available-bytes)
+                                        (>= available-bytes (:minimum-available-bytes retention-profile))
+                                        (vector? frames) (= (:frames retention-profile) (count frames))
+                                        (every? valid-frame? frames)))
+     :scope "pinned offline research backend only" :model-execution false :production-adoption false}))

@@ -4,7 +4,7 @@
 This research candidate freezes a prompt comparison, private source excerpts and
 portable scoring/admission laws. It has not run model inference and is not a
 production capability. The bounded HTTP stream transport has passed synthetic endpoint tests; the
-synthetic lifecycle controller now exercises the existing user manager. An admitted model launch path, endpoint ownership and token-retention proof remain unimplemented. See `protocol.edn` for the explicit remaining execution gaps.
+synthetic lifecycle controller now exercises the existing user manager. An admitted model launch path, endpoint ownership remain unimplemented. Offline token retention is tested for a separately pinned research backend; live runtime confirmation remains pending. See `protocol.edn` for the explicit remaining execution gaps.
 
 The experiment asks whether one fixed extraction-first system instruction
 improves source-bound exact quotation. Both prompts receive identical question,
@@ -149,3 +149,50 @@ It requires the existing Linux cgroup v2/user manager, and fails on unavailable
 capabilities. A failure is not permission to fall back to shared production
 workers. Model cache mounts, exact tokenizer/chat-template context retention,
 owned endpoint binding and fresh resource admission remain separate gates.
+
+## Exact offline tokenizer and native rendering
+
+`token_probe/render.go` imports the unmodified renderer from Ollama 0.32.5
+(source `eec8e0b9458b8a01be0c216a9cc53eefde24ef50`) and emits the complete
+`gemma4-small` prompt, including native turn markers and the generation prefix.
+Build it within that pinned upstream module; no production binary is rebuilt or
+replaced. `token_probe/vocab.c` links to a byte-pinned copy of Stealth's existing
+native library using the upstream b10091 headers. Native ABI qualification is
+limited to artifact identity and observed behavior; source reproducibility of
+the installed native library is not established. It sets vocabulary-only mode,
+disables mmap and GPU offload, and never creates an inference context or reads
+tensor weights. The matching native compatibility layer is retained.
+
+The metadata process has a 512 MiB address-space cap, 15 CPU seconds, 16 framed
+inputs and 64 KiB per input. Its caller enforces 20 seconds wall time. The
+separate offline profile requires at least 768 MiB available memory; it grants
+no model execution and does not replace the model-bytes-plus-2-GiB CPU guard.
+The Go renderer has bounded input lines/count and is supervised with a wall
+timeout; its runtime memory setting is a soft target, not a hard cgroup limit.
+
+Requests use compact UTF-8 JSON containing `question` and `sources`; each
+source has `id` and `text`, in frozen order. Both conditions use identical
+source-bearing payloads. Metadata-only validation neither changes excerpts nor
+uses locked cases or answer output. The native helper compares the full rendered
+encoding without automatic specials against the completion path that strips
+rendered BOS and inserts native special tokens. All token IDs must match.
+Detokenization with special markers must reproduce the full rendered bytes.
+The CLJC retention law additionally reserves 256 output tokens and one native
+slot within 4,096, and grants no model or production authority.
+
+Cross-host offline validation uses the same research renderer and native bytes.
+Earlier Ollama CLI version calls reported 0.21.2 on Yoga and 0.32.5 on Stealth.
+Those are server metadata observations with unrecorded inherited endpoints,
+not verified local ELF build identities. Final offline validation makes no
+server calls. Passing the copied bundle does not qualify a production backend. The existing
+model manifest, config and full GGUF blob are verified on each host. A future
+owned inference worker must bind this profile or obtain a separate qualification,
+and confirm actual runtime prompt accounting before scoring model output.
+
+Reproduction requires the seven upstream b10091 headers and the three recorded
+shared libraries in a task-owned `runtime/` directory. Compile C with
+`-Wall -Wextra -Werror`, the recorded headers, and a runtime-relative library path.
+Build Go using the pinned Ollama module and `-mod=readonly`; retain build info,
+source/binary/library hashes and process attribution. Private harness commands
+and byte manifests are retained in `ann-followup/e4b-token-retention-v1/`.
+Never stage fixture text, rendered prompts, Go caches or the runtime bundle.

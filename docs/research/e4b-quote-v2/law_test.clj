@@ -125,5 +125,26 @@
       (is (contains? properties "MemoryMax=64M"))))
   (is (thrown? Exception (law/worker-test-plan "gemma4:e4b"))))
 
+(deftest context-retention-includes-native-formatting-and-output-headroom
+  (let [frame {:prompt-tokens 3839 :completion-tokens 3839 :token-ids-equal true
+               :full-roundtrip true :source-payload-preserved true}
+        facts {:profile-verified true :model-verified true :requests-verified true
+               :available-bytes (:minimum-available-bytes law/retention-profile)
+               :frames (vec (repeat 16 frame))}]
+    (is (:retain-full-context (law/retention-decision facts)))
+    (doseq [bad [(assoc facts :profile-verified false) (assoc facts :model-verified false)
+                 (assoc facts :requests-verified false) (assoc facts :available-bytes 0)
+                 (assoc facts :frames (vec (repeat 15 frame)))
+                 (-> facts (assoc-in [:frames 0 :prompt-tokens] 3840)
+                     (assoc-in [:frames 0 :completion-tokens] 3840))
+                 (assoc-in facts [:frames 0 :completion-tokens] 3838)
+                 (assoc-in facts [:frames 0 :token-ids-equal] false)
+                 (assoc-in facts [:frames 0 :full-roundtrip] false)
+                 (assoc-in facts [:frames 0 :source-payload-preserved] false)]]
+      (let [decision (law/retention-decision bad)]
+        (is (false? (:retain-full-context decision)))
+        (is (false? (:model-execution decision)))
+        (is (false? (:production-adoption decision)))))))
+
 (let [result (run-tests)]
   (System/exit (if (zero? (+ (:fail result) (:error result))) 0 1)))

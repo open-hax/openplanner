@@ -1,6 +1,6 @@
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 {:protocol/id "e4b-quote-v2.1"
- :status :synthetic-stream-and-lifecycle-tested-model-worker-pending
+ :status :offline-context-retention-profile-model-worker-pending
  :production-adoption false
  :question "Does one fixed extraction-first instruction improve source-bound exact quotation under identical retrieved context?"
  :model {:name "gemma4:e4b"
@@ -43,7 +43,13 @@
              :manager :existing-systemd-user-manager
              :plan-source "research.e4b-quote-law/worker-test-plan"
              :model-launch-plan false :endpoint-ownership-proof false}
- :execution-gaps [:admitted-model-worker-controller :token-budget-retention-proof
+ :retention {:version "e4b-token-retention-v1" :profile-source "research.e4b-quote-law/retention-profile"
+             :backend :pinned-offline-research-only :ollama "0.32.5" :renderer "gemma4-small"
+             :native-header-tag "b10091" :native-mode :vocabulary-only-no-tensors
+             :input-encoding {:format :compact-utf8-json :keys ["question" "sources"]
+                              :source-keys ["id" "text"] :ensure-ascii false}
+             :output-reserve 256 :extra-native-reserve 1 :model-execution false}
+ :execution-gaps [:admitted-model-worker-controller :live-runtime-retention-confirmation
                   :fresh-resource-admission :independent-review-before-execution]
  :cloud {:allocations-this-stage 0 :campaign "colab-gemma-2026-10-25"
          :total-cap 30 :existing-reservations 4
