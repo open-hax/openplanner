@@ -4,7 +4,7 @@
 This research candidate freezes a prompt comparison, private source excerpts and
 portable scoring/admission laws. It has not run model inference and is not a
 production capability. The bounded HTTP stream transport has passed synthetic endpoint tests; the
-isolated model worker/controller and token-retention proof remain unimplemented. See `protocol.edn` for the explicit remaining execution gaps.
+synthetic lifecycle controller now exercises the existing user manager. An admitted model launch path, endpoint ownership and token-retention proof remain unimplemented. See `protocol.edn` for the explicit remaining execution gaps.
 
 The experiment asks whether one fixed extraction-first system instruction
 improves source-bound exact quotation. Both prompts receive identical question,
@@ -108,3 +108,44 @@ content fragment, matching the earlier probe's definition. Raw provider timing
 fields are retained as provider claims, not independently verified timings.
 These tests are not model, context-retention, native retrieval or production
 qualification, and do not authorize cloud allocation.
+
+## Synthetic worker lifecycle
+
+`worker_adapter.py` submits only `fake_worker.py` through the existing systemd
+user manager. It has no arbitrary executable or model launch option, production
+service installation, scheduler, download or inference CLI. The CLJC
+`worker-test-plan` operation supplies a separate two-second test profile:
+64 MiB RAM, zero swap, eight tasks, 25% CPU quota, no restart, 200 ms stop grace,
+cgroup exit tracking, control-group kill and forced teardown. These are synthetic bounds, not a change
+to the frozen model proposal. Unit output is discarded; observations remain in
+an explicitly supplied private evidence directory.
+
+A random unit name/description and mode-0600 intent lease precede submission.
+The controller reconciles the manager's invocation ID before teardown. Fresh
+controllers can recover private owned leases for teardown only. Unit names are
+never reused. Unknown descriptions/invocations fail closed. Manager expiry
+survives an absent controller. A successful stop requires unit disappearance
+and an empty or absent previously observed cgroup; tests include a child in
+a different process group. No PID-based kill or group-name guess is used.
+
+This is a cooperative ownership contract: another same-UID manager client can
+alter units or files, and systemctl has no atomic compare-and-stop. The nonce
+and invocation checks do not provide a security boundary against that actor.
+The user manager's child loginuid can differ from the requesting SSH session;
+retain both requester identity and unit/invocation evidence, and do not claim
+the daemon inherited caller attribution. Exec success is not endpoint readiness.
+The fixture readiness file proves only this synthetic process reached its marker.
+
+To reproduce, set `XDG_RUNTIME_DIR` and the existing user bus appropriately,
+then use a new private path whose parent exists:
+
+```sh
+E4B_WORKER_EVIDENCE=PRIVATE_NEW_DIRECTORY python3 -B docs/research/e4b-quote-v2/worker_test.py
+```
+
+The suite retains its evidence and leases; it does not delete them automatically.
+It starts only small synthetic processes and stops only its own nonce-bound units.
+It requires the existing Linux cgroup v2/user manager, and fails on unavailable
+capabilities. A failure is not permission to fall back to shared production
+workers. Model cache mounts, exact tokenizer/chat-template context retention,
+owned endpoint binding and fresh resource admission remain separate gates.

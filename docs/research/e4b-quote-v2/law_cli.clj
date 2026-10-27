@@ -12,4 +12,5 @@
               "request" (law/request condition sources-json)
               "score" (law/score (:case input) transport)
               "transport-bounds" law/transport-bounds
+              "worker-test-plan" (law/worker-test-plan (:mode input))
               (throw (ex-info "Unknown quote experiment operation" {:operation operation}))))))

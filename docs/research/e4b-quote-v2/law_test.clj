@@ -113,5 +113,17 @@
   (is (<= (:max-line-bytes law/transport-bounds) (:max-response-bytes law/transport-bounds)))
   (is (<= (:max-visible-bytes law/transport-bounds) (:max-response-bytes law/transport-bounds))))
 
+(deftest synthetic-lifecycle-is-bounded-and-grants-no-model-plan
+  (doseq [mode ["graceful" "stubborn" "exit-error" "orphan"]]
+    (let [plan (law/worker-test-plan mode)
+          properties (set (:properties plan))]
+      (is (false? (:model-execution plan)))
+      (is (contains? properties "RuntimeMaxSec=2s"))
+      (is (contains? properties "ExitType=cgroup"))
+      (is (contains? properties "KillMode=control-group"))
+      (is (contains? properties "Restart=no"))
+      (is (contains? properties "MemoryMax=64M"))))
+  (is (thrown? Exception (law/worker-test-plan "gemma4:e4b"))))
+
 (let [result (run-tests)]
   (System/exit (if (zero? (+ (:fail result) (:error result))) 0 1)))

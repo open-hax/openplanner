@@ -98,3 +98,16 @@
   {:deadline-ms deadline-ms :max-request-bytes 65536 :max-response-bytes 65536
    :max-line-bytes 16384 :max-events 1024 :max-visible-bytes 16384 :max-json-depth 32
    :host "127.0.0.1" :path "/api/chat" :forbidden-ports [11434]})
+
+;; A deliberately synthetic-only lifecycle profile. There is no model launch
+;; plan: a future plan must separately prove admission, cache and endpoint ownership.
+(defn worker-test-plan [mode]
+  (when-not (contains? #{"graceful" "stubborn" "exit-error" "orphan"} mode)
+    (throw (ex-info "Unknown synthetic worker mode" {:mode mode})))
+  {:schema "e4b-worker-test-v1" :mode mode :model-execution false
+   :properties ["Type=exec" "ExitType=cgroup" "RemainAfterExit=yes" "Restart=no"
+                "RuntimeMaxSec=2s" "TimeoutStartSec=1s" "TimeoutStopSec=200ms"
+                "KillMode=control-group" "SendSIGKILL=yes"
+                "MemoryMax=64M" "MemorySwapMax=0" "TasksMax=8" "CPUQuota=25%"
+                "NoNewPrivileges=yes" "UMask=0077"
+                "StandardOutput=null" "StandardError=null"]})
