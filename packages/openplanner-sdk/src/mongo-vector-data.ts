@@ -6,10 +6,10 @@ import { loadHydrationSourceText } from "./source-hydration.js";
 
 export type MongoVectorTier = "hot" | "compact";
 
-// Keep the existing SDK mutable public types while implementation inputs are readonly.
-// eslint-disable-next-line functional/prefer-readonly-type -- SDK public mutation ABI; guarded by compile fixture.
-export type SdkMutable<T> = { -readonly [Key in keyof T]: T[Key] };
-export type SdkArray<T> = SdkMutable<readonly T[]>;
+import type { SdkArray, SdkMutable } from "./types.js";
+
+// Retain the previous subpath while the shared type boundary lives with DTOs.
+export type { SdkArray, SdkMutable } from "./types.js";
 
 export type RawQueryResult = SdkMutable<{
   readonly ids: SdkArray<SdkArray<string>>;

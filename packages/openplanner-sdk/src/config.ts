@@ -1,44 +1,46 @@
+import type { SdkMutable } from "./types.js";
+
 import path from "node:path";
 import { parseModelMap, type EmbeddingModelConfig } from "./embedding-models.js";
 
-export type SemanticCompactionConfig = {
-  enabled: boolean;
-  minEventCount: number;
-  maxNeighbors: number;
-  maxChars: number;
-  distanceThreshold: number;
-  minClusterSize: number;
-  maxPacksPerRun: number;
-};
+export type SemanticCompactionConfig = SdkMutable<{
+  readonly enabled: boolean;
+  readonly minEventCount: number;
+  readonly maxNeighbors: number;
+  readonly maxChars: number;
+  readonly distanceThreshold: number;
+  readonly minClusterSize: number;
+  readonly maxPacksPerRun: number;
+}>;
 
-export type MongoConfig = {
-  uri: string;
-  dbName: string;
-  eventsCollection: string;
-  compactedCollection: string;
-  vectorHotCollection: string;
-  vectorCompactCollection: string;
-  graphLayoutCollection: string;
-  graphNodeEmbeddingCollection: string;
-  eventsTtlSeconds?: number;
-  compactedTtlSeconds?: number;
-};
+export type MongoConfig = SdkMutable<{
+  readonly uri: string;
+  readonly dbName: string;
+  readonly eventsCollection: string;
+  readonly compactedCollection: string;
+  readonly vectorHotCollection: string;
+  readonly vectorCompactCollection: string;
+  readonly graphLayoutCollection: string;
+  readonly graphNodeEmbeddingCollection: string;
+  readonly eventsTtlSeconds?: number;
+  readonly compactedTtlSeconds?: number;
+}>;
 
-export type OpenPlannerConfig = {
-  dataDir: string;
-  host: string;
-  port: number;
-  apiKey: string;
-  embedProviderBaseUrl: string;
-  embedProviderApiKey?: string;
-  embeddingModels: EmbeddingModelConfig;
-  compactEmbedModel: string;
-  embedProviderBatchWindowMs: number;
-  embedProviderMaxBatchItems: number;
-  embedProviderCachePath: string;
-  semanticCompaction: SemanticCompactionConfig;
-  mongodb: MongoConfig;
-};
+export type OpenPlannerConfig = SdkMutable<{
+  readonly dataDir: string;
+  readonly host: string;
+  readonly port: number;
+  readonly apiKey: string;
+  readonly embedProviderBaseUrl: string;
+  readonly embedProviderApiKey?: string;
+  readonly embeddingModels: EmbeddingModelConfig;
+  readonly compactEmbedModel: string;
+  readonly embedProviderBatchWindowMs: number;
+  readonly embedProviderMaxBatchItems: number;
+  readonly embedProviderCachePath: string;
+  readonly semanticCompaction: SemanticCompactionConfig;
+  readonly mongodb: MongoConfig;
+}>;
 
 function mustGet(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -70,12 +72,15 @@ export function loadConfig(): OpenPlannerConfig {
   const port = Number(mustGet("OPENPLANNER_PORT", "7777"));
   const apiKey = mustGet("OPENPLANNER_API_KEY", "change-me");
   const embedProviderBaseUrl = mustGet("EMBED_PROVIDER_BASE_URL", "http://host.docker.internal:8789");
-  const embedProviderApiKey = process.env.EMBED_PROVIDER_API_KEY ?? process.env.OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN ?? undefined;
+  const embedProviderApiKey = process.env.EMBED_PROVIDER_API_KEY
+    ?? process.env.OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN ?? undefined;
   const defaultEmbedModel = mustGet("EMBED_PROVIDER_MODEL", "qwen3-embedding:0.6b");
   const compactEmbedModel = mustGet("EMBED_PROVIDER_COMPACT_MODEL", defaultEmbedModel);
   const embedProviderBatchWindowMs = parsePositiveInt(process.env.EMBED_PROVIDER_BATCH_WINDOW_MS, 50);
   const embedProviderMaxBatchItems = parsePositiveInt(process.env.EMBED_PROVIDER_MAX_BATCH_ITEMS, 256);
-  const embedProviderCachePath = mustGet("EMBED_PROVIDER_CACHE_PATH", path.join(dataDir, "cache", "embed-provider-cache.jsonl"));
+  const embedProviderCachePath = mustGet(
+    "EMBED_PROVIDER_CACHE_PATH", path.join(dataDir, "cache", "embed-provider-cache.jsonl"),
+  );
   const embeddingModels: EmbeddingModelConfig = {
     defaultModel: defaultEmbedModel,
     bySource: parseModelMap(process.env.EMBED_PROVIDER_MODEL_BY_SOURCE),

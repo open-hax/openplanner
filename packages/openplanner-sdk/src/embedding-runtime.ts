@@ -1,28 +1,36 @@
+import type { SdkMutable } from "./types.js";
+
 import type { OpenPlannerConfig } from "./config.js";
 import { PersistentEmbeddingCache } from "./embedding-cache.js";
 import { resolveEmbeddingModel } from "./embedding-models.js";
 import { EmbedProviderFunction, ParallelEmbeddingPool } from "./embeddings.js";
 
-export type EmbeddingRuntime = {
-  hot: {
-    getModel: (scope: { source?: string; kind?: string; project?: string }) => string;
-    getEmbeddingFunction: (scope: { source?: string; kind?: string; project?: string }) => EmbedProviderFunction;
-    getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
-    getBackgroundEmbeddingFunction: (scope: { source?: string; kind?: string; project?: string }) => EmbedProviderFunction;
-    getBackgroundEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
-    getParallelPool: (scope: { source?: string; kind?: string; project?: string }) => ParallelEmbeddingPool;
-    getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
-  };
-  compact: {
-    getModel: () => string;
-    getEmbeddingFunction: () => EmbedProviderFunction;
-    getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
-    getBackgroundEmbeddingFunction: () => EmbedProviderFunction;
-    getBackgroundEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
-    getParallelPool: () => ParallelEmbeddingPool;
-    getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
-  };
-};
+type RuntimeScope = SdkMutable<{
+  readonly source?: string;
+  readonly kind?: string;
+  readonly project?: string;
+}>;
+
+export type EmbeddingRuntime = SdkMutable<{
+  readonly hot: SdkMutable<{
+    readonly getModel: (scope: RuntimeScope) => string;
+    readonly getEmbeddingFunction: (scope: RuntimeScope) => EmbedProviderFunction;
+    readonly getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
+    readonly getBackgroundEmbeddingFunction: (scope: RuntimeScope) => EmbedProviderFunction;
+    readonly getBackgroundEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
+    readonly getParallelPool: (scope: RuntimeScope) => ParallelEmbeddingPool;
+    readonly getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
+  }>;
+  readonly compact: SdkMutable<{
+    readonly getModel: () => string;
+    readonly getEmbeddingFunction: () => EmbedProviderFunction;
+    readonly getEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
+    readonly getBackgroundEmbeddingFunction: () => EmbedProviderFunction;
+    readonly getBackgroundEmbeddingFunctionForModel: (model: string) => EmbedProviderFunction;
+    readonly getParallelPool: () => ParallelEmbeddingPool;
+    readonly getParallelPoolForModel: (model: string) => ParallelEmbeddingPool;
+  }>;
+}>;
 
 export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime {
   const interactiveCache = new Map<string, EmbedProviderFunction>();
@@ -30,7 +38,9 @@ export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime
   const parallelPoolCache = new Map<string, ParallelEmbeddingPool>();
   const persistentCache = new PersistentEmbeddingCache(cfg.embedProviderCachePath);
 
-  const makeEmbeddingFunction = (model: string, opts?: { maxConcurrentBatches?: number }): EmbedProviderFunction => new EmbedProviderFunction(model, cfg.embedProviderBaseUrl, {
+  const makeEmbeddingFunction = (
+    model: string, opts?: { readonly maxConcurrentBatches?: number },
+  ): EmbedProviderFunction => new EmbedProviderFunction(model, cfg.embedProviderBaseUrl, {
     apiKey: cfg.embedProviderApiKey,
     cache: persistentCache,
     batchWindowMs: cfg.embedProviderBatchWindowMs,
@@ -38,13 +48,15 @@ export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime
     maxConcurrentBatches: opts?.maxConcurrentBatches ?? 1,
   });
 
-  const makeParallelPool = (model: string): ParallelEmbeddingPool => new ParallelEmbeddingPool(model, cfg.embedProviderBaseUrl, {
-    apiKey: cfg.embedProviderApiKey,
-    cache: persistentCache,
-    batchWindowMs: cfg.embedProviderBatchWindowMs,
-    maxBatchItems: cfg.embedProviderMaxBatchItems,
-    workerCount: 4,
-  });
+  const makeParallelPool = (model: string): ParallelEmbeddingPool => new ParallelEmbeddingPool(
+    model, cfg.embedProviderBaseUrl, {
+      apiKey: cfg.embedProviderApiKey,
+      cache: persistentCache,
+      batchWindowMs: cfg.embedProviderBatchWindowMs,
+      maxBatchItems: cfg.embedProviderMaxBatchItems,
+      workerCount: 4,
+    },
+  );
 
   const getEmbeddingFunctionForModel = (model: string): EmbedProviderFunction => {
     const cached = interactiveCache.get(model);
@@ -70,7 +82,7 @@ export function createEmbeddingRuntime(cfg: OpenPlannerConfig): EmbeddingRuntime
     return created;
   };
 
-  const getHotModel = (scope: { source?: string; kind?: string; project?: string }): string =>
+  const getHotModel = (scope: Readonly<RuntimeScope>): string =>
     resolveEmbeddingModel(cfg.embeddingModels, scope);
 
   return {
