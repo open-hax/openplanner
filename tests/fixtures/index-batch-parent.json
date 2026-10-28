@@ -1,0 +1,5635 @@
+{
+  "schema": "index-batch-parent/v1",
+  "commit": "b5b37604f4f8967f60c2cda041ecbdabcec948a8",
+  "construction": "128 fixed index-derived combinations; no model/retrieval labels",
+  "cases": [
+    {
+      "chunks": [],
+      "options": {},
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "a\tb\nc",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": " ",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "​x",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "x",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          4,
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "﻿hello world ",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "hello world",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "​x",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": -1
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        }
+      },
+      "expected": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        }
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        }
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "a\tb\nc",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": " ",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "﻿hello world ",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "​x",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "x",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "a\tb\nc",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 0
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": " ",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "​x",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "hello world",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "a\tb\nc",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": " ",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "﻿hello world ",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 0
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 0
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": " ",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "﻿hello world ",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "a\tb\nc",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "​x",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "x",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "hello world",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 1
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "​x",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "hello world",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 1
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": " ",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "﻿hello world ",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "a\tb\nc",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": " ",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "​x",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "x",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 2
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "﻿hello world ",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "a\tb\nc",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "​x",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "x",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "hello world",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": " ",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "﻿hello world ",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "a\tb\nc",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": " ",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "﻿hello world ",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          6,
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 2
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 2
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "﻿hello world ",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "a\tb\nc",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": " ",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "​x",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "x",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "hello world",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "​x",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": " ",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "﻿hello world ",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "hello world",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6,
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 4
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "﻿hello world ",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "a\tb\nc",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": " ",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "﻿hello world ",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 4
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "​x",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "x",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "a\tb\nc",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "hello world",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "​x",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "x",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 7
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1,
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "​x",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2
+        ],
+        [
+          3,
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "﻿hello world ",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "hello world",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "a\tb\nc",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": " ",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "﻿hello world ",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "​x",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "x",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "a\tb\nc",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": " ",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 7
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 7
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "a\tb\nc",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "​x",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "x",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "﻿hello world ",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "hello world",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "a\tb\nc",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": " ",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "﻿hello world ",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0,
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 20
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "a\tb\nc",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": " ",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "​x",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "x",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 20
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": " ",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "﻿hello world ",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "hello world",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "​x",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 40
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3
+        ],
+        [
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "a\tb\nc",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": " ",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "﻿hello world ",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "hello world",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "​x",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "x",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "a\tb\nc",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 40
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 40
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": " ",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "​x",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 1,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "hello world",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 2,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "​x",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": "x",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "a\tb\nc",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": " ",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "﻿hello world ",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 4,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchTokens": 7,
+        "maxBatchItems": 40000
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "a\tb\nc",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 20,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "​x",
+          "chunkIndex": 0,
+          "chunkCount": 2
+        },
+        {
+          "id": "1",
+          "text": "x",
+          "chunkIndex": 1,
+          "chunkCount": 2
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "",
+          "chunkIndex": 0,
+          "chunkCount": 3
+        },
+        {
+          "id": "1",
+          "text": "hello world",
+          "chunkIndex": 1,
+          "chunkCount": 3
+        },
+        {
+          "id": "2",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 2,
+          "chunkCount": 3
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 40000,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": " ",
+          "chunkIndex": 0,
+          "chunkCount": 4
+        },
+        {
+          "id": "1",
+          "text": "﻿hello world ",
+          "chunkIndex": 1,
+          "chunkCount": 4
+        },
+        {
+          "id": "2",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 2,
+          "chunkCount": 4
+        },
+        {
+          "id": "3",
+          "text": "",
+          "chunkIndex": 3,
+          "chunkCount": 4
+        }
+      ],
+      "options": {
+        "maxBatchTokens": -1,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "x",
+          "chunkIndex": 0,
+          "chunkCount": 5
+        },
+        {
+          "id": "1",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 1,
+          "chunkCount": 5
+        },
+        {
+          "id": "2",
+          "text": "a\tb\nc",
+          "chunkIndex": 2,
+          "chunkCount": 5
+        },
+        {
+          "id": "3",
+          "text": " ",
+          "chunkIndex": 3,
+          "chunkCount": 5
+        },
+        {
+          "id": "4",
+          "text": "﻿hello world ",
+          "chunkIndex": 4,
+          "chunkCount": 5
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0.5,
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "hello world",
+          "chunkIndex": 0,
+          "chunkCount": 6
+        },
+        {
+          "id": "1",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 1,
+          "chunkCount": 6
+        },
+        {
+          "id": "2",
+          "text": "​x",
+          "chunkIndex": 2,
+          "chunkCount": 6
+        },
+        {
+          "id": "3",
+          "text": "x",
+          "chunkIndex": 3,
+          "chunkCount": 6
+        },
+        {
+          "id": "4",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 4,
+          "chunkCount": 6
+        },
+        {
+          "id": "5",
+          "text": "a\tb\nc",
+          "chunkIndex": 5,
+          "chunkCount": 6
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "NaN"
+        },
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "﻿hello world ",
+          "chunkIndex": 0,
+          "chunkCount": 7
+        },
+        {
+          "id": "1",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 1,
+          "chunkCount": 7
+        },
+        {
+          "id": "2",
+          "text": "",
+          "chunkIndex": 2,
+          "chunkCount": 7
+        },
+        {
+          "id": "3",
+          "text": "hello world",
+          "chunkIndex": 3,
+          "chunkCount": 7
+        },
+        {
+          "id": "4",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 4,
+          "chunkCount": 7
+        },
+        {
+          "id": "5",
+          "text": "​x",
+          "chunkIndex": 5,
+          "chunkCount": 7
+        },
+        {
+          "id": "6",
+          "text": "x",
+          "chunkIndex": 6,
+          "chunkCount": 7
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "Infinity"
+        },
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      ]
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "😀 😀 😀 😀 😀 😀 😀 ",
+          "chunkIndex": 0,
+          "chunkCount": 8
+        },
+        {
+          "id": "1",
+          "text": "a\tb\nc",
+          "chunkIndex": 1,
+          "chunkCount": 8
+        },
+        {
+          "id": "2",
+          "text": " ",
+          "chunkIndex": 2,
+          "chunkCount": 8
+        },
+        {
+          "id": "3",
+          "text": "﻿hello world ",
+          "chunkIndex": 3,
+          "chunkCount": 8
+        },
+        {
+          "id": "4",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 4,
+          "chunkCount": 8
+        },
+        {
+          "id": "5",
+          "text": "",
+          "chunkIndex": 5,
+          "chunkCount": 8
+        },
+        {
+          "id": "6",
+          "text": "hello world",
+          "chunkIndex": 6,
+          "chunkCount": 8
+        },
+        {
+          "id": "7",
+          "text": "word word word word word word word word word word word word word word word word word word word word word ",
+          "chunkIndex": 7,
+          "chunkCount": 8
+        }
+      ],
+      "options": {
+        "maxBatchTokens": {
+          "number": "-Infinity"
+        },
+        "maxBatchItems": 40000
+      },
+      "expected": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          2
+        ],
+        [
+          3
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ],
+        [
+          6
+        ],
+        [
+          7
+        ]
+      ]
+    },
+    {
+      "chunks": [],
+      "options": {
+        "maxBatchItems": -1
+      },
+      "expected": []
+    },
+    {
+      "chunks": [
+        {
+          "id": "0",
+          "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "chunkIndex": 0,
+          "chunkCount": 1
+        }
+      ],
+      "options": {
+        "maxBatchTokens": 0,
+        "maxBatchItems": -1
+      },
+      "expected": [
+        [
+          0
+        ]
+      ]
+    }
+  ],
+  "tokens": [
+    {
+      "text": "",
+      "expected": 0
+    },
+    {
+      "text": " ",
+      "expected": 0
+    },
+    {
+      "text": "x",
+      "expected": 2
+    },
+    {
+      "text": "hello world",
+      "expected": 3
+    },
+    {
+      "text": "﻿hello world ",
+      "expected": 4
+    },
+    {
+      "text": "😀 😀 😀 😀 😀 😀 😀 ",
+      "expected": 10
+    },
+    {
+      "text": "word word word word word word word word word word word word word word word word word word word word word ",
+      "expected": 29
+    },
+    {
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "expected": 33
+    },
+    {
+      "text": "a\tb\nc",
+      "expected": 5
+    },
+    {
+      "text": "​x",
+      "expected": 2
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@open-hax/openplanner-indexing-policy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "LGPL-3.0-or-later",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {".": {"types": "./dist/index.d.ts", "import": "./dist/index.js"}},
+  "scripts": {"build": "shadow-cljs release lib && node emit-types.mjs"},
+  "devDependencies": {"shadow-cljs": "^3.3.5"}
+}

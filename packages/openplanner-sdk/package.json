@@ -18,7 +18,7 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @open-hax/openplanner-embedding-model-policy build && tsc",
+    "build": "pnpm --filter @open-hax/openplanner-embedding-model-policy build && pnpm --filter @open-hax/openplanner-indexing-policy build && tsc",
     "watch": "tsc --watch"
   },
   "dependencies": {
@@ -28,7 +28,8 @@
     "sentence-splitter": "^5.0.1",
     "turndown": "^7.2.4",
     "turndown-plugin-gfm": "^1.0.2",
-    "@open-hax/openplanner-embedding-model-policy": "workspace:*"
+    "@open-hax/openplanner-embedding-model-policy": "workspace:*",
+    "@open-hax/openplanner-indexing-policy": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

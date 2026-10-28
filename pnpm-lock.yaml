@@ -525,8 +525,17 @@ importers:
         specifier: ^3.3.5
         version: 3.4.10
 
+  packages/embedding/indexing-policy:
+    devDependencies:
+      shadow-cljs:
+        specifier: ^3.3.5
+        version: 3.4.10
+
   packages/openplanner-sdk:
     dependencies:
+      '@open-hax/openplanner-indexing-policy':
+        specifier: workspace:*
+        version: link:../embedding/indexing-policy
       '@open-hax/openplanner-embedding-model-policy':
         specifier: workspace:*
         version: link:../embedding/model-policy

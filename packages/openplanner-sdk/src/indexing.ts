@@ -1,3 +1,5 @@
+import type { SdkArray, SdkMutable } from "./types.js";
+import { batchPreparedChunks as batchPolicy, estimateTokens } from "@open-hax/openplanner-indexing-policy";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 
@@ -10,8 +12,6 @@ const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 5_000;
 const DEFAULT_TARGET_CHUNK_TOKENS = 4_000;
 const DEFAULT_TARGET_CHUNK_CHARS = 16_000;
 const DEFAULT_OVERLAP_CHARS = 400;
-const DEFAULT_BATCH_TOKEN_BUDGET = 40_000;
-const DEFAULT_BATCH_ITEM_LIMIT = 256;
 const HARD_MIN_CHUNK_CHARS = 3_000;
 
 const turndown = new TurndownService({
@@ -24,26 +24,26 @@ const turndown = new TurndownService({
 turndown.use(gfm);
 turndown.remove(["script", "style", "meta", "link", "noscript", "iframe", "object", "embed", "svg"]);
 
-export type PreparedIndexChunk = {
-  id: string;
-  text: string;
-  chunkIndex: number;
-  chunkCount: number;
-  charStart?: number | null;
-  charEnd?: number | null;
-};
+export type PreparedIndexChunk = SdkMutable<{
+  readonly id: string;
+  readonly text: string;
+  readonly chunkIndex: number;
+  readonly chunkCount: number;
+  readonly charStart?: number | null;
+  readonly charEnd?: number | null;
+}>;
 
-export type PreparedIndexDocument = {
-  parentId: string;
-  rawText: string;
-  normalizedText: string;
-  normalizedFormat: "markdown" | "text";
-  chunked: boolean;
-  chunkCount: number;
-  chunks: PreparedIndexChunk[];
-  rawEstimatedTokens: number;
-  normalizedEstimatedTokens: number;
-};
+export type PreparedIndexDocument = SdkMutable<{
+  readonly parentId: string;
+  readonly rawText: string;
+  readonly normalizedText: string;
+  readonly normalizedFormat: "markdown" | "text";
+  readonly chunked: boolean;
+  readonly chunkCount: number;
+  readonly chunks: SdkArray<PreparedIndexChunk>;
+  readonly rawEstimatedTokens: number;
+  readonly normalizedEstimatedTokens: number;
+}>;
 
 function normalizeWhitespace(input: string): string {
   return input
@@ -106,13 +106,6 @@ function extractHtmlCandidate(text: string, extra?: Record<string, unknown>): st
   return null;
 }
 
-function estimateTokens(input: string): number {
-  const text = String(input || "");
-  if (!text.trim()) return 0;
-  const chars = text.length;
-  const words = text.match(/\S+/g)?.length ?? 0;
-  return Math.max(Math.ceil(chars / 4), Math.ceil(words * 1.35));
-}
 
 function hardSplitBlock(block: string, maxChars: number): string[] {
   const normalized = normalizeWhitespace(block);
@@ -258,31 +251,7 @@ export function isContextOverflowError(error: unknown): boolean {
 
 export function batchPreparedChunks(
   chunks: ReadonlyArray<PreparedIndexChunk>,
-  opts?: { maxBatchTokens?: number; maxBatchItems?: number },
-): PreparedIndexChunk[][] {
-  const maxBatchTokens = opts?.maxBatchTokens ?? DEFAULT_BATCH_TOKEN_BUDGET;
-  const maxBatchItems = opts?.maxBatchItems ?? DEFAULT_BATCH_ITEM_LIMIT;
-
-  const batches: PreparedIndexChunk[][] = [];
-  let current: PreparedIndexChunk[] = [];
-  let currentTokens = 0;
-
-  for (const chunk of chunks) {
-    const nextTokens = estimateTokens(chunk.text);
-    const wouldOverflow = current.length > 0 && (currentTokens + nextTokens > maxBatchTokens || current.length >= maxBatchItems);
-    if (wouldOverflow) {
-      batches.push(current);
-      current = [];
-      currentTokens = 0;
-    }
-
-    current.push(chunk);
-    currentTokens += nextTokens;
-  }
-
-  if (current.length > 0) {
-    batches.push(current);
-  }
-
-  return batches;
+  opts?: SdkMutable<{ readonly maxBatchTokens?: number; readonly maxBatchItems?: number }>,
+): SdkArray<SdkArray<PreparedIndexChunk>> {
+  return batchPolicy(chunks, opts);
 }

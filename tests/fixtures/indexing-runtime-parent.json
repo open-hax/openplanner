@@ -1,0 +1,37 @@
+{
+  "schema": "indexing-runtime-parent/v1",
+  "commit": "b5b37604f4f8967f60c2cda041ecbdabcec948a8",
+  "declaration": "export type PreparedIndexChunk = {\n    id: string;\n    text: string;\n    chunkIndex: number;\n    chunkCount: number;\n    charStart?: number | null;\n    charEnd?: number | null;\n};\nexport type PreparedIndexDocument = {\n    parentId: string;\n    rawText: string;\n    normalizedText: string;\n    normalizedFormat: \"markdown\" | \"text\";\n    chunked: boolean;\n    chunkCount: number;\n    chunks: PreparedIndexChunk[];\n    rawEstimatedTokens: number;\n    normalizedEstimatedTokens: number;\n};\nexport declare function prepareIndexDocument(params: {\n    parentId: string;\n    text: string;\n    extra?: Record<string, unknown>;\n    forceChunking?: boolean;\n    targetChunkTokens?: number;\n    targetChunkChars?: number;\n    overlapChars?: number;\n    overflowThresholdTokens?: number;\n}): PreparedIndexDocument;\nexport declare function isContextOverflowError(error: unknown): boolean;\nexport declare function batchPreparedChunks(chunks: ReadonlyArray<PreparedIndexChunk>, opts?: {\n    maxBatchTokens?: number;\n    maxBatchItems?: number;\n}): PreparedIndexChunk[][];\n",
+  "statements": [
+    "bbed3dd2d2e485f9771ee79567b86f5d4e4fb90f9592f238594d633f10c15cbc",
+    "2bf5f304b69dced345b04245e305333bbf7c4a43b6e2c5aeeda4770d144dc68d",
+    "ec945ab0b9493ad78d055e0bf4452b03a6f6f984544100e5ce58e1c933cda674",
+    "d549aa2bcbcebb5e3600096645cf499205136887a6cc64240b247d98392f7260",
+    "c0a841735f2cf72ad2ee9a347b85e8c46bd53a831baeb0b439009773ec6f246f",
+    "f0a568e6759cbd243df98ed563df303a4da177bcb68ba41a6adec3b573bb2d8d",
+    "3e2df96367c2a41fe4a581ddaebec1c344e22371483b9f1575886fca313b2502",
+    "314cf52004b134e1fa7f0ef15d63b9d7429d4b2a12507ac9636002fa09c33df3",
+    "0d5d3808bdc8f3ad6104d446be55b643c028e4f567218106c1eddb55609392c5",
+    "65910dfdb9c241f275ef69e11a3d7902ee0af99ea12de8bb4ddb52b120bb3465",
+    "b1b9095da4da9e563161b139bb63c80081754f49fb012bbfca8f0c158a1dad14",
+    "050c14ca10f596142fc0074d1f511258edb230145c377d3612246ba27eed5a37",
+    "3fb26a82cf85619df31ca92a97c756d43fa7944476ece696b455c323022173bc",
+    "56d52f0a9596db7ff3a7b544b721ca2d4af7e17163d5a22025886f255fd5a148",
+    "255133e8f387730e562ea8257c6ead445fbd5347171e923ec8fa2c092bd46cbe",
+    "707beb3eb2de39d9a724a8576dc110c608e1e0e9c40192a9e50efb01967be1bb",
+    "e8ba8a4185f0130c65f7191c907e4c5568a6461c301d7a46b74cb814f11d928e",
+    "597e61ce9710403e1be9bd4ecd063915f9dca4e154c59586c04394025a6302c0",
+    "51dc0109f0864392598a8c446c9bfb85fbc9779aaa90da187d956c3bf12ec94a",
+    "3da0191076010ea1340c8e3d4c20517ddc7fdba414c348d6f5302b54c09b9535",
+    "e629a586dc0f782824bc377f0d37ffb74d8fe2afdf1446394d07392a35c62101",
+    "da23ab6e4c81f9a3f4a730a2107f6fde8f353f665c66de908b8fa78cd450aaa5",
+    "5cdaef864d4a3ecb2ae575da79432951ebcb57c1a931cee7d101af31bceb4568"
+  ],
+  "excluded": [
+    "estimateTokens",
+    "batchPreparedChunks",
+    "DEFAULT_BATCH_TOKEN_BUDGET",
+    "DEFAULT_BATCH_ITEM_LIMIT"
+  ],
+  "sourceHash": "3662b6478948087a905cb1aabff3b177ade7497dc9ddb0ce1236ca728e345fd1"
+}
