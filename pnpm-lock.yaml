@@ -519,8 +519,17 @@ importers:
         specifier: ^4.8.3
         version: 4.8.3
 
+  packages/embedding/model-policy:
+    devDependencies:
+      shadow-cljs:
+        specifier: ^3.3.5
+        version: 3.4.10
+
   packages/openplanner-sdk:
     dependencies:
+      '@open-hax/openplanner-embedding-model-policy':
+        specifier: workspace:*
+        version: link:../embedding/model-policy
       '@open-hax/openplanner-document-hydration':
         specifier: workspace:*
         version: link:../stores/document-hydration

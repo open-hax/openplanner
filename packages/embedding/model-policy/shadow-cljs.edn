@@ -1,0 +1,7 @@
+{:source-paths ["src"]
+ :dependencies []
+ :builds {:lib {:target :esm :output-dir "dist"
+                :modules {:index {:entries [openplanner.embedding-model.boundary]
+                                  :exports {:parseModelMap openplanner.embedding-model.boundary/parse-model-map
+                                            :resolveEmbeddingModel openplanner.embedding-model.boundary/resolve-model}}}
+                :compiler-options {:output-feature-set :es-next}}}}

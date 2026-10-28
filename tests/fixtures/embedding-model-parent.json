@@ -1,0 +1,7245 @@
+{
+  "schema": "embedding-model-parent/v1",
+  "commit": "eb3b5f4f47e5dafb076d9799e11a042e381e6975",
+  "seed": "0x20261028",
+  "parse": [
+    {
+      "raw": {
+        "type": "object",
+        "value": null
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "undefined"
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": ""
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " "
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=x;a=y"
+      },
+      "expected": [
+        [
+          "a",
+          "y"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=x,b=y"
+      },
+      "expected": [
+        [
+          "a",
+          "x"
+        ],
+        [
+          "b",
+          "y"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a="
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a"
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " = x"
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "__proto__=x;constructor=y;toString=z"
+      },
+      "expected": [
+        [
+          "constructor",
+          "y"
+        ],
+        [
+          "toString",
+          "z"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\" x \",\"b\":3,\"c\":null}"
+      },
+      "expected": [
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{a=x"
+      },
+      "expected": [
+        [
+          "{a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\"x\",\"constructor\":\"z\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "z"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"zero\",\" 0 \":\"override\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "override"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "[1,2]"
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "﻿x=y "
+      },
+      "expected": [
+        [
+          "x",
+          "y"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=model:v1;__proto__=model:v1;02=model:v1;constructor=a=b;toString=\nline\n;toString=model:v1;constructor=\nline\n;source=\nline\n"
+      },
+      "expected": [
+        [
+          "source",
+          "line"
+        ],
+        [
+          "02",
+          "model:v1"
+        ],
+        [
+          "constructor",
+          "line"
+        ],
+        [
+          "toString",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"kind\":\"\"}"
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "﻿x = x ,toString=\nline\n,constructor=model:v1,a=,toString=,source=a=b,kind=model:v1,project=m"
+      },
+      "expected": [
+        [
+          "x",
+          "x"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "project",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"a=b\",\"02\":\"model:v1\",\" 💡 \":\" x \"}"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "02",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=🙂,toString=a=b, 💡 =m,toString=🙂,0=\nline\n,__proto__=🙂,kind=🙂,0=model:v1"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "💡",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"m\",\"kind\":\"\",\"02\":\" x \"}"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "02",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "﻿x =\nline\n;0=;source=a=b;0=a=b;toString=model:v1;toString=\nline\n;﻿x =🙂;﻿x =🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "x",
+          "🙂"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "toString",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"m\",\"source\":\"🙂\",\"﻿x \":\"m\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "x",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=a=b,kind=model:v1,a=🙂,__proto__=\nline\n,a=m,__proto__=model:v1,source=,project=\nline\n"
+      },
+      "expected": [
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "a",
+          "m"
+        ],
+        [
+          "project",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\" 💡 \":\"m\",\"__proto__\":\" x \",\"a\":\" x \"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=a=b,constructor=a=b,kind=m,source=m,toString=\nline\n,kind= x ,a= x ,kind="
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "source",
+          "m"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"model:v1\",\"toString\":\"\",\"a\":\" x \"}"
+      },
+      "expected": [
+        [
+          "source",
+          "model:v1"
+        ],
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=;02=m;constructor=\nline\n;source=model:v1;project=\nline\n;source= x ;a= x ;kind=m"
+      },
+      "expected": [
+        [
+          "02",
+          "m"
+        ],
+        [
+          "constructor",
+          "line"
+        ],
+        [
+          "source",
+          "x"
+        ],
+        [
+          "project",
+          "line"
+        ],
+        [
+          "a",
+          "x"
+        ],
+        [
+          "kind",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"🙂\",\"02\":\"a=b\",\"project\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "project",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "project=,source=,0=a=b,a=🙂,a=\nline\n,__proto__=🙂,kind=,kind= x "
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "a",
+          "line"
+        ],
+        [
+          "kind",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\"\",\"a\":\"\\nline\\n\",\"project\":\" x \"}"
+      },
+      "expected": [
+        [
+          "a",
+          "line"
+        ],
+        [
+          "project",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " 💡 =a=b,constructor=,source=a=b,0=,project=m,__proto__=m,project=m,__proto__=🙂"
+      },
+      "expected": [
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "project",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\" x \",\"__proto__\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=a=b; 💡 =model:v1;source=model:v1;project=🙂;constructor= x ;source=m;toString=;kind=model:v1"
+      },
+      "expected": [
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "source",
+          "m"
+        ],
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"kind\":\"m\",\"constructor\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "kind",
+          "m"
+        ],
+        [
+          "constructor",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=🙂,kind= x ,0=,__proto__=m, 💡 =🙂,kind= x ,0=🙂,__proto__=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "💡",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\" x \",\"project\":\"m\",\"constructor\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "m"
+        ],
+        [
+          "constructor",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "﻿x =model:v1,source=m,02=model:v1,a= x ,__proto__=🙂,project=,a=model:v1,a= x "
+      },
+      "expected": [
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "source",
+          "m"
+        ],
+        [
+          "02",
+          "model:v1"
+        ],
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\" x \",\"kind\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "kind",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=🙂; 💡 =model:v1;﻿x =\nline\n;project=a=b;0=m;constructor=a=b;02=🙂;﻿x =\nline\n"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "x",
+          "line"
+        ],
+        [
+          "project",
+          "a=b"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "02",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"02\":\"\",\" 💡 \":\"model:v1\",\"kind\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " 💡 =m,﻿x =,source=\nline\n,02=,project=model:v1,0=m,a=\nline\n,__proto__=\nline\n"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "source",
+          "line"
+        ],
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "a",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"kind\":\"\\nline\\n\",\"constructor\":\"m\",\"project\":\"\"}"
+      },
+      "expected": [
+        [
+          "kind",
+          "line"
+        ],
+        [
+          "constructor",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor= x , 💡 =\nline\n,toString=\nline\n,constructor=model:v1,source=🙂,constructor= x ,project=m,constructor=m"
+      },
+      "expected": [
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "💡",
+          "line"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "project",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"m\",\" 💡 \":\"🙂\",\"02\":\" x \"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "💡",
+          "🙂"
+        ],
+        [
+          "02",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=🙂;toString=🙂;toString=\nline\n;﻿x =;0=\nline\n;project=🙂;0=;toString="
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "project",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"\",\" 💡 \":\"model:v1\",\"constructor\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "project=a=b,a=\nline\n,constructor=m,toString=a=b,kind=model:v1,02=🙂, 💡 =\nline\n,project=a=b"
+      },
+      "expected": [
+        [
+          "project",
+          "a=b"
+        ],
+        [
+          "a",
+          "line"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "toString",
+          "a=b"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "💡",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"02\":\"m\",\"constructor\":\"a=b\",\"toString\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "m"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "toString",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=\nline\n,02=🙂,﻿x =model:v1,0=\nline\n,__proto__=model:v1,__proto__=,a=,﻿x = x "
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "x",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"🙂\",\"kind\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "kind",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=;a=;constructor=model:v1;project=\nline\n;0=a=b;0=model:v1;project=a=b;__proto__=🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "project",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"🙂\",\"source\":\"🙂\",\" 💡 \":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "💡",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "__proto__=🙂,kind= x ,toString=a=b,a=🙂,02=\nline\n,toString=,0= x ,__proto__=🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "toString",
+          "a=b"
+        ],
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "02",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\" x \",\"a\":\"a=b\",\"﻿x \":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "x"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "x",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=🙂,0=model:v1,a= x ,source=,constructor=🙂,source=🙂,__proto__=,0=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "a",
+          "x"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\" 💡 \":\"model:v1\",\"constructor\":\"\",\"a\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "a",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor=a=b;﻿x =model:v1;a=;kind=a=b;constructor=\nline\n;02=\nline\n;project=model:v1;__proto__=a=b"
+      },
+      "expected": [
+        [
+          "constructor",
+          "line"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "a=b"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "project",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"model:v1\",\"constructor\":\"a=b\",\" 💡 \":\" x \"}"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "💡",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02= x ,02=\nline\n, 💡 =,constructor=m,project=m,__proto__=🙂,﻿x =m,kind=🙂"
+      },
+      "expected": [
+        [
+          "02",
+          "line"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "project",
+          "m"
+        ],
+        [
+          "x",
+          "m"
+        ],
+        [
+          "kind",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"﻿x \":\"model:v1\",\"02\":\"\\nline\\n\",\"kind\":\"m\"}"
+      },
+      "expected": [
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "kind",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=model:v1,a=model:v1,a= x ,kind=model:v1,toString=,kind=model:v1,a=\nline\n,﻿x =🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "a",
+          "line"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "x",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\" 💡 \":\"\",\"02\":\"a=b\",\"project\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "project",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=model:v1;02=m;kind=🙂;constructor=m;a=🙂;constructor=;toString=;__proto__="
+      },
+      "expected": [
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "02",
+          "m"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"a=b\",\"kind\":\"\",\"__proto__\":\"m\"}"
+      },
+      "expected": [
+        [
+          "source",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=,constructor=m,a= x ,0=\nline\n, 💡 =🙂,02=🙂, 💡 = x ,a=\nline\n"
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "a",
+          "line"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "02",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"a=b\",\"kind\":\"🙂\",\" 💡 \":\" x \"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "a=b"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "💡",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=model:v1,source=a=b, 💡 =\nline\n,constructor=a=b,kind=🙂,toString=m,a= x ,source="
+      },
+      "expected": [
+        [
+          "02",
+          "model:v1"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "💡",
+          "line"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"model:v1\",\"toString\":\"🙂\",\"02\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "02",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor=a=b;source=a=b;0= x ;toString=;__proto__=;0= x ;project= x ;﻿x =a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "project",
+          "x"
+        ],
+        [
+          "x",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"\\nline\\n\",\"constructor\":\"model:v1\",\"toString\":\" x \"}"
+      },
+      "expected": [
+        [
+          "a",
+          "line"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "toString",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " 💡 = x ,a=\nline\n,kind=m,__proto__=\nline\n,02=\nline\n,a=🙂,__proto__=,﻿x =m"
+      },
+      "expected": [
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "kind",
+          "m"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "x",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\"a=b\",\"a\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "a=b"
+        ],
+        [
+          "a",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "﻿x = x ,﻿x =model:v1,constructor=a=b,project=\nline\n,project=model:v1,__proto__= x , 💡 =a=b,02=model:v1"
+      },
+      "expected": [
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "02",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"﻿x \":\"\\nline\\n\",\"constructor\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "x",
+          "line"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=\nline\n;a=\nline\n;source= x ;constructor=\nline\n;a=a=b;source=a=b;constructor=a=b;kind="
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\" 💡 \":\"🙂\",\"source\":\"\\nline\\n\",\"constructor\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "🙂"
+        ],
+        [
+          "source",
+          "line"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=model:v1,﻿x =a=b,kind=m,kind=a=b,source=🙂,kind=a=b, 💡 = x ,toString=\nline\n"
+      },
+      "expected": [
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "x",
+          "a=b"
+        ],
+        [
+          "kind",
+          "a=b"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "toString",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"02\":\"m\",\"project\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "m"
+        ],
+        [
+          "project",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "project=,a=a=b,0=m,0=m, 💡 =🙂,﻿x = x ,constructor=🙂,__proto__= x "
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "💡",
+          "🙂"
+        ],
+        [
+          "x",
+          "x"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\"🙂\",\" 💡 \":\"m\",\"constructor\":\"\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "💡",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=\nline\n;﻿x =🙂;0= x ;02=\nline\n;0=a=b;﻿x =model:v1;kind=m;constructor=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "a",
+          "line"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "kind",
+          "m"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\" x \",\" 💡 \":\"model:v1\",\"source\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "x"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString= x ,﻿x =a=b,kind= x ,__proto__=🙂,﻿x =\nline\n,project=a=b,__proto__=\nline\n,toString=m"
+      },
+      "expected": [
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "x",
+          "line"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "project",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"m\",\" 💡 \":\"m\",\"kind\":\"m\"}"
+      },
+      "expected": [
+        [
+          "source",
+          "m"
+        ],
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "kind",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=\nline\n,project=a=b,kind= x ,a=model:v1,project=🙂,kind=a=b,kind= x ,toString="
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "a",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"m\",\"a\":\"model:v1\",\"source\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "source",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=model:v1;constructor=🙂;02=m;0=\nline\n; 💡 =🙂;toString=;__proto__=\nline\n;a=m"
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "source",
+          "model:v1"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "02",
+          "m"
+        ],
+        [
+          "💡",
+          "🙂"
+        ],
+        [
+          "a",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\"\",\"source\":\"a=b\",\"project\":\" x \"}"
+      },
+      "expected": [
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "project",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "__proto__=a=b,__proto__= x , 💡 =model:v1,0=🙂,﻿x =a=b,a=\nline\n,kind= x ,source=🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "x",
+          "a=b"
+        ],
+        [
+          "a",
+          "line"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"🙂\",\" 💡 \":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "💡",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor=a=b,a=m,kind= x ,a=a=b,project=m,source=a=b,constructor=\nline\n,__proto__=a=b"
+      },
+      "expected": [
+        [
+          "constructor",
+          "line"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "project",
+          "m"
+        ],
+        [
+          "source",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"kind\":\"m\",\"source\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "kind",
+          "m"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor=;kind=m;toString=🙂;﻿x =m; 💡 =🙂;toString=m;kind=a=b;a=\nline\n"
+      },
+      "expected": [
+        [
+          "kind",
+          "a=b"
+        ],
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "x",
+          "m"
+        ],
+        [
+          "💡",
+          "🙂"
+        ],
+        [
+          "a",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\" x \",\"kind\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "kind",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=a=b, 💡 =a=b,project=m,kind=🙂,project=\nline\n,project=model:v1,a= x ,toString=model:v1"
+      },
+      "expected": [
+        [
+          "toString",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"a=b\",\" 💡 \":\" x \",\"toString\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "toString",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=a=b,0=model:v1,toString=\nline\n,0=a=b,project=m,project=model:v1,kind= x ,a=\nline\n"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "a",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"a=b\",\"a\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "a",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=🙂;0= x ;kind= x ;project=model:v1; 💡 =;﻿x = x ;kind=model:v1;02=m"
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "02",
+          "m"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "x",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"﻿x \":\" x \",\"02\":\"a=b\",\"project\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "x",
+          "x"
+        ],
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "project",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " 💡 = x ,project=a=b,02=🙂,a=m,﻿x =model:v1,a=m,project=model:v1,source=m"
+      },
+      "expected": [
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "a",
+          "m"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "source",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\"m\",\"02\":\"🙂\",\"a\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "a",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=,constructor=model:v1,constructor=\nline\n,toString=m,project=\nline\n,__proto__=,project=a=b,0=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "constructor",
+          "line"
+        ],
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "project",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"\\nline\\n\",\"constructor\":\"model:v1\",\" 💡 \":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "﻿x =model:v1;a=m;a= x ;kind=model:v1;source=m;a=m;source=🙂;﻿x ="
+      },
+      "expected": [
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "a",
+          "m"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\"🙂\",\" 💡 \":\"\\nline\\n\",\"constructor\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "💡",
+          "line"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=🙂,constructor=m,project=\nline\n, 💡 =,a=m,02=a=b,project=m,02=m"
+      },
+      "expected": [
+        [
+          "a",
+          "m"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "project",
+          "m"
+        ],
+        [
+          "02",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"a=b\",\"toString\":\"\\nline\\n\",\"kind\":\" x \"}"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "kind",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind= x ,kind=🙂,﻿x =,toString=\nline\n,constructor=🙂,a=,a=m,0=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "a",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"m\",\"02\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "02",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " 💡 =\nline\n;02= x ;kind=m;project=\nline\n;constructor=;0=;constructor=🙂;0=🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "💡",
+          "line"
+        ],
+        [
+          "02",
+          "x"
+        ],
+        [
+          "kind",
+          "m"
+        ],
+        [
+          "project",
+          "line"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"\\nline\\n\",\"source\":\"🙂\",\"kind\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "a",
+          "line"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "kind",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor=🙂, 💡 =model:v1,constructor=, 💡 =,a=m,constructor=, 💡 =m,a=model:v1"
+      },
+      "expected": [
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "a",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"🙂\",\"02\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "02",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=🙂, 💡 = x ,﻿x =m,toString=🙂,constructor=m,toString=\nline\n,source=model:v1,source="
+      },
+      "expected": [
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "x",
+          "m"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "source",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\"model:v1\",\" 💡 \":\" x \",\"02\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "02",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=;toString=a=b; 💡 =a=b;02=m;0=model:v1;constructor=a=b;__proto__=a=b;source=\nline\n"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "toString",
+          "a=b"
+        ],
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "02",
+          "m"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "source",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"m\",\"constructor\":\"m\",\" 💡 \":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "a",
+          "m"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "💡",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " 💡 =🙂,__proto__=model:v1,toString=\nline\n,source=,02=🙂,toString=m, 💡 =\nline\n,__proto__=m"
+      },
+      "expected": [
+        [
+          "💡",
+          "line"
+        ],
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "02",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"model:v1\",\" 💡 \":\"a=b\",\"toString\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "source",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "toString",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=a=b,project=🙂,__proto__=\nline\n,02=🙂,02=,toString=m,﻿x =m,02=\nline\n"
+      },
+      "expected": [
+        [
+          "kind",
+          "a=b"
+        ],
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "x",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"🙂\",\"﻿x \":\"\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source= x ;constructor=🙂;__proto__=🙂;a= x ;source=🙂;__proto__=;kind=a=b;a=a=b"
+      },
+      "expected": [
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "kind",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"🙂\",\"__proto__\":\"🙂\",\"constructor\":\" x \"}"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=model:v1,project=m,toString=, 💡 =model:v1,kind=,toString=🙂,a=model:v1,﻿x =m"
+      },
+      "expected": [
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "project",
+          "m"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "x",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\"model:v1\",\"02\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "02",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=m,__proto__= x ,02=\nline\n, 💡 =m,constructor=model:v1,a=,constructor=,constructor=🙂"
+      },
+      "expected": [
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"\",\"constructor\":\"\",\"project\":\"\"}"
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "__proto__=;0=model:v1;0= x ;kind=🙂;0= x ;a= x ;__proto__=🙂;a="
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "a",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"🙂\",\"﻿x \":\"m\",\"source\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "x",
+          "m"
+        ],
+        [
+          "source",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a= x ,kind=m,source= x ,0=a=b,constructor=🙂,kind= x ,02= x ,source=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "a",
+          "x"
+        ],
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "02",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"﻿x \":\"model:v1\",\"project\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "project",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=,﻿x =a=b,﻿x =m,0=\nline\n,project=🙂, 💡 =,0=🙂,﻿x ="
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "x",
+          "m"
+        ],
+        [
+          "project",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\"model:v1\",\"source\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=a=b;toString=;02=a=b;__proto__=🙂;toString= x ;project=model:v1;a=a=b;kind=model:v1"
+      },
+      "expected": [
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "toString",
+          "x"
+        ],
+        [
+          "project",
+          "model:v1"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\"m\",\"kind\":\"a=b\",\"source\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "kind",
+          "a=b"
+        ],
+        [
+          "source",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString= x ,project=, 💡 =\nline\n,kind=model:v1,0=model:v1,__proto__= x ,source= x ,source=🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "toString",
+          "x"
+        ],
+        [
+          "💡",
+          "line"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"a=b\",\" 💡 \":\"m\",\"toString\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "toString",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "project=\nline\n,project=model:v1,﻿x = x ,toString=\nline\n,project=\nline\n,0=model:v1,__proto__=🙂,constructor="
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "project",
+          "line"
+        ],
+        [
+          "x",
+          "x"
+        ],
+        [
+          "toString",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"\",\"toString\":\" x \",\"kind\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "x"
+        ],
+        [
+          "kind",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "project= x ; 💡 =m;﻿x =model:v1;0=🙂;source=;0=model:v1;kind= x ;﻿x =model:v1"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "project",
+          "x"
+        ],
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\" 💡 \":\"a=b\",\"toString\":\"model:v1\",\"﻿x \":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "toString",
+          "model:v1"
+        ],
+        [
+          "x",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=a=b,constructor= x ,source=model:v1,toString=🙂,﻿x =model:v1,kind=m,﻿x =,﻿x =model:v1"
+      },
+      "expected": [
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "source",
+          "model:v1"
+        ],
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"02\":\"m\",\"source\":\" x \"}"
+      },
+      "expected": [
+        [
+          "02",
+          "m"
+        ],
+        [
+          "source",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=,0=\nline\n,kind= x ,kind=\nline\n,a=🙂,__proto__=a=b,toString=a=b,toString="
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "kind",
+          "line"
+        ],
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "toString",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"\",\"02\":\" x \",\"project\":\"\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor= x ;project=🙂;toString=🙂;a=a=b;kind=;﻿x =m;toString=🙂; 💡 =a=b"
+      },
+      "expected": [
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "x",
+          "m"
+        ],
+        [
+          "💡",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\"\",\"project\":\"m\",\"source\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "m"
+        ],
+        [
+          "source",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=,02= x ,a=🙂,toString=🙂,source=m,constructor=🙂,kind= x ,project="
+      },
+      "expected": [
+        [
+          "02",
+          "x"
+        ],
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "source",
+          "m"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "kind",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\"\",\"constructor\":\" x \",\"project\":\"m\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "project",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=m,a=model:v1,__proto__=model:v1, 💡 =\nline\n,02=\nline\n,toString=\nline\n,02=🙂, 💡 = x "
+      },
+      "expected": [
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "02",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"m\",\"kind\":\"🙂\",\"toString\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "a",
+          "m"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "toString",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=\nline\n;kind=m;﻿x =a=b;toString=;a=🙂;a=a=b; 💡 =a=b;a=model:v1"
+      },
+      "expected": [
+        [
+          "kind",
+          "m"
+        ],
+        [
+          "x",
+          "a=b"
+        ],
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"🙂\",\"﻿x \":\"model:v1\",\" 💡 \":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "🙂"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "__proto__=a=b, 💡 =🙂,kind=,constructor=🙂,02=🙂,toString=a=b,﻿x =,0=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "💡",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "toString",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"🙂\",\"source\":\" x \",\"kind\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "source",
+          "x"
+        ],
+        [
+          "kind",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source= x , 💡 =a=b,source=a=b,a=🙂,0=m,a=model:v1,project=model:v1, 💡 = x "
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "source",
+          "a=b"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "project",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\"\",\"a\":\"m\",\"__proto__\":\"\"}"
+      },
+      "expected": [
+        [
+          "a",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "0=a=b;a=model:v1;project=🙂;toString= x ;kind=model:v1; 💡 =;a=🙂;﻿x ="
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "toString",
+          "x"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"project\":\"a=b\",\"__proto__\":\" x \",\"﻿x \":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "project",
+          "a=b"
+        ],
+        [
+          "x",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=\nline\n,0=m,02=🙂,project= x , 💡 =model:v1,kind=\nline\n,constructor=\nline\n, 💡 =a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "kind",
+          "line"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "project",
+          "x"
+        ],
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "constructor",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"a=b\",\"project\":\"model:v1\",\"__proto__\":\" x \"}"
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "project",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=a=b,kind=\nline\n,project=,02=\nline\n,02=model:v1,source=🙂,0=a=b,toString="
+      },
+      "expected": [
+        [
+          "0",
+          "a=b"
+        ],
+        [
+          "02",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "line"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\"a=b\",\"toString\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "a=b"
+        ],
+        [
+          "toString",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=model:v1;02=; 💡 =a=b;toString=m;project=🙂;constructor=model:v1;__proto__= x ;toString= x "
+      },
+      "expected": [
+        [
+          "source",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "a=b"
+        ],
+        [
+          "toString",
+          "x"
+        ],
+        [
+          "project",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"m\",\"kind\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "kind",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor=\nline\n,source=\nline\n,__proto__= x ,a=model:v1,02=a=b,toString=a=b,02=🙂, 💡 = x "
+      },
+      "expected": [
+        [
+          "constructor",
+          "line"
+        ],
+        [
+          "source",
+          "line"
+        ],
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "toString",
+          "a=b"
+        ],
+        [
+          "💡",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"🙂\",\"a\":\"\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=,02=m, 💡 =m, 💡 =\nline\n,kind=🙂, 💡 =m,__proto__=🙂,constructor=m"
+      },
+      "expected": [
+        [
+          "02",
+          "m"
+        ],
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"02\":\"\\nline\\n\",\"__proto__\":\"\",\"project\":\"m\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "line"
+        ],
+        [
+          "project",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=🙂;02=\nline\n;a=🙂;kind=a=b;project=;﻿x = x ;project=;toString= x "
+      },
+      "expected": [
+        [
+          "toString",
+          "x"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "kind",
+          "a=b"
+        ],
+        [
+          "x",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"02\":\"a=b\",\"﻿x \":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "x",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "toString=,kind=🙂,project=,source=m,a=m,﻿x =model:v1,0=🙂,constructor=model:v1"
+      },
+      "expected": [
+        [
+          "0",
+          "🙂"
+        ],
+        [
+          "kind",
+          "🙂"
+        ],
+        [
+          "source",
+          "m"
+        ],
+        [
+          "a",
+          "m"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\" x \",\"__proto__\":\"\\nline\\n\",\"kind\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "kind",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "﻿x =,toString=a=b,a=m,a=🙂,a= x ,02=🙂,02=,02=a=b"
+      },
+      "expected": [
+        [
+          "toString",
+          "a=b"
+        ],
+        [
+          "a",
+          "x"
+        ],
+        [
+          "02",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"model:v1\",\"toString\":\"\",\"project\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "project",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "__proto__=m;source=🙂;a=\nline\n;project=\nline\n;__proto__=;constructor=model:v1;02= x ;02="
+      },
+      "expected": [
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "a",
+          "line"
+        ],
+        [
+          "project",
+          "line"
+        ],
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "02",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"kind\":\"\\nline\\n\",\"constructor\":\"m\",\"a\":\"\"}"
+      },
+      "expected": [
+        [
+          "kind",
+          "line"
+        ],
+        [
+          "constructor",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=\nline\n,a=\nline\n,0= x ,source=🙂,__proto__= x ,02=m,a=a=b,source=🙂"
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "02",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\" 💡 \":\"\\nline\\n\",\"﻿x \":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "line"
+        ],
+        [
+          "x",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "02=a=b,﻿x =\nline\n,a=🙂,constructor=🙂,a=m,0=\nline\n,project= x ,constructor= x "
+      },
+      "expected": [
+        [
+          "0",
+          "line"
+        ],
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "x",
+          "line"
+        ],
+        [
+          "a",
+          "m"
+        ],
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "project",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"a=b\",\"__proto__\":\"🙂\",\"toString\":\"m\"}"
+      },
+      "expected": [
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "toString",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=;toString=;toString=;a=🙂;project=\nline\n;a=;kind=;source=\nline\n"
+      },
+      "expected": [
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "project",
+          "line"
+        ],
+        [
+          "source",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"🙂\",\"constructor\":\" x \",\"kind\":\"🙂\"}"
+      },
+      "expected": [
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "kind",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=m,﻿x =model:v1,__proto__=🙂, 💡 =🙂, 💡 =model:v1,a= x ,kind=m,0=m"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "a",
+          "x"
+        ],
+        [
+          "x",
+          "model:v1"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"constructor\":\"model:v1\",\"02\":\"\",\"toString\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "toString",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "source=🙂,toString=\nline\n,a=m,kind=model:v1,02=🙂,a=model:v1,constructor=a=b,a=a=b"
+      },
+      "expected": [
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\"a=b\",\"toString\":\"\",\"kind\":\"m\"}"
+      },
+      "expected": [
+        [
+          "kind",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=model:v1;source=🙂;constructor=\nline\n;__proto__= x ;﻿x =a=b;project=🙂;constructor=🙂;__proto__=🙂"
+      },
+      "expected": [
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "source",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "🙂"
+        ],
+        [
+          "x",
+          "a=b"
+        ],
+        [
+          "project",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"a\":\"\",\"constructor\":\"\"}"
+      },
+      "expected": []
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=m,project=,constructor=m,__proto__=,kind=a=b, 💡 =a=b,a=🙂,project="
+      },
+      "expected": [
+        [
+          "a",
+          "🙂"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "kind",
+          "a=b"
+        ],
+        [
+          "💡",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\" x \",\"source\":\"m\",\"﻿x \":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "source",
+          "m"
+        ],
+        [
+          "x",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "constructor=model:v1,﻿x = x , 💡 =🙂,﻿x =\nline\n,toString=m,__proto__=, 💡 = x ,02=a=b"
+      },
+      "expected": [
+        [
+          "constructor",
+          "model:v1"
+        ],
+        [
+          "x",
+          "line"
+        ],
+        [
+          "💡",
+          "x"
+        ],
+        [
+          "toString",
+          "m"
+        ],
+        [
+          "02",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"﻿x \":\" x \",\"kind\":\"m\"}"
+      },
+      "expected": [
+        [
+          "x",
+          "x"
+        ],
+        [
+          "kind",
+          "m"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=m;a=a=b;0=🙂;02=\nline\n;0= x ;kind=a=b;__proto__=m;a=a=b"
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "a",
+          "a=b"
+        ],
+        [
+          "02",
+          "line"
+        ],
+        [
+          "kind",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"source\":\"\",\"toString\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=model:v1,project=\nline\n,source=,﻿x =a=b,02=model:v1,source=🙂,0= x ,﻿x = x "
+      },
+      "expected": [
+        [
+          "0",
+          "x"
+        ],
+        [
+          "a",
+          "model:v1"
+        ],
+        [
+          "project",
+          "line"
+        ],
+        [
+          "x",
+          "x"
+        ],
+        [
+          "02",
+          "model:v1"
+        ],
+        [
+          "source",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"toString\":\"🙂\",\"kind\":\"\",\"__proto__\":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "toString",
+          "🙂"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "kind=\nline\n,__proto__=a=b,constructor=m,kind=\nline\n,toString=\nline\n,__proto__=🙂,﻿x = x ,0=model:v1"
+      },
+      "expected": [
+        [
+          "0",
+          "model:v1"
+        ],
+        [
+          "kind",
+          "line"
+        ],
+        [
+          "constructor",
+          "m"
+        ],
+        [
+          "toString",
+          "line"
+        ],
+        [
+          "x",
+          "x"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"kind\":\" x \",\"project\":\"model:v1\"}"
+      },
+      "expected": [
+        [
+          "kind",
+          "x"
+        ],
+        [
+          "project",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "__proto__=m;constructor=\nline\n;﻿x =🙂;constructor= x ;constructor= x ;toString= x ;__proto__=a=b;kind=\nline\n"
+      },
+      "expected": [
+        [
+          "constructor",
+          "x"
+        ],
+        [
+          "x",
+          "🙂"
+        ],
+        [
+          "toString",
+          "x"
+        ],
+        [
+          "kind",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"0\":\"\",\"﻿x \":\"a=b\"}"
+      },
+      "expected": [
+        [
+          "x",
+          "a=b"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "a=m,﻿x = x ,a=\nline\n,project=m,02=,﻿x =🙂,02=🙂,source=\nline\n"
+      },
+      "expected": [
+        [
+          "a",
+          "line"
+        ],
+        [
+          "x",
+          "🙂"
+        ],
+        [
+          "project",
+          "m"
+        ],
+        [
+          "02",
+          "🙂"
+        ],
+        [
+          "source",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"02\":\"a=b\",\" 💡 \":\"model:v1\",\"source\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "02",
+          "a=b"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "source",
+          "line"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": " 💡 = x ,﻿x = x ,﻿x =,0=\nline\n,a=m, 💡 =model:v1,kind=model:v1,0=m"
+      },
+      "expected": [
+        [
+          "0",
+          "m"
+        ],
+        [
+          "💡",
+          "model:v1"
+        ],
+        [
+          "x",
+          "x"
+        ],
+        [
+          "a",
+          "m"
+        ],
+        [
+          "kind",
+          "model:v1"
+        ]
+      ]
+    },
+    {
+      "raw": {
+        "type": "string",
+        "value": "{\"__proto__\":\"\",\" 💡 \":\"m\",\"kind\":\"\\nline\\n\"}"
+      },
+      "expected": [
+        [
+          "💡",
+          "m"
+        ],
+        [
+          "kind",
+          "line"
+        ]
+      ]
+    }
+  ],
+  "route": [
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "project": "__proto__",
+        "source": "x",
+        "kind": ""
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "missing",
+        "source": " x ",
+        "kind": "toString"
+      },
+      "expected": {
+        "type": "string",
+        "value": "source"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "constructor",
+        "kind": "__proto__"
+      },
+      "expected": {
+        "type": "function",
+        "name": "Object"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "x",
+        "source": "",
+        "kind": "missing"
+      },
+      "expected": {
+        "type": "string",
+        "value": "default"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": ""
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": " x ",
+        "source": "toString",
+        "kind": "constructor"
+      },
+      "expected": {
+        "type": "string",
+        "value": "project"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": ""
+        }
+      },
+      "scope": {
+        "source": "__proto__",
+        "kind": "x"
+      },
+      "expected": {
+        "type": "object-prototype"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": ""
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "",
+        "source": "missing",
+        "kind": " x "
+      },
+      "expected": {
+        "type": "string",
+        "value": "kind"
+      }
+    },
+    {
+      "config": {
+        "defaultModel": "default",
+        "byProject": {
+          "x": "project"
+        },
+        "bySource": {
+          "x": "source"
+        },
+        "byKind": {
+          "x": "kind"
+        }
+      },
+      "scope": {
+        "project": "toString",
+        "source": "constructor"
+      },
+      "expected": {
+        "type": "function",
+        "name": "toString"
+      }
+    }
+  ]
+}
