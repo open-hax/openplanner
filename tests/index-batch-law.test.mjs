@@ -12,6 +12,8 @@ import { estimateTokens } from '../packages/embedding/indexing-policy/dist/index
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fixture = JSON.parse(fs.readFileSync(new URL('./fixtures/index-batch-parent.json', import.meta.url), 'utf8'));
 const contract = JSON.parse(fs.readFileSync(new URL('./fixtures/indexing-runtime-parent.json', import.meta.url), 'utf8'));
+const packing = JSON.parse(fs.readFileSync(new URL('./fixtures/index-pack-parent.json', import.meta.url), 'utf8'));
+const migrated = packing['migrated-statements'];
 const chunk = text => ({ id: text, text, chunkIndex: 0, chunkCount: 1 });
 const decode = value => value && typeof value === 'object' && 'number' in value
   ? ({ NaN, Infinity, '-Infinity': -Infinity })[value.number] : value;
@@ -26,7 +28,8 @@ function statements(text) {
       literal ? node.rawText ?? null : null, children];
   };
   return parsed.statements.filter(n => !ts.isImportDeclaration(n)
-    && !contract.excluded.includes(n.name?.text ?? n.declarationList?.declarations[0]?.name?.text))
+    && ![...contract.excluded, ...Object.keys(migrated)].includes(
+      n.name?.text ?? n.declarationList?.declarations[0]?.name?.text))
     .map(n => crypto.createHash('sha256').update(JSON.stringify(tree(n))).digest('hex'));
 }
 
@@ -56,12 +59,18 @@ type Batch = Assert<Equal<typeof Current.batchPreparedChunks,typeof Legacy.batch
 type Prepare = Assert<Equal<typeof Current.prepareIndexDocument,typeof Legacy.prepareIndexDocument>>;
 type Overflow = Assert<Equal<typeof Current.isContextOverflowError,typeof Legacy.isContextOverflowError>>;
 function mutate(c:Current.PreparedIndexChunk,d:Current.PreparedIndexDocument,b:ReturnType<typeof Current.batchPreparedChunks>,
- o:NonNullable<Parameters<typeof Current.batchPreparedChunks>[1]>) {
+ o:NonNullable<Parameters<typeof Current.batchPreparedChunks>[1]>,
+ p:Parameters<typeof Current.prepareIndexDocument>[0]) {
  c.id=c.id;c.text=c.text;c.chunkIndex=c.chunkIndex;c.chunkCount=c.chunkCount;c.charStart=c.charStart;c.charEnd=c.charEnd;
  d.parentId=d.parentId;d.rawText=d.rawText;d.normalizedText=d.normalizedText;d.normalizedFormat=d.normalizedFormat;
  d.chunked=d.chunked;d.chunkCount=d.chunkCount;d.chunks=d.chunks;d.chunks.push(c);d.chunks[0]!.text=c.text;
  d.rawEstimatedTokens=d.rawEstimatedTokens;d.normalizedEstimatedTokens=d.normalizedEstimatedTokens;
  b.push([c]);b[0]!.push(c);o.maxBatchTokens=1;o.maxBatchItems=1;
+ p.parentId=p.parentId;p.text=p.text;p.extra=p.extra;p.forceChunking=p.forceChunking;
+ p.targetChunkTokens=p.targetChunkTokens;p.targetChunkChars=p.targetChunkChars;
+ p.overlapChars=p.overlapChars;p.overflowThresholdTokens=p.overflowThresholdTokens;
+ if(p.extra)p.extra["probe"]=p.extra["probe"];
+
 }`;
 
 test('128 frozen parent batches and10 estimator examples match', () => {
@@ -74,18 +83,23 @@ test('128 frozen parent batches and10 estimator examples match', () => {
   fixture.tokens.forEach(c => assert.equal(estimateTokens(c.text), c.expected));
 });
 
-test('only the intended batch/estimator runtime statements change', () => {
+test('unmigrated runtime statements retain the original parent identity', () => {
   const js = fs.readFileSync(path.join(root, 'packages/openplanner-sdk/dist/indexing.js'), 'utf8');
-  assert.deepEqual(statements(js), contract.statements);
-  assert.notDeepEqual(statements(js.replace('3_000', '3_001')), contract.statements);
-  assert.notDeepEqual(statements(js.replace('context window|', 'context changed|')), contract.statements);
+  Object.values(migrated).forEach(hash => assert.ok(contract.statements.includes(hash)));
+  const expected = contract.statements.filter(hash => !Object.values(migrated).includes(hash));
+  assert.deepEqual(statements(js), expected);
+  assert.notDeepEqual(statements(js.replace('3_000', '3_001')), expected);
+  assert.notDeepEqual(statements(js.replace('context window|', 'context changed|')), expected);
 });
 
 test('all five public contracts and writable DTO/container/options operations compile unchanged', () => {
   const current = fs.readFileSync(path.join(root, 'packages/openplanner-sdk/dist/indexing.d.ts'), 'utf8');
+  assert.deepEqual(diagnose(contract.declaration, contract.declaration, consumer), []);
   assert.deepEqual(diagnose(current, contract.declaration, consumer), []);
   assert.ok(diagnose(current.replace('readonly id: string;', 'readonly id: number;'), contract.declaration, consumer).length);
   assert.ok(diagnose(current.replace('SdkMutable<{', 'Readonly<{'), contract.declaration, consumer).length);
+  const readonlyParams = current.replace('params: SdkMutable<{', 'params: Readonly<{');
+  assert.ok(diagnose(readonlyParams, contract.declaration, consumer).length);
 });
 
 test('oversize, zero and nonfinite item limits never drop or clone objects', () => {

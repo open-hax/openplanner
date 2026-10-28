@@ -3,5 +3,7 @@
  :builds {:lib {:target :esm :output-dir "dist"
                 :modules {:index {:entries [openplanner.index-batch.boundary]
                                   :exports {:batchPreparedChunks openplanner.index-batch.boundary/batch-chunks
-                                            :estimateTokens openplanner.index-batch.boundary/estimate-tokens}}}
+                                            :estimateTokens openplanner.index-batch.boundary/estimate-tokens
+                                            :packBlocks openplanner.index-batch.boundary/pack-blocks
+                                            :locateChunkOffsets openplanner.index-batch.boundary/locate-offsets}}}
                 :compiler-options {:output-feature-set :es-next}}}}

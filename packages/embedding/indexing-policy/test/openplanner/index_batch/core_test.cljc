@@ -21,4 +21,21 @@
          (law/step {:count 2 :tokens 7} {:next-tokens 2 :token-overflow? false :item-limit? false})))
   (is (= {:max-batch-tokens 40000 :max-batch-items 256} law/defaults)))
 
+(deftest packing-and-overlap-laws
+  (is (= "a\n\nb" (law/joined "a" "b")))
+  (is (= "b" (law/joined "" "b")))
+  (is (false? (law/pack-flush? "" true true)))
+  (is (true? (law/pack-flush? "a" false true)))
+  (is (== 0 (law/overlap-budget 4 9 400)))
+  (is (== 1.5 (law/overlap-budget 14 6 1.5)))
+  (is (= {:emit "a" :current "z\n\nb"}
+         (law/pack-step "a" {:block "b" :candidate "a\n\nb" :flush? true :overlap "z"}))))
+
+(deftest offset-cursor-and-missing-range-laws
+  (is (= {:cursor 17 :offset {:charStart nil :charEnd nil}} (law/offset-step 17 -1 0)))
+  (let [result (law/offset-step 0 0 600)]
+    (is (== 200 (:cursor result)))
+    (is (= {:charStart 0 :charEnd 600} (:offset result))))
+  (is (== 1 (:cursor (law/offset-step 0 0 0)))))
+
 (defn -main [& _] (run-tests 'openplanner.index-batch.core-test))

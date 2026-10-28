@@ -1,5 +1,7 @@
 import type { SdkArray, SdkMutable } from "./types.js";
-import { batchPreparedChunks as batchPolicy, estimateTokens } from "@open-hax/openplanner-indexing-policy";
+import {
+  batchPreparedChunks as batchPolicy, estimateTokens, packBlocks, locateChunkOffsets,
+} from "@open-hax/openplanner-indexing-policy";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 
@@ -145,7 +147,7 @@ function hardSplitBlock(block: string, maxChars: number): string[] {
   return out.filter(Boolean);
 }
 
-function chunkText(input: string, targetTokens: number, targetChars: number, overlapChars: number): string[] {
+function chunkText(input: string, targetTokens: number, targetChars: number, overlapChars: number): SdkArray<string> {
   const text = normalizeWhitespace(input);
   if (!text) return [];
   if (estimateTokens(text) <= targetTokens && text.length <= targetChars) {
@@ -158,47 +160,19 @@ function chunkText(input: string, targetTokens: number, targetChars: number, ove
     .filter(Boolean)
     .flatMap((block) => hardSplitBlock(block, targetChars));
 
-  const out: string[] = [];
-  let current = "";
-
-  for (const block of blocks) {
-    const next = current ? `${current}\n\n${block}` : block;
-    if (current && (estimateTokens(next) > targetTokens || next.length > targetChars)) {
-      out.push(current.trim());
-      const maxOverlapChars = Math.max(0, Math.min(overlapChars, targetChars - block.length - 2));
-      const overlap = maxOverlapChars > 0 ? current.slice(-maxOverlapChars).trim() : "";
-      current = overlap ? `${overlap}\n\n${block}` : block;
-      continue;
-    }
-    current = next;
-  }
-
-  if (current.trim()) out.push(current.trim());
-  return out.filter(Boolean);
+  return packBlocks(blocks, targetTokens, targetChars, overlapChars);
 }
 
-function locateChunkOffsets(text: string, chunks: string[]): Array<{ charStart: number | null; charEnd: number | null }> {
-  let searchFrom = 0;
-  return chunks.map((chunk) => {
-    let start = text.indexOf(chunk, searchFrom);
-    if (start < 0) start = text.indexOf(chunk);
-    if (start < 0) return { charStart: null, charEnd: null };
-    const charEnd = start + chunk.length;
-    searchFrom = Math.max(start + 1, charEnd - DEFAULT_OVERLAP_CHARS);
-    return { charStart: start, charEnd };
-  });
-}
-
-export function prepareIndexDocument(params: {
-  parentId: string;
-  text: string;
-  extra?: Record<string, unknown>;
-  forceChunking?: boolean;
-  targetChunkTokens?: number;
-  targetChunkChars?: number;
-  overlapChars?: number;
-  overflowThresholdTokens?: number;
-}): PreparedIndexDocument {
+export function prepareIndexDocument(params: SdkMutable<{
+  readonly parentId: string;
+  readonly text: string;
+  readonly extra?: Record<string, unknown>;
+  readonly forceChunking?: boolean;
+  readonly targetChunkTokens?: number;
+  readonly targetChunkChars?: number;
+  readonly overlapChars?: number;
+  readonly overflowThresholdTokens?: number;
+}>): PreparedIndexDocument {
   const rawText = normalizeWhitespace(String(params.text || ""));
   const htmlCandidate = extractHtmlCandidate(rawText, params.extra);
   const normalizedText = htmlCandidate ? htmlToMarkdown(htmlCandidate) : stripMarkdownHtmlArtifacts(rawText);

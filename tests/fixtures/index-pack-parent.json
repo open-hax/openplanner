@@ -1,0 +1,3330 @@
+{
+  "schema": "index-pack-parent/v1",
+  "commit": "16c57038e18954980e5c1db87ae0fde153fdb1d9",
+  "pack": [
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": 0,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 0,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 0,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 0,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": 0,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 0,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 0,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 0,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 0,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 0,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 0,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 0,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": 1,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 1,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 1,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 1,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": 1,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 1,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 1,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 1,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 1,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 1,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 1,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 1,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": 2,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 2,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 2,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 2,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": 2,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 2,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 2,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 2,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 2,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 2,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 2,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 2,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": 8,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "e\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 8,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 8,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "x\ty\n\nbc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "pace\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 8,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": 8,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 8,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 8,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 8,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "ord\n\nx\ty",
+        "x\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 8,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "e\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 8,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 8,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "x\ty\n\nbc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "pace\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 8,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": 32,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 32,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 32,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 32,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "word word word word word\n\nx\ty",
+        "ord word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": 32,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "d\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 32,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!\n\na",
+        "word word word word word\n\nx\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 32,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty\n\nbc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "wordlongwordlongword\n\nzero​space",
+        "longwordlongword\n\nzero​space\n\n😀",
+        "rd\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 32,
+      "overlap": -1,
+      "expected": [
+        "zero​space\n\n😀\n\npunctuation!\n\na",
+        "word word word word word\n\nx\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 32,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 32,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 32,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 32,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "word word word word word\n\nx\ty",
+        "ord word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": 100,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "d\n\nzero​space",
+        "e\n\n😀",
+        "\ude00\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 100,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 100,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "x\ty\n\nbc",
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space",
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀",
+        "ngwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 100,
+      "overlap": -1,
+      "expected": [
+        "zero​space\n\n😀\n\npunctuation!\n\na",
+        "word word word word word",
+        "x\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": 100,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 100,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 100,
+      "overlap": 3,
+      "expected": [
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 100,
+      "overlap": 400,
+      "expected": [
+        "word word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 100,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀",
+        "\ude00\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 100,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 100,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "x\ty\n\nbc",
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space",
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀",
+        "ngwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 100,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": 4000,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 4000,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 4000,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 4000,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "word word word word word\n\nx\ty",
+        "word word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": 4000,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 4000,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!\n\na\n\nword word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 4000,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 4000,
+      "overlap": -1,
+      "expected": [
+        "zero​space\n\n😀\n\npunctuation!\n\na\n\nword word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 4000,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 4000,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 4000,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 4000,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "word word word word word\n\nx\ty",
+        "word word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": -1,
+      "expected": [
+        "zero​space\n\n😀\n\npunctuation!\n\na",
+        "word word word word word",
+        "x\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": 3,
+      "expected": [
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": 400,
+      "expected": [
+        "word word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": {
+        "number": "NaN"
+      },
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "word word word word word\n\nx\ty",
+        "word word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!\n\na\n\nword word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty\n\nbc\n\nlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword\n\nzero​space\n\n😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": -1,
+      "expected": [
+        "zero​space\n\n😀\n\npunctuation!\n\na\n\nword word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "😀\n\npunctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": {
+        "number": "Infinity"
+      },
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "word word word word word\n\nx\ty",
+        "word word word word word\n\nx\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": {
+        "number": "-Infinity"
+      },
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": 0.5,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 0.5,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 0.5,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 0.5,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": 0.5,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 0.5,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 0.5,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 0.5,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 0.5,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 0.5,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 0.5,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 0.5,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": -1,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": -1,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": -1,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": -1,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": -1,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": -1,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": -1,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": -1,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": -1,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": -1,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": -1,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": -1,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": 0,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 0,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 0,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 0,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": 0,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 0,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 0,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 0,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 0,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 0,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 0,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 0,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": 1,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 1,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 1,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 1,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": 1,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 1,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 1,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 1,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 1,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 1,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 1,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 1,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 0,
+      "chars": 2,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 2,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 2,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 2,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 32,
+      "chars": 2,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 2,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 2,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 2,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 2,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 2,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 2,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 2,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0,
+      "chars": 8,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "e\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 1,
+      "chars": 8,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 2,
+      "chars": 8,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "x\ty\n\nbc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "pace\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": 8,
+      "chars": 8,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [],
+      "tokens": 32,
+      "chars": 8,
+      "overlap": 0,
+      "expected": []
+    },
+    {
+      "blocks": [
+        "bc"
+      ],
+      "tokens": 100,
+      "chars": 8,
+      "overlap": 1,
+      "expected": [
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 4000,
+      "chars": 8,
+      "overlap": 3,
+      "expected": [
+        "😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "NaN"
+      },
+      "chars": 8,
+      "overlap": 400,
+      "expected": [
+        "word word word word word",
+        "ord\n\nx\ty",
+        "x\ty\n\nbc"
+      ]
+    },
+    {
+      "blocks": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": {
+        "number": "Infinity"
+      },
+      "chars": 8,
+      "overlap": 1.5,
+      "expected": [
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "e\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": {
+        "number": "-Infinity"
+      },
+      "chars": 8,
+      "overlap": {
+        "number": "NaN"
+      },
+      "expected": [
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    },
+    {
+      "blocks": [
+        "x\ty",
+        "bc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "😀",
+        "punctuation!"
+      ],
+      "tokens": 0.5,
+      "chars": 8,
+      "overlap": {
+        "number": "Infinity"
+      },
+      "expected": [
+        "x\ty",
+        "x\ty\n\nbc",
+        "longwordlongwordlongwordlongwordlongwordlongwordlongwordlongwordlongword",
+        "zero​space",
+        "pace\n\n😀",
+        "punctuation!"
+      ]
+    },
+    {
+      "blocks": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ],
+      "tokens": -1,
+      "chars": 8,
+      "overlap": -1,
+      "expected": [
+        "zero​space",
+        "😀",
+        "punctuation!",
+        "a",
+        "word word word word word",
+        "x\ty",
+        "bc"
+      ]
+    }
+  ],
+  "offsets": [
+    {
+      "text": "abc abc xyz abc",
+      "chunks": [
+        "abc",
+        "absent",
+        "abc",
+        "xyz",
+        "abc"
+      ],
+      "expected": [
+        {
+          "charStart": 0,
+          "charEnd": 3
+        },
+        {
+          "charStart": null,
+          "charEnd": null
+        },
+        {
+          "charStart": 4,
+          "charEnd": 7
+        },
+        {
+          "charStart": 8,
+          "charEnd": 11
+        },
+        {
+          "charStart": 12,
+          "charEnd": 15
+        }
+      ]
+    },
+    {
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "chunks": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "",
+        "absent",
+        "x"
+      ],
+      "expected": [
+        {
+          "charStart": 0,
+          "charEnd": 600
+        },
+        {
+          "charStart": 200,
+          "charEnd": 800
+        },
+        {
+          "charStart": 400,
+          "charEnd": 400
+        },
+        {
+          "charStart": null,
+          "charEnd": null
+        },
+        {
+          "charStart": 401,
+          "charEnd": 402
+        }
+      ]
+    },
+    {
+      "text": "😀α\ntext\n😀α",
+      "chunks": [
+        "😀α",
+        "text",
+        "😀α",
+        "\ud83d",
+        "none"
+      ],
+      "expected": [
+        {
+          "charStart": 0,
+          "charEnd": 3
+        },
+        {
+          "charStart": 4,
+          "charEnd": 8
+        },
+        {
+          "charStart": 9,
+          "charEnd": 12
+        },
+        {
+          "charStart": 0,
+          "charEnd": 1
+        },
+        {
+          "charStart": null,
+          "charEnd": null
+        }
+      ]
+    }
+  ],
+  "migrated-statements": {
+    "chunkText": "3da0191076010ea1340c8e3d4c20517ddc7fdba414c348d6f5302b54c09b9535",
+    "locateChunkOffsets": "e629a586dc0f782824bc377f0d37ffb74d8fe2afdf1446394d07392a35c62101"
+  }
+}

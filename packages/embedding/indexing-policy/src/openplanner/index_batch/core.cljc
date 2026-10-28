@@ -15,3 +15,30 @@
         base (if flush? initial-state state)]
     {:flush-before? (boolean flush?)
      :state {:count (inc (:count base)) :tokens (+ (:tokens base) next-tokens)}}))
+
+(defn joined [current block]
+  (if (seq current) (str current "\n\n" block) block))
+
+(defn pack-flush? [current token-overflow? char-overflow?]
+  (boolean (and (seq current) (or (true? token-overflow?) (true? char-overflow?)))))
+
+(defn overlap-budget [target-chars block-chars overlap-chars]
+  #?(:clj (Math/max 0.0 (Math/min (double overlap-chars) (- (double target-chars) block-chars 2)))
+     :cljs (js/Math.max 0 (js/Math.min overlap-chars (- target-chars block-chars 2)))))
+
+(defn pack-emission [current flush?] (when flush? current))
+
+(defn pack-step [current {:keys [block candidate flush? overlap]}]
+  {:emit (pack-emission current flush?)
+   :current (if flush? (joined overlap block) candidate)})
+
+;; Historical offset lookup advances using the fixed 400-character default,
+;; even when the caller supplied a different packing overlap. Preserve that law.
+(def offset-overlap-chars 400)
+(defn offset-step [cursor start size]
+  (if (neg? start)
+    {:cursor cursor :offset {:charStart nil :charEnd nil}}
+    (let [end (+ start size)]
+      {:cursor #?(:clj (Math/max (double (inc start)) (double (- end offset-overlap-chars)))
+                  :cljs (js/Math.max (inc start) (- end offset-overlap-chars)))
+       :offset {:charStart start :charEnd end}})))

@@ -41,3 +41,34 @@
           nil)))
     (when (pos? (:count @state)) (.push batches @current))
     batches))
+
+(defn pack-blocks [blocks target-tokens target-chars overlap-chars]
+  (let [current (volatile! "") output #js []]
+    (consume-native
+      blocks
+      (fn [block]
+        (let [candidate (law/joined @current block)
+              nonempty? (js/Boolean @current)
+              tokens-over? (and nonempty? (> (estimate-tokens candidate) target-tokens))
+              chars-over? (and nonempty? (not tokens-over?) (> (.-length candidate) target-chars))
+              flush? (law/pack-flush? @current tokens-over? chars-over?)
+              emission (law/pack-emission @current flush?)]
+          ;; Preserve the parent effect order: trim/push before limit coercion.
+          (when (some? emission) (.push output (.trim emission)))
+          (let [budget (when flush? (law/overlap-budget target-chars (.-length block) overlap-chars))
+                overlap (if (and flush? (> budget 0)) (.trim (.slice @current (- budget))) "")
+                plan (law/pack-step @current {:block block :candidate candidate :flush? flush? :overlap overlap})]
+            (vreset! current (:current plan))))))
+    (when (pos? (.-length (.trim @current))) (.push output (.trim @current)))
+    (.filter output js/Boolean)))
+
+(defn locate-offsets [text chunks]
+  (let [cursor (volatile! 0)]
+    (.map chunks
+          (fn [chunk]
+            (let [found (.indexOf text chunk @cursor)
+                  start (if (< found 0) (.indexOf text chunk) found)
+                  plan (law/offset-step @cursor start (if (< start 0) 0 (.-length chunk)))]
+              (vreset! cursor (:cursor plan))
+              (let [offset (:offset plan)]
+                #js {:charStart (:charStart offset) :charEnd (:charEnd offset)}))))))
