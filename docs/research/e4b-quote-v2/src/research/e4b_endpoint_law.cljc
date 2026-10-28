@@ -60,3 +60,17 @@
      :scope "synthetic lifecycle preflight only"
      :atomic-connect-ownership false :adversarial-same-uid-boundary false
      :model-execution false :production-adoption false :cloud-allocation false}))
+
+
+;; This only authorizes one fixed synthetic body through the fixture path.
+;; Two individually consistent snapshots must agree; this remains preflight,
+;; not an atomic socket capability or a grant to load/execute a model.
+(def fixture-marker "e4b-managed-listener-v1")
+(defn fixture-request-decision [{:keys [initial current]}]
+  {:fixture-request-allowed
+   (boolean (and (:ownership-evidence-consistent (decision initial))
+                 (:ownership-evidence-consistent (decision current))
+                 (= initial current)))
+   :body {:fixture fixture-marker}
+   :model-execution false :cloud-allocation false :production-adoption false
+   :atomic-connect-ownership false :exclusive-socket-ownership false})

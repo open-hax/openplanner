@@ -102,15 +102,17 @@
 ;; A deliberately synthetic-only lifecycle profile. There is no model launch
 ;; plan: a future plan must separately prove admission, cache and endpoint ownership.
 (defn worker-test-plan [mode]
-  (when-not (contains? #{"graceful" "stubborn" "exit-error" "orphan"} mode)
+  (when-not (contains? #{"graceful" "stubborn" "exit-error" "orphan" "listener"} mode)
     (throw (ex-info "Unknown synthetic worker mode" {:mode mode})))
-  {:schema "e4b-worker-test-v1" :mode mode :model-execution false
+  (cond-> {:schema (if (= mode "listener") "e4b-managed-listener-v1" "e4b-worker-test-v1")
+           :mode mode :model-execution false
    :properties ["Type=exec" "ExitType=cgroup" "RemainAfterExit=yes" "Restart=no"
                 "RuntimeMaxSec=2s" "TimeoutStartSec=1s" "TimeoutStopSec=200ms"
                 "KillMode=control-group" "SendSIGKILL=yes"
                 "MemoryMax=64M" "MemorySwapMax=0" "TasksMax=8" "CPUQuota=25%"
                 "NoNewPrivileges=yes" "UMask=0077"
-                "StandardOutput=null" "StandardError=null"]})
+                "StandardOutput=null" "StandardError=null"]}
+    (= mode "listener") (assoc :fixture-marker "e4b-managed-listener-v1")))
 
 (def retention-profile
   {:id "e4b-token-retention-v1" :renderer-upstream-version "0.32.5"

@@ -4,7 +4,7 @@
 This research candidate freezes a prompt comparison, private source excerpts and
 portable scoring/admission laws. It has not run model inference and is not a
 production capability. The bounded HTTP stream transport has passed synthetic endpoint tests; the
-synthetic lifecycle controller now exercises the existing user manager. An admitted model launch path and transport-integrated endpoint binding remain unimplemented. A separate bounded Linux endpoint preflight is tested with an owned listening child and synthetic manager facts; it grants no model readiness. Offline token retention is tested for a separately pinned research backend; live runtime confirmation remains pending. See `protocol.edn` for the explicit remaining execution gaps.
+synthetic lifecycle controller now exercises the existing user manager. An admitted model launch path and model-specific endpoint binding remain unimplemented. The bounded Linux preflight now joins a real synthetic listener under the existing manager to one fixed fixture request on Stealth; it grants no model readiness. Offline token retention is tested for a separately pinned research backend; live runtime confirmation remains pending. See `protocol.edn` for the explicit remaining execution gaps.
 
 The experiment asks whether one fixed extraction-first system instruction
 improves source-bound exact quotation. Both prompts receive identical question,
@@ -207,3 +207,13 @@ is not atomic connection ownership, exclusive socket ownership or a boundary
 against another process with the same UID. No request path uses this preflight
 as model authorization. See the dated endpoint-preflight report for remaining
 controller, cache, backend, live-token and resource-admission gates.
+
+
+`managed_fixture.consume_fixture` has no configurable body, host or model. It
+captures two complete controller/process/socket observations, asks the CLJC law
+for a fixed-fixture decision and then sends only the law's fixture marker through
+the existing bounded transport. The `listener` test mode retains the two-second,
+64-MiB lifecycle limits and has its own protocol schema. Real stop-between-proof,
+foreign-port, stale-invocation, arbitrary-body and manager-expiry tests exercise
+the join on Stealth. Yoga remains pending. This is still a cooperative preflight,
+not atomic or exclusive socket ownership, and supplies no model authorization.

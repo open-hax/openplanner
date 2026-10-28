@@ -55,6 +55,14 @@
                       :real-manager-listener-join false :transport-integration false
                       :atomic-connect-ownership false :exclusive-socket-ownership false
                       :model-execution false}
+ :managed-listener {:version "e4b-managed-listener-v1"
+                    :state :synthetic-managed-listener-joined-on-stealth
+                    :manager :existing-systemd-user-manager
+                    :worker-plan "research.e4b-quote-law/worker-test-plan"
+                    :decision "research.e4b-endpoint-law/fixture-request-decision"
+                    :body :fixed-fixture-marker-only :yoga-qualified false
+                    :model-endpoint-binding false :atomic-connect-ownership false
+                    :exclusive-socket-ownership false :model-execution false}
  :execution-gaps [:admitted-model-worker-controller :live-runtime-retention-confirmation
                   :fresh-resource-admission :independent-review-before-execution]
  :cloud {:allocations-this-stage 0 :campaign "colab-gemma-2026-10-25"

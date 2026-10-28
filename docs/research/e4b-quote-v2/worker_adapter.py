@@ -140,6 +140,8 @@ class Worker:
             argv.append("--property=" + prop)
         argv += ["--", sys.executable, "-B", str(HERE / "fake_worker.py"),
                  self.plan["mode"], str(self.directory)]
+        if self.plan.get("fixture-marker"):
+            argv.append(self.plan["fixture-marker"])
         try:
             self.run(argv)
             return self.reconcile()

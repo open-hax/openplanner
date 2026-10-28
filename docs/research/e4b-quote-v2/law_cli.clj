@@ -13,6 +13,7 @@
               "host" (law/local-admission host)
               "request" (law/request condition sources-json)
               "score" (law/score (:case input) transport)
+              "fixture-endpoint-request" (endpoint/fixture-request-decision (:facts input))
               "endpoint-bounds" endpoint/bounds
               "endpoint-evidence" (endpoint/decision (:facts input))
               "transport-bounds" law/transport-bounds

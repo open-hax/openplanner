@@ -59,4 +59,18 @@
 
 )
 
+
+(deftest fixture-request-never-grants-model-authority
+  (let [decision (law/fixture-request-decision {:initial facts :current facts})]
+    (is (true? (:fixture-request-allowed decision)))
+    (is (= {:fixture "e4b-managed-listener-v1"} (:body decision)))
+    (doseq [key [:model-execution :cloud-allocation :production-adoption
+                :atomic-connect-ownership :exclusive-socket-ownership]]
+      (is (false? (get decision key)))))
+  (doseq [changed [(assoc facts :port 11434) (assoc-in facts [:lease :invocation] nonce)
+                   (assoc-in facts [:process :start-ticks] 101)
+                   (assoc-in facts [:process :listeners 0 :inode] 790) nil]]
+    (is (false? (:fixture-request-allowed
+                  (law/fixture-request-decision {:initial facts :current changed}))))))
+
 (run-tests 'endpoint-law-test)
