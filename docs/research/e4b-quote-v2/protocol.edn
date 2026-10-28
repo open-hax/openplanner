@@ -49,6 +49,12 @@
              :input-encoding {:format :compact-utf8-json :keys ["question" "sources"]
                               :source-keys ["id" "text"] :ensure-ascii false}
              :output-reserve 256 :extra-native-reserve 1 :model-execution false}
+ :endpoint-preflight {:version "e4b-endpoint-proof-v1"
+                      :policy "research.e4b-endpoint-law/decision"
+                      :state :owned-child-proc-read-and-synthetic-manager-tests
+                      :real-manager-listener-join false :transport-integration false
+                      :atomic-connect-ownership false :exclusive-socket-ownership false
+                      :model-execution false}
  :execution-gaps [:admitted-model-worker-controller :live-runtime-retention-confirmation
                   :fresh-resource-admission :independent-review-before-execution]
  :cloud {:allocations-this-stage 0 :campaign "colab-gemma-2026-10-25"

@@ -3,6 +3,8 @@
   (:require [cheshire.core :as json]))
 (load-file (str (.getParent (java.io.File. *file*)) "/src/research/e4b_quote_law.cljc"))
 (require '[research.e4b-quote-law :as law])
+(load-file (str (.getParent (java.io.File. *file*)) "/src/research/e4b_endpoint_law.cljc"))
+(require '[research.e4b-endpoint-law :as endpoint])
 (let [{:keys [operation fixture host condition sources-json transport] :as input}
       (json/parse-string (slurp *in*) true)]
   (println (json/generate-string
@@ -11,6 +13,8 @@
               "host" (law/local-admission host)
               "request" (law/request condition sources-json)
               "score" (law/score (:case input) transport)
+              "endpoint-bounds" endpoint/bounds
+              "endpoint-evidence" (endpoint/decision (:facts input))
               "transport-bounds" law/transport-bounds
               "worker-test-plan" (law/worker-test-plan (:mode input))
               "retention-profile" law/retention-profile

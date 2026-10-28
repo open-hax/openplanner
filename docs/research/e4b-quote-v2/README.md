@@ -4,7 +4,7 @@
 This research candidate freezes a prompt comparison, private source excerpts and
 portable scoring/admission laws. It has not run model inference and is not a
 production capability. The bounded HTTP stream transport has passed synthetic endpoint tests; the
-synthetic lifecycle controller now exercises the existing user manager. An admitted model launch path, endpoint ownership remain unimplemented. Offline token retention is tested for a separately pinned research backend; live runtime confirmation remains pending. See `protocol.edn` for the explicit remaining execution gaps.
+synthetic lifecycle controller now exercises the existing user manager. An admitted model launch path and transport-integrated endpoint binding remain unimplemented. A separate bounded Linux endpoint preflight is tested with an owned listening child and synthetic manager facts; it grants no model readiness. Offline token retention is tested for a separately pinned research backend; live runtime confirmation remains pending. See `protocol.edn` for the explicit remaining execution gaps.
 
 The experiment asks whether one fixed extraction-first system instruction
 improves source-bound exact quotation. Both prompts receive identical question,
@@ -196,3 +196,14 @@ Build Go using the pinned Ollama module and `-mod=readonly`; retain build info,
 source/binary/library hashes and process attribution. Private harness commands
 and byte manifests are retained in `ann-followup/e4b-token-retention-v1/`.
 Never stage fixture text, rendered prompts, Go caches or the runtime bundle.
+
+
+`endpoint_probe.py` reads only a named process's bounded Linux metadata, descriptor
+links and IPv4 listener table. `observe_worker` joins those facts to two reconciled
+snapshots of the existing controller, refusing an unpinned invocation first.
+`research.e4b-endpoint-law` validates synthetic lifecycle evidence through the
+`endpoint-bounds` and `endpoint-evidence` law CLI operations. A matching snapshot
+is not atomic connection ownership, exclusive socket ownership or a boundary
+against another process with the same UID. No request path uses this preflight
+as model authorization. See the dated endpoint-preflight report for remaining
+controller, cache, backend, live-token and resource-admission gates.
