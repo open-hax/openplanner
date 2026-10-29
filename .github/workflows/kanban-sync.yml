@@ -1,6 +1,10 @@
 name: Kanban Sync to GitHub Issues
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/kanban-sync.yml'
+      - 'kanban/**'
   push:
     branches: [main]
     paths:
@@ -21,10 +25,12 @@ permissions:
 
 jobs:
   kanban-sync:
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
     uses: open-hax/eta-mu/.github/workflows/kanban-sync.yml@f4ac84be690fb6cfc7bf8fbd27b62d1befaaaee8
     with:
       eta-mu-ref: f4ac84be690fb6cfc7bf8fbd27b62d1befaaaee8
       tasks-dir: kanban
-      dry-run: ${{ github.event.inputs.dry_run == 'true' }}
+      # PR validation must never mutate GitHub Issues.
+      dry-run: ${{ github.event_name == 'pull_request' || github.event.inputs.dry_run == 'true' }}
       max-writes: 50
       write-delay-ms: 1000
