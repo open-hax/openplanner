@@ -22,7 +22,7 @@ onlyBuiltDependencies:
   - msgpackr-extract
   - protobufjs
 
-patchedDependencies:
-  libsodium-wrappers@0.7.16: patches/libsodium-wrappers@0.7.16.patch
+overrides:
+  hono: ^4.12.18
 
 linkWorkspacePackages: true

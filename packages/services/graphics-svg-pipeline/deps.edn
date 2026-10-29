@@ -1,0 +1,2 @@
+{:deps {metosin/malli {:mvn/version "0.16.4"}}
+ :aliases {:clj-kondo {:extra-deps {clj-kondo/clj-kondo {:mvn/version "2024.09.27"}}}}}

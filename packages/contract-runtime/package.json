@@ -1,0 +1,8 @@
+{
+  "name": "@open-hax/contract-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "license": "LGPL-3.0-or-later",
+  "description": "Contract runtime core: manifest parsing, action interpretation, store protocols, driver/condition/filter registries, and agent utilities.",
+  "type": "module"
+}

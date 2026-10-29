@@ -40,7 +40,6 @@ export interface ExplainResult {
 }
 
 export function createMemoryLruCache(options?: { maxEntries?: number; defaultTtlMs?: number }): CacheHandle;
-export function createRedisCache(options: { client: unknown; prefix?: string; defaultTtlMs?: number }): CacheHandle;
 export function createLmdbCache(options: { db: unknown; prefix?: string; defaultTtlMs?: number }): CacheHandle;
 export function createLayeredCache(caches: CacheHandle[]): CacheHandle;
 
