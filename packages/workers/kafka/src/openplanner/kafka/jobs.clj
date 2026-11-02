@@ -105,6 +105,14 @@
   (when-not (str/blank? s)
     (json/parse-string s keyword)))
 
+(defn parse-audit-record
+  "Return a parsed payload or a parsing error; leave other audit failures visible."
+  [value]
+  (try
+    {:payload (parse-json value)}
+    (catch Exception e
+      {:error e})))
+
 (defn extract-event
   [payload]
   (cond
@@ -349,20 +357,26 @@
         (while @running
           (let [records (.poll consumer (Duration/ofMillis 1000))]
             (doseq [record records]
-              (let [payload (parse-json (.value record))
-                    event (extract-event payload)
-                    n (swap! consumed inc)
-                    now-ms (System/currentTimeMillis)]
-                (when (or (= n 1) (> (- now-ms @last-log-ms) 30000))
-                  (reset! last-log-ms now-ms)
-                  (log! :info "clojure kafka raw event audit heartbeat"
+              (let [{:keys [payload error]} (parse-audit-record (.value record))]
+                (if error
+                  (log! :warn "clojure kafka audit skipped bad record"
                         {:topic (.topic record)
                          :partition (.partition record)
                          :offset (.offset record)
-                         :consumed n
-                         :event-id (:id event)
-                         :event-kind (:kind event)
-                         :event-source (:source event)}))))
+                         :error (.getMessage error)})
+                  (let [event (extract-event payload)
+                      n (swap! consumed inc)
+                      now-ms (System/currentTimeMillis)]
+                    (when (or (= n 1) (> (- now-ms @last-log-ms) 30000))
+                      (reset! last-log-ms now-ms)
+                      (log! :info "clojure kafka raw event audit heartbeat"
+                            {:topic (.topic record)
+                             :partition (.partition record)
+                             :offset (.offset record)
+                             :consumed n
+                             :event-id (:id event)
+                             :event-kind (:kind event)
+                             :event-source (:source event)}))))))
             (when (pos? (.count records))
               (.commitAsync consumer))))))))
 
