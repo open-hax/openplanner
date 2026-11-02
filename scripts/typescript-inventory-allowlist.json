@@ -1052,6 +1052,12 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/cephalon/packages/cephalon-ts/src/ui/src/api.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
       "path": "packages/agents/cephalon/packages/cephalon-ts/src/ui/src/App.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -1065,6 +1071,12 @@
     },
     {
       "path": "packages/agents/cephalon/packages/cephalon-ts/src/ui/src/Header.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/cephalon/packages/cephalon-ts/src/ui/src/main.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1113,18 +1125,6 @@
     },
     {
       "path": "packages/agents/cephalon/packages/cephalon-ts/src/ui/src/ViewToggle.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/cephalon/packages/cephalon-ts/src/ui/src/api.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/cephalon/packages/cephalon-ts/src/ui/src/main.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1186,8 +1186,9 @@
     {
       "path": "packages/agents/knoxx/frontend/src/App.tsx",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/bridge/app.ts",
@@ -1208,79 +1209,13 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/components/ChatComposer.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/CollapsedPanelTab.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/ConsolePanel.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/EmptyState.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/GraphExplorer.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/JsonTree.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/LoungePanel.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/MemorySignalChip.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/SidebarOpsStatus.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/ToolReceiptBlock.test.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/ToolReceiptBlock.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/WorkspaceBrowserCard.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
       "path": "packages/agents/knoxx/frontend/src/components/admin-page/CatalogSection.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/admin-page/common.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1328,6 +1263,12 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/components/admin-page/helpers.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/components/admin-page/IdentitySection.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -1366,35 +1307,25 @@
     {
       "path": "packages/agents/knoxx/frontend/src/components/admin-page/TranslationModelSection.test.tsx",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/admin-page/TranslationModelSection.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/admin-page/types.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/admin-page/UsersMembershipsSection.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/admin-page/common.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/admin-page/helpers.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/admin-page/types.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1414,11 +1345,67 @@
     {
       "path": "packages/agents/knoxx/frontend/src/components/agent-audit/AgentAuditSessionList.test.tsx",
       "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/agent-audit/AgentAuditSessionList.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/auto-conversation-voice-utils.test.ts",
+      "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/components/agent-audit/AgentAuditSessionList.tsx",
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/auto-conversation-voice-utils.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-config.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-derived.test.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-derived.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-persistence-suite.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-runtime-actions.test.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-runtime-actions.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-runtime-effects.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1502,96 +1489,6 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/MultimodalContent.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/MultimodalInput.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/SpeakAssistantButton.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/VoiceInputButton.test.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/VoiceInputButton.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/VoiceReplyButton.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/auto-conversation-voice-utils.test.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/auto-conversation-voice-utils.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-config.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-derived.test.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-derived.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-page-persistence-suite.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-runtime-actions.test.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-runtime-actions.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/components/chat-page/chat-runtime-effects.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
       "path": "packages/agents/knoxx/frontend/src/components/chat-page/hooks.test.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -1610,6 +1507,18 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/MultimodalContent.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/MultimodalInput.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/components/chat-page/scratchpad-actions.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -1617,6 +1526,12 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/chat-page/sidebar-resize.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/SpeakAssistantButton.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1664,6 +1579,24 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/VoiceInputButton.test.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/VoiceInputButton.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/chat-page/VoiceReplyButton.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/components/chat-page/workspace-actions.test.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -1677,6 +1610,12 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/chat-page/workspace-sync-constants.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/ChatComposer.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1707,6 +1646,18 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/cms/VisualEditor.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/CollapsedPanelTab.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/ConsolePanel.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1772,13 +1723,31 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/components/editor/editor-types.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/components/editor/PublishWorkflow.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/components/editor/editor-types.ts",
+      "path": "packages/agents/knoxx/frontend/src/components/EmptyState.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/GraphExplorer.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/JsonTree.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1791,6 +1760,12 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/layout/BottomPanel.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/layout/index.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1838,7 +1813,13 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/components/layout/index.ts",
+      "path": "packages/agents/knoxx/frontend/src/components/LoungePanel.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/MemorySignalChip.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1922,6 +1903,12 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/components/SidebarOpsStatus.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/components/studio/MusicPlayerView.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -1929,6 +1916,18 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/studio/PlaylistQueueList.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/ToolReceiptBlock.test.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/ToolReceiptBlock.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -1965,6 +1964,12 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/components/workspace-context/utils.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/components/WorkspaceBrowserCard.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2086,14 +2091,16 @@
     {
       "path": "packages/agents/knoxx/frontend/src/lib/document-links.test.ts",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/lib/document-links.ts",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/lib/edn.ts",
@@ -2116,8 +2123,9 @@
     {
       "path": "packages/agents/knoxx/frontend/src/lib/multimodal-utils.ts",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/lib/nextApi.ts",
@@ -2146,8 +2154,9 @@
     {
       "path": "packages/agents/knoxx/frontend/src/main.tsx",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/pages/AdminLayout.tsx",
@@ -2162,16 +2171,24 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/pages/AuthContext.test.tsx",
+      "path": "packages/agents/knoxx/frontend/src/pages/auth-context-instance.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/pages/AuthContext.test.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/pages/AuthContext.tsx",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/pages/BroadcastStudioPage.test.tsx",
@@ -2240,6 +2257,19 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/pages/documents-page/DocumentsPageView.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/pages/DocumentsPage.test.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-generate-from-cljs",
+      "removalCondition": "frontend test ported to CLJS test runner"
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/pages/DocumentsPage.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -2254,11 +2284,25 @@
     {
       "path": "packages/agents/knoxx/frontend/src/pages/GardensPage.test.tsx",
       "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/pages/GardensPage.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/pages/ingestion-page/parts.tsx",
+      "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/pages/GardensPage.tsx",
+      "path": "packages/agents/knoxx/frontend/src/pages/ingestion-page/types.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2278,23 +2322,32 @@
     {
       "path": "packages/agents/knoxx/frontend/src/pages/LoginPage.tsx",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/pages/MailPage.test.tsx",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
     },
     {
       "path": "packages/agents/knoxx/frontend/src/pages/MailPage.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/pages/OpsRoot.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/frontend/src/pages/OpsRoot.tsx",
+      "path": "packages/agents/knoxx/frontend/src/pages/raw-graph-export/graph-helpers.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2318,6 +2371,12 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/frontend/src/pages/SettingsPage.test.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-generate-from-cljs",
+      "removalCondition": "frontend test ported to CLJS test runner"
+    },
+    {
       "path": "packages/agents/knoxx/frontend/src/pages/SettingsPage.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
@@ -2326,8 +2385,22 @@
     {
       "path": "packages/agents/knoxx/frontend/src/pages/SignupPage.tsx",
       "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/pages/source-doc-page/ForumThreadView.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/pages/SourceDocPage.test.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-generate-from-cljs",
+      "removalCondition": "frontend test ported to CLJS test runner"
     },
     {
       "path": "packages/agents/knoxx/frontend/src/pages/SourceDocPage.tsx",
@@ -2343,6 +2416,13 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/pages/TranslationReviewPage.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "removed",
+      "removalCondition": "active agent package has no TS/TSX source",
+      "removed": true
+    },
+    {
+      "path": "packages/agents/knoxx/frontend/src/pages/useAuth.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2361,48 +2441,6 @@
     },
     {
       "path": "packages/agents/knoxx/frontend/src/pages/VisualCmsEditorPage.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/pages/auth-context-instance.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/pages/documents-page/DocumentsPageView.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/pages/ingestion-page/parts.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/pages/ingestion-page/types.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/pages/raw-graph-export/graph-helpers.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/pages/source-doc-page/ForumThreadView.tsx",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/frontend/src/pages/useAuth.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2510,7 +2548,7 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/pseudo/WorkbenchPage.tsx",
+      "path": "packages/agents/knoxx/pseudo/shell/chord-actions.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2522,7 +2560,19 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
+      "path": "packages/agents/knoxx/pseudo/shell/nav-items.ts",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
       "path": "packages/agents/knoxx/pseudo/shell/Shell.tsx",
+      "owner": "T6-agent-package-tranche",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "active agent package has no TS/TSX source"
+    },
+    {
+      "path": "packages/agents/knoxx/pseudo/shell/status-hooks.ts",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2534,19 +2584,7 @@
       "removalCondition": "active agent package has no TS/TSX source"
     },
     {
-      "path": "packages/agents/knoxx/pseudo/shell/chord-actions.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/pseudo/shell/nav-items.ts",
-      "owner": "T6-agent-package-tranche",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "active agent package has no TS/TSX source"
-    },
-    {
-      "path": "packages/agents/knoxx/pseudo/shell/status-hooks.ts",
+      "path": "packages/agents/knoxx/pseudo/WorkbenchPage.tsx",
       "owner": "T6-agent-package-tranche",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "active agent package has no TS/TSX source"
@@ -2564,31 +2602,13 @@
       "removalCondition": "shared leaf/declaration package exposes CLJS-authored API"
     },
     {
+      "path": "packages/event-ledger/index.d.ts",
+      "owner": "T1-shared-leaves-and-declaration-stubs",
+      "disposition": "port-to-cljs-or-generate-from-cljs",
+      "removalCondition": "event-ledger package exposes CLJS-authored API; declaration generated from CLJS"
+    },
+    {
       "path": "packages/gardens/publication-components/src/AudioPlaybackWidgets.tsx",
-      "owner": "T7-ui-component-leaf-packages",
-      "disposition": "port-to-cljs-or-replace",
-      "removalCondition": "shared UI package is CLJS-native or replaced"
-    },
-    {
-      "path": "packages/gardens/publication-components/src/MusicPlayerView.tsx",
-      "owner": "T7-ui-component-leaf-packages",
-      "disposition": "port-to-cljs-or-replace",
-      "removalCondition": "shared UI package is CLJS-native or replaced"
-    },
-    {
-      "path": "packages/gardens/publication-components/src/PlaylistQueueList.tsx",
-      "owner": "T7-ui-component-leaf-packages",
-      "disposition": "port-to-cljs-or-replace",
-      "removalCondition": "shared UI package is CLJS-native or replaced"
-    },
-    {
-      "path": "packages/gardens/publication-components/src/PublicationBlocksRenderer.tsx",
-      "owner": "T7-ui-component-leaf-packages",
-      "disposition": "port-to-cljs-or-replace",
-      "removalCondition": "shared UI package is CLJS-native or replaced"
-    },
-    {
-      "path": "packages/gardens/publication-components/src/StudioPlaylistPlayer.tsx",
       "owner": "T7-ui-component-leaf-packages",
       "disposition": "port-to-cljs-or-replace",
       "removalCondition": "shared UI package is CLJS-native or replaced"
@@ -2612,7 +2632,31 @@
       "removalCondition": "shared UI package is CLJS-native or replaced"
     },
     {
+      "path": "packages/gardens/publication-components/src/MusicPlayerView.tsx",
+      "owner": "T7-ui-component-leaf-packages",
+      "disposition": "port-to-cljs-or-replace",
+      "removalCondition": "shared UI package is CLJS-native or replaced"
+    },
+    {
+      "path": "packages/gardens/publication-components/src/PlaylistQueueList.tsx",
+      "owner": "T7-ui-component-leaf-packages",
+      "disposition": "port-to-cljs-or-replace",
+      "removalCondition": "shared UI package is CLJS-native or replaced"
+    },
+    {
+      "path": "packages/gardens/publication-components/src/PublicationBlocksRenderer.tsx",
+      "owner": "T7-ui-component-leaf-packages",
+      "disposition": "port-to-cljs-or-replace",
+      "removalCondition": "shared UI package is CLJS-native or replaced"
+    },
+    {
       "path": "packages/gardens/publication-components/src/server.tsx",
+      "owner": "T7-ui-component-leaf-packages",
+      "disposition": "port-to-cljs-or-replace",
+      "removalCondition": "shared UI package is CLJS-native or replaced"
+    },
+    {
+      "path": "packages/gardens/publication-components/src/StudioPlaylistPlayer.tsx",
       "owner": "T7-ui-component-leaf-packages",
       "disposition": "port-to-cljs-or-replace",
       "removalCondition": "shared UI package is CLJS-native or replaced"
@@ -2678,30 +2722,6 @@
       "removalCondition": "shared leaf/declaration package exposes CLJS-authored API"
     },
     {
-      "path": "packages/event-ledger/index.d.ts",
-      "owner": "T1-shared-leaves-and-declaration-stubs",
-      "disposition": "port-to-cljs-or-generate-from-cljs",
-      "removalCondition": "event-ledger package exposes CLJS-authored API; declaration generated from CLJS"
-    },
-    {
-      "path": "packages/openplanner-protocols/index.d.ts",
-      "owner": "T1-shared-leaves-and-declaration-stubs",
-      "disposition": "port-to-cljs-or-generate-from-cljs",
-      "removalCondition": "openplanner-protocols package exposes CLJS-authored API; declaration generated from CLJS"
-    },
-    {
-      "path": "packages/openplanner-client/src/index.ts",
-      "owner": "T2-root-openplanner-cljs-runtime-api",
-      "disposition": "port-to-cljs",
-      "removalCondition": "openplanner socket.io client reimplemented in CLJS"
-    },
-    {
-      "path": "packages/graph/graph-weaver-aco/src/GraphWeaverAco.ts",
-      "owner": "T3-graph-package-tranche",
-      "disposition": "port-to-cljs",
-      "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
-    },
-    {
       "path": "packages/graph/graph-weaver-aco/src/aco.ts",
       "owner": "T3-graph-package-tranche",
       "disposition": "port-to-cljs",
@@ -2715,6 +2735,12 @@
     },
     {
       "path": "packages/graph/graph-weaver-aco/src/frontier.ts",
+      "owner": "T3-graph-package-tranche",
+      "disposition": "port-to-cljs",
+      "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
+    },
+    {
+      "path": "packages/graph/graph-weaver-aco/src/GraphWeaverAco.ts",
       "owner": "T3-graph-package-tranche",
       "disposition": "port-to-cljs",
       "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
@@ -2840,12 +2866,6 @@
       "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
     },
     {
-      "path": "packages/graph/myrmex/src/Myrmex.ts",
-      "owner": "T3-graph-package-tranche",
-      "disposition": "port-to-cljs",
-      "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
-    },
-    {
       "path": "packages/graph/myrmex/src/checkpoint.ts",
       "owner": "T3-graph-package-tranche",
       "disposition": "port-to-cljs",
@@ -2882,6 +2902,12 @@
       "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
     },
     {
+      "path": "packages/graph/myrmex/src/Myrmex.ts",
+      "owner": "T3-graph-package-tranche",
+      "disposition": "port-to-cljs",
+      "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
+    },
+    {
       "path": "packages/graph/myrmex/src/shuvcrawl-backend.ts",
       "owner": "T3-graph-package-tranche",
       "disposition": "port-to-cljs",
@@ -2895,12 +2921,6 @@
     },
     {
       "path": "packages/graph/myrmex/src/types.ts",
-      "owner": "T3-graph-package-tranche",
-      "disposition": "port-to-cljs",
-      "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
-    },
-    {
-      "path": "packages/graph/webgl-graph-view/src/WebGLGraphView.ts",
       "owner": "T3-graph-package-tranche",
       "disposition": "port-to-cljs",
       "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
@@ -2958,6 +2978,24 @@
       "owner": "T3-graph-package-tranche",
       "disposition": "port-to-cljs",
       "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
+    },
+    {
+      "path": "packages/graph/webgl-graph-view/src/WebGLGraphView.ts",
+      "owner": "T3-graph-package-tranche",
+      "disposition": "port-to-cljs",
+      "removalCondition": "graph packages build from CLJS and TypeScript sources are removed"
+    },
+    {
+      "path": "packages/openplanner-client/src/index.ts",
+      "owner": "T2-root-openplanner-cljs-runtime-api",
+      "disposition": "port-to-cljs",
+      "removalCondition": "openplanner socket.io client reimplemented in CLJS"
+    },
+    {
+      "path": "packages/openplanner-protocols/index.d.ts",
+      "owner": "T1-shared-leaves-and-declaration-stubs",
+      "disposition": "port-to-cljs-or-generate-from-cljs",
+      "removalCondition": "openplanner-protocols package exposes CLJS-authored API; declaration generated from CLJS"
     },
     {
       "path": "packages/signals/event/src/config.ts",
@@ -3267,18 +3305,6 @@
     },
     {
       "path": "pseudo/clients/pseudo/test-spawn.ts",
-      "owner": "T5-pseudo-service-adapters-and-client-tools",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
-    },
-    {
-      "path": "pseudo/clients/src/SessionInfo.ts",
-      "owner": "T5-pseudo-service-adapters-and-client-tools",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
-    },
-    {
-      "path": "pseudo/clients/src/SessionUtils.ts",
       "owner": "T5-pseudo-service-adapters-and-client-tools",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
@@ -3668,6 +3694,18 @@
       "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
     },
     {
+      "path": "pseudo/clients/src/SessionInfo.ts",
+      "owner": "T5-pseudo-service-adapters-and-client-tools",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
+    },
+    {
+      "path": "pseudo/clients/src/SessionUtils.ts",
+      "owner": "T5-pseudo-service-adapters-and-client-tools",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
+    },
+    {
       "path": "pseudo/clients/src/stores.ts",
       "owner": "T5-pseudo-service-adapters-and-client-tools",
       "disposition": "port-to-cljs-or-retire",
@@ -3681,18 +3719,6 @@
     },
     {
       "path": "pseudo/clients/src/test-utils.ts",
-      "owner": "T5-pseudo-service-adapters-and-client-tools",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
-    },
-    {
-      "path": "pseudo/clients/src/tests/SessionUtils.test.ts",
-      "owner": "T5-pseudo-service-adapters-and-client-tools",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
-    },
-    {
-      "path": "pseudo/clients/src/tests/SessionUtilsBasic.test.ts",
       "owner": "T5-pseudo-service-adapters-and-client-tools",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
@@ -3818,19 +3844,19 @@
       "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
     },
     {
+      "path": "pseudo/clients/src/tests/SessionUtils.test.ts",
+      "owner": "T5-pseudo-service-adapters-and-client-tools",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
+    },
+    {
+      "path": "pseudo/clients/src/tests/SessionUtilsBasic.test.ts",
+      "owner": "T5-pseudo-service-adapters-and-client-tools",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
+    },
+    {
       "path": "pseudo/clients/src/tests/simple.test.ts",
-      "owner": "T5-pseudo-service-adapters-and-client-tools",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
-    },
-    {
-      "path": "pseudo/clients/src/types/SessionData.ts",
-      "owner": "T5-pseudo-service-adapters-and-client-tools",
-      "disposition": "port-to-cljs-or-retire",
-      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
-    },
-    {
-      "path": "pseudo/clients/src/types/StoreSession.ts",
       "owner": "T5-pseudo-service-adapters-and-client-tools",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
@@ -3843,6 +3869,18 @@
     },
     {
       "path": "pseudo/clients/src/types/plugin-hooks.ts",
+      "owner": "T5-pseudo-service-adapters-and-client-tools",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
+    },
+    {
+      "path": "pseudo/clients/src/types/SessionData.ts",
+      "owner": "T5-pseudo-service-adapters-and-client-tools",
+      "disposition": "port-to-cljs-or-retire",
+      "removalCondition": "pseudo package builds from CLJS or is explicitly retired"
+    },
+    {
+      "path": "pseudo/clients/src/types/StoreSession.ts",
       "owner": "T5-pseudo-service-adapters-and-client-tools",
       "disposition": "port-to-cljs-or-retire",
       "removalCondition": "pseudo package builds from CLJS or is explicitly retired"

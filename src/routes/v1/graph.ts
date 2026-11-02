@@ -5308,14 +5308,59 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     const requestedLakes: string[] = Array.isArray(req.body?.lakes) && req.body.lakes.length > 0
       ? req.body.lakes
       : ["discord", "bluesky", "desktop", "web", "topic"];
-    const maxNodes = Math.min(1000, Math.max(10, Number(req.body?.max_nodes ?? req.body?.maxNodes ?? 250)));
+    const maxNodes = Math.min(1000, Math.max(1, Number(req.body?.max_nodes ?? req.body?.maxNodes ?? 250)));
     const seedNodeIds: string[] = Array.isArray(req.body?.seed_node_ids ?? req.body?.seedNodeIds)
       ? req.body.seed_node_ids ?? req.body.seedNodeIds
       : [];
     const includeDesktop = req.body?.include_desktop !== false && req.body?.includeDesktop !== false;
 
+    // Helper functions within route
+    const lakeClusterOf = (id: string): string => {
+      if (id.startsWith("view:compact:")) return "view";
+      for (const lake of ["devel", "web", "bluesky", "knoxx-session", "discord", "topic", "desktop"]) {
+        if (id.startsWith(lake + ":")) return lake;
+      }
+      if (id.startsWith("window:") || id.startsWith("workspace:") || id.startsWith("app:")) return "desktop";
+      return "other";
+    };
+
+    const isAllowedNode = (id: string): boolean => {
+      const lake = lakeClusterOf(id);
+      if (lake === "desktop") {
+        if (!includeDesktop) return false;
+        if (!requestedLakes.includes("desktop")) return false;
+      } else {
+        if (!requestedLakes.includes(lake)) return false;
+      }
+      return true;
+    };
+
+    const nodeTypeOfLocal = (id: string): string => {
+      if (id.startsWith("view:compact:")) return "compact_view";
+      if (id.startsWith("discord:user:")) return "discord.user";
+      if (id.startsWith("discord:channel:")) return "discord.channel";
+      if (id.startsWith("discord:guild:")) return "discord.guild";
+      if (id.startsWith("discord:reaction:")) return "discord.reaction";
+      if (id.startsWith("discord:attachment:")) return "discord.attachment";
+      if (id.startsWith("discord:")) return "discord.message";
+      if (id.startsWith("web:url:")) return "web.url";
+      if (id.startsWith("topic:")) return "topic";
+      if (id.startsWith("bluesky:user:")) return "bluesky.user";
+      if (id.startsWith("bluesky:post:")) return "bluesky.post";
+      if (id.startsWith("window:") || id.startsWith("desktop:window:")) return "desktop.window";
+      if (id.startsWith("workspace:") || id.startsWith("desktop:workspace:")) return "desktop.workspace";
+      if (id.startsWith("app:") || id.startsWith("desktop:app:")) return "desktop.app";
+      const parts = id.split(":");
+      return parts.length >= 2 ? parts[1] : "unknown";
+    };
+
     // 1. Identify seeds
-    const seeds = new Set<string>(seedNodeIds);
+    const seeds = new Set<string>();
+    for (const sid of seedNodeIds) {
+      if (seeds.size >= maxNodes) break;
+      if (isAllowedNode(sid)) seeds.add(sid);
+    }
+
     if (seeds.size === 0 && q) {
       try {
         const hits = await app.mongo.graphNodeEmbeddings.find(
@@ -5323,28 +5368,59 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           { projection: { node_id: 1, score: { $meta: "textScore" } } }
         ).sort({ score: { $meta: "textScore" } }).limit(25).toArray();
         for (const hit of hits) {
-          if (hit.node_id) seeds.add(String(hit.node_id));
+          if (hit.node_id && isAllowedNode(String(hit.node_id))) {
+            seeds.add(String(hit.node_id));
+            if (seeds.size >= maxNodes) break;
+          }
         }
       } catch (_e) {
         // text index search fallback
       }
+
+      if (seeds.size === 0) {
+        try {
+          const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const hits = await app.mongo.events.find(
+            {
+              $or: [
+                { message: { $regex: escaped, $options: "i" } },
+                { text: { $regex: escaped, $options: "i" } }
+              ]
+            },
+            { projection: { id: 1, "extra.node_id": 1 } }
+          ).limit(25).toArray();
+          for (const r of hits) {
+            const nid = String((r.extra as any)?.node_id || r.id);
+            if (isAllowedNode(nid)) {
+              seeds.add(nid);
+              if (seeds.size >= maxNodes) break;
+            }
+          }
+        } catch (_e) {
+          // regex fallback
+        }
+      }
     }
 
-    if (seeds.size === 0) {
+    // Only fallback to recent events if no query was specified and seeds are empty
+    if (seeds.size === 0 && !q) {
       const recent = await app.mongo.events.find(
         { kind: { $in: ["discord.message", "graph.node", "discord.reaction"] } },
         { projection: { id: 1, "extra.node_id": 1 } }
       ).sort({ ts: -1 }).limit(30).toArray();
       for (const r of recent) {
         const nid = String((r.extra as any)?.node_id || r.id);
-        seeds.add(nid);
+        if (isAllowedNode(nid)) {
+          seeds.add(nid);
+          if (seeds.size >= maxNodes) break;
+        }
       }
     }
 
     // 2. Multi-hop traversal via graph_edges
-    const visitedNodes = new Set<string>(seeds);
+    const visitedNodes = new Set<string>([...seeds].slice(0, maxNodes));
     const collectedEdges = new Map<string, any>();
-    let currentFrontier = [...seeds];
+    let currentFrontier = [...visitedNodes];
 
     for (let hop = 0; hop < 2 && visitedNodes.size < maxNodes; hop++) {
       if (currentFrontier.length === 0) break;
@@ -5371,11 +5447,11 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
             data: edge.data ?? null,
           });
         }
-        if (!visitedNodes.has(s) && visitedNodes.size < maxNodes) {
+        if (isAllowedNode(s) && !visitedNodes.has(s) && visitedNodes.size < maxNodes) {
           visitedNodes.add(s);
           nextFrontier.push(s);
         }
-        if (!visitedNodes.has(t) && visitedNodes.size < maxNodes) {
+        if (isAllowedNode(t) && !visitedNodes.has(t) && visitedNodes.size < maxNodes) {
           visitedNodes.add(t);
           nextFrontier.push(t);
         }
@@ -5384,7 +5460,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     // 3. Hydrate nodes
-    const nodeIds = [...visitedNodes];
+    const nodeIds = [...visitedNodes].slice(0, maxNodes);
     const [eventsById, eventsByNodeId] = await Promise.all([
       app.mongo.events.find({ id: { $in: nodeIds } }).toArray().catch(() => []),
       app.mongo.events.find({ "extra.node_id": { $in: nodeIds } }).toArray().catch(() => []),
@@ -5395,35 +5471,6 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       if (doc.id) eventDocMap.set(String(doc.id), doc);
       if ((doc.extra as any)?.node_id) eventDocMap.set(String((doc.extra as any).node_id), doc);
     }
-
-    // Helper functions within route
-    const lakeClusterOf = (id: string): string => {
-      if (id.startsWith("view:compact:")) return "view";
-      for (const lake of ["devel", "web", "bluesky", "knoxx-session", "discord", "topic", "desktop"]) {
-        if (id.startsWith(lake + ":")) return lake;
-      }
-      if (id.startsWith("window:") || id.startsWith("workspace:") || id.startsWith("app:")) return "desktop";
-      return "other";
-    };
-
-    const nodeTypeOfLocal = (id: string): string => {
-      if (id.startsWith("view:compact:")) return "compact_view";
-      if (id.startsWith("discord:user:")) return "discord.user";
-      if (id.startsWith("discord:channel:")) return "discord.channel";
-      if (id.startsWith("discord:guild:")) return "discord.guild";
-      if (id.startsWith("discord:reaction:")) return "discord.reaction";
-      if (id.startsWith("discord:attachment:")) return "discord.attachment";
-      if (id.startsWith("discord:")) return "discord.message";
-      if (id.startsWith("web:url:")) return "web.url";
-      if (id.startsWith("topic:")) return "topic";
-      if (id.startsWith("bluesky:user:")) return "bluesky.user";
-      if (id.startsWith("bluesky:post:")) return "bluesky.post";
-      if (id.startsWith("window:") || id.startsWith("desktop:window:")) return "desktop.window";
-      if (id.startsWith("workspace:") || id.startsWith("desktop:workspace:")) return "desktop.workspace";
-      if (id.startsWith("app:") || id.startsWith("desktop:app:")) return "desktop.app";
-      const parts = id.split(":");
-      return parts.length >= 2 ? parts[1] : "unknown";
-    };
 
     // 4. Group into clusters & compute layout coordinates
     const nodes: any[] = [];
@@ -5590,9 +5637,13 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Format Edges for WebGL View
+    // Format Edges for WebGL View (strictly drop dangling edges)
+    const returnedNodeIdSet = new Set(nodes.map((n) => n.id));
     const edges: any[] = [];
     for (const e of collectedEdges.values()) {
+      if (!returnedNodeIdSet.has(e.source) || !returnedNodeIdSet.has(e.target)) {
+        continue;
+      }
       let color: [number, number, number, number] = [0.4, 0.45, 0.5, 0.5];
       if (e.kind === "mentions_topic") color = [1.0, 0.75, 0.2, 0.7];
       else if (e.kind === "authored_by" || e.kind === "mentions_user") color = [0.35, 0.65, 1.0, 0.7];
