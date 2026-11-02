@@ -5,13 +5,18 @@
   {:target :esm
    :runtime :node
    :output-dir "dist"
-   :exports {"createEdnEventAdmission" promethean.records.edn.event-admission/create-edn-event-admission
-             "validateEnvelope" promethean.openplanner-protocols/validate-envelope
-             "makeEnvelope" promethean.openplanner-protocols/make-envelope}
    :js-options {:js-provider :import
                 :keep-as-import #{"fs" "fs/promises" "path"}}
-   :modules {:main {:init-fn promethean.openplanner-protocols/init
-                    :entries [promethean.records.edn.event-admission]}}
+   :modules {:index {:entries [promethean.records.edn.event-admission]
+                     :exports {:createEdnEventAdmission promethean.records.edn.event-admission/create-edn-event-admission-js
+                               :validateEnvelope promethean.openplanner-protocols/validate-envelope-js
+                               :makeEnvelope promethean.openplanner-protocols/make-envelope-js}}}
+   :compiler-options {:output-feature-set :es-next}}
+  :api-test
+  {:target :node-test
+   :output-to "target/api-test.cjs"
+   :namespaces [promethean.records.edn.js-boundary-test]
+   :autorun false
    :compiler-options {:output-feature-set :es-next}}
   :test
   {:target :node-test

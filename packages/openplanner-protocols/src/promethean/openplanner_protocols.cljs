@@ -48,11 +48,16 @@
                             (map #(str (name k) ": " %) vs)))
                   vec)}))
 
+(declare normalize-js normalize-event reject-unsupported!)
+
 (defn ^:export validate-envelope-js
   "JS-compatible envelope validation."
   [envelope]
-  (let [result (validate-envelope (js->clj envelope :keywordize-keys true))]
-    (clj->js result)))
+  (try
+    (reject-unsupported! envelope (js/WeakSet.))
+    (clj->js (validate-envelope (normalize-event (normalize-js envelope))))
+    (catch :default _
+      #js {:valid false :errors #js ["Unsupported or invalid envelope"]})))
 
 ;; ---------------------------------------------------------------------------
 ;; Event Admission — the core ingestion protocol
@@ -189,3 +194,70 @@
   "Module init for ESM export; protocols are defined as protocol vars,
    no runtime state needed."
   [] {})
+
+(defn to-js [value]
+  (cond
+    (map? value) (let [obj #js {}]
+                   (doseq [[k v] value]
+                     (js/Object.defineProperty obj (if (keyword? k) (subs (str k) 1) (str k))
+                                               #js {:value (to-js v) :enumerable true :writable true :configurable true}))
+                   obj)
+    (sequential? value) (into-array (map to-js value))
+    :else value))
+
+(defn reject-unsupported! [value seen]
+  (let [kind (goog/typeOf value)]
+    (cond
+      (undefined? value) (throw (js/Error. "Undefined is not supported"))
+      (nil? value) nil
+      (or (= kind "string") (= kind "boolean")) nil
+      (= kind "number") (when-not (js/Number.isFinite value)
+                            (throw (js/Error. "Non-finite number is not supported")))
+      (or (= kind "object") (= kind "array"))
+      (do
+        (when (.has seen value)
+          (throw (js/Error. "Cyclic input is not supported")))
+        (let [proto (js/Object.getPrototypeOf value)]
+          (when-not (or (and (= kind "array") (= proto (.-prototype js/Array)))
+                        (and (= kind "object") (or (nil? proto) (= proto (.-prototype js/Object)))))
+            (throw (js/Error. "Only plain objects and arrays are supported"))))
+        (when (pos? (alength (js/Object.getOwnPropertySymbols value)))
+          (throw (js/Error. "Symbol properties are not supported")))
+        (.add seen value)
+        (let [names (array-seq (js/Object.getOwnPropertyNames value))
+              keys (if (= kind "array") (remove #(= % "length") names) names)]
+          (when (and (= kind "array") (or (not= (count keys) (alength value))
+                                          (not-every? #(.call (.-hasOwnProperty js/Object.prototype) value (str %))
+                                                      (range (alength value)))))
+            (throw (js/Error. "Sparse or extended arrays are not supported")))
+          (doseq [key keys]
+            (let [descriptor (js/Object.getOwnPropertyDescriptor value key)]
+              (when-not (and (.-enumerable descriptor)
+                             (.call (.-hasOwnProperty js/Object.prototype) descriptor "value"))
+                (throw (js/Error. "Accessor and hidden properties are not supported")))
+              (reject-unsupported! (.-value descriptor) seen))))
+        (.delete seen value))
+      :else (throw (js/Error. "Value is not supported by the EDN boundary")))))
+
+(defn normalize-js [value]
+  (case (goog/typeOf value)
+    "array" (mapv normalize-js (array-seq value))
+    "object" (if (nil? value) nil
+               (reduce (fn [m key] (assoc m key (normalize-js (aget value key))))
+                       {} (array-seq (js/Object.keys value))))
+    value))
+
+(defn normalize-event [value]
+  (when-not (map? value)
+    (throw (js/Error. "Event or filter must be an object")))
+  (reduce-kv (fn [event k v]
+               (let [key (keyword k)
+                     normalized (if (and (#{:event/from :event/to} key) (map? v))
+                                  (reduce-kv (fn [m child-key child] (assoc m (keyword child-key) child)) {} v)
+                                  v)]
+                 (assoc event key normalized)))
+             {} value))
+
+(defn ^:export make-envelope-js [event-type payload]
+  (reject-unsupported! payload (js/WeakSet.))
+  (to-js (make-envelope event-type (normalize-js payload))))
