@@ -28,16 +28,16 @@ jobs:
         with:
           repository: open-hax/eta-mu
           ref: f4ac84be690fb6cfc7bf8fbd27b62d1befaaaee8
-          path: .eta-mu
+          path: .rheos-runtime
           persist-credentials: false
 
       - name: Verify eta-mu checkout
         shell: bash
         run: |
           set -euo pipefail
-          test -f .eta-mu/packages/rheos/package.json
+          test -f .rheos-runtime/packages/rheos/package.json
           echo "eta-mu ref: f4ac84be690fb6cfc7bf8fbd27b62d1befaaaee8"
-          echo "eta-mu commit: $(git -C .eta-mu rev-parse HEAD)"
+          echo "eta-mu commit: $(git -C .rheos-runtime rev-parse HEAD)"
 
       - name: Setup Java
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
@@ -56,10 +56,10 @@ jobs:
         with:
           node-version: "22"
           cache: pnpm
-          cache-dependency-path: .eta-mu/pnpm-lock.yaml
+          cache-dependency-path: .rheos-runtime/pnpm-lock.yaml
 
       - name: Install eta-mu workspace
-        run: pnpm --dir .eta-mu install --frozen-lockfile
+        run: pnpm --dir .rheos-runtime install --frozen-lockfile
 
       - name: Install Clojure CLI
         uses: DeLaGuardo/setup-clojure@3fe9b3ae632c6758d0b7757b0838606ef4287b08 # v13.4
@@ -70,7 +70,7 @@ jobs:
         run: clojure -Sdescribe
 
       - name: Build Rheos projection executables
-        run: pnpm --dir .eta-mu/packages/rheos exec shadow-cljs release cli github-sync
+        run: pnpm --dir .rheos-runtime/packages/rheos exec shadow-cljs release cli github-sync
 
       - name: Resolve board path
         id: board
@@ -99,7 +99,7 @@ jobs:
               ;;
           esac
 
-          if [[ "$tasks_path" == "$workspace/.eta-mu"* ]]; then
+          if [[ "$tasks_path" == "$workspace/.rheos-runtime"* ]]; then
             echo "::error::tasks-dir must target the calling repository"
             exit 1
           fi
@@ -113,7 +113,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$(dirname "$SNAPSHOT_PATH")"
-          node .eta-mu/packages/rheos/dist/cli.cjs board snapshot \
+          node .rheos-runtime/packages/rheos/dist/cli.cjs board snapshot \
             --tasks-dir "$TASKS_PATH" \
             --out "$SNAPSHOT_PATH"
 
@@ -149,7 +149,7 @@ jobs:
           DRIFT_PATH: ${{ runner.temp }}/rheos-github-sync/drift.txt
         run: |
           set -euo pipefail
-          node .eta-mu/packages/rheos/dist/cli.cjs drift \
+          node .rheos-runtime/packages/rheos/dist/cli.cjs drift \
             --tasks-dir "$TASKS_PATH" | tee "$DRIFT_PATH"
 
       - name: Project Rheos tasks to GitHub Issues
@@ -165,7 +165,7 @@ jobs:
           SYNC_PATH: ${{ runner.temp }}/rheos-github-sync/sync.txt
         run: |
           set -euo pipefail
-          node .eta-mu/packages/rheos/dist/github-sync.cjs \
+          node .rheos-runtime/packages/rheos/dist/github-sync.cjs \
             --repo "$TARGET_REPO" \
             --tasks-dir "$TASKS_PATH" \
             --cwd "$GITHUB_WORKSPACE" \
