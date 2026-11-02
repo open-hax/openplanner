@@ -6,7 +6,6 @@
    :output-dir "dist"
    :modules {:index {:entries [openplanner.stores.cache.boundary]
                      :exports {:createMemoryLruCache openplanner.stores.cache.boundary/create-memory-lru-cache
-                               :createRedisCache openplanner.stores.cache.boundary/create-redis-cache
                                :createLmdbCache openplanner.stores.cache.boundary/create-lmdb-cache
                                :createLayeredCache openplanner.stores.cache.boundary/create-layered-cache
                                :cacheGet openplanner.stores.cache.boundary/cache-get-js

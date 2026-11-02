@@ -24,7 +24,6 @@ export function hydrateDocumentRow(row: Record<string, unknown>, sourceText?: st
 export function rowToDocument(row: Record<string, unknown>): Record<string, unknown>;
 
 export function createMemoryLruCache(options?: { maxEntries?: number; defaultTtlMs?: number }): CacheHandle;
-export function createRedisCache(options: { client: unknown; prefix?: string; defaultTtlMs?: number }): CacheHandle;
 export function createLmdbCache(options: { db: unknown; prefix?: string; defaultTtlMs?: number }): CacheHandle;
 export function createLayeredCache(caches: CacheHandle[]): CacheHandle;
 export function cacheGet<T = string>(cache: CacheHandle, key: string): Awaitable<T | null>;
