@@ -13,6 +13,21 @@
   [p f]
   (.then (js/Promise.resolve p) f))
 
+(deftest cache-key-contract-test
+  (doseq [value [nil "" " \t\n" 0 false :key [] {}]]
+    (is (false? (schema/valid-cache-key? value)) (str "invalid key: " (pr-str value))))
+  (doseq [value ["key" " key "]]
+    (is (true? (schema/valid-cache-key? value)) (str "valid key: " (pr-str value))))
+  (let [entry {:cache/key 42 :cache/value nil :cache/created-at-ms 0 :cache/touched-at-ms 0}
+        envelope {:projection/name 42 :projection/version 1 :projection/source-store false
+                  :projection/source-key :key :projection/value nil}]
+    (is (= [[:cache/key]] (mapv :path (schema/cache-entry-errors entry))))
+    (is (= [[:projection/name] [:projection/source-store] [:projection/source-key]]
+           (mapv :path (schema/projection-envelope-errors envelope))))
+    (is (false? (aget (boundary/explain-cache-entry-js
+                       #js {"cache/key" 42 "cache/value" nil
+                            "cache/created-at-ms" 0 "cache/touched-at-ms" 0}) "valid")))))
+
 (deftest cache-entry-and-projection-envelope-schema-test
   (let [entry (schema/cache-entry {:key "sessions:recent"
                                    :value {:rows []}
