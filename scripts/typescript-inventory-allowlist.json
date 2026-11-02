@@ -2678,6 +2678,24 @@
       "removalCondition": "shared leaf/declaration package exposes CLJS-authored API"
     },
     {
+      "path": "packages/event-ledger/index.d.ts",
+      "owner": "T1-shared-leaves-and-declaration-stubs",
+      "disposition": "port-to-cljs-or-generate-from-cljs",
+      "removalCondition": "event-ledger package exposes CLJS-authored API; declaration generated from CLJS"
+    },
+    {
+      "path": "packages/openplanner-protocols/index.d.ts",
+      "owner": "T1-shared-leaves-and-declaration-stubs",
+      "disposition": "port-to-cljs-or-generate-from-cljs",
+      "removalCondition": "openplanner-protocols package exposes CLJS-authored API; declaration generated from CLJS"
+    },
+    {
+      "path": "packages/openplanner-client/src/index.ts",
+      "owner": "T2-root-openplanner-cljs-runtime-api",
+      "disposition": "port-to-cljs",
+      "removalCondition": "openplanner socket.io client reimplemented in CLJS"
+    },
+    {
       "path": "packages/graph/graph-weaver-aco/src/GraphWeaverAco.ts",
       "owner": "T3-graph-package-tranche",
       "disposition": "port-to-cljs",
@@ -4263,6 +4281,18 @@
     },
     {
       "path": "src/lib/paths.ts",
+      "owner": "T2-root-openplanner-cljs-runtime-api",
+      "disposition": "port-to-cljs",
+      "removalCondition": "root OpenPlanner service and tests run from CLJS"
+    },
+    {
+      "path": "src/lib/protocol-adapters.ts",
+      "owner": "T2-root-openplanner-cljs-runtime-api",
+      "disposition": "port-to-cljs",
+      "removalCondition": "root OpenPlanner service and tests run from CLJS"
+    },
+    {
+      "path": "src/lib/protocol-factory.ts",
       "owner": "T2-root-openplanner-cljs-runtime-api",
       "disposition": "port-to-cljs",
       "removalCondition": "root OpenPlanner service and tests run from CLJS"

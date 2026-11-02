@@ -1,0 +1,28 @@
+{:source-paths ["src/cljs"]
+ :dependencies [[metosin/malli "0.16.4"]]
+ :builds
+ {:lib
+  {:target :esm
+   :output-dir "dist"
+   :modules {:lib {:exports #{open-hax.contract-runtime.manifest
+                              open-hax.contract-runtime.store.law
+                              open-hax.contract-runtime.store.protocol
+                              open-hax.contract-runtime.store.memory
+                              open-hax.contract-runtime.store.registry
+                              open-hax.contract-runtime.law.url
+                              open-hax.contract-runtime.action.anonymous
+                              open-hax.contract-runtime.action.interpreter
+                              open-hax.contract-runtime.driver.registry
+                              open-hax.contract-runtime.condition.registry
+                              open-hax.contract-runtime.filter.registry
+                              open-hax.contract-runtime.registry.resource
+                              open-hax.contract-runtime.agent.context
+                              open-hax.contract-runtime.agent.reasoning
+                              open-hax.contract-runtime.agent.turn-guards
+                              open-hax.contract-runtime.agent.tool-lifecycle
+                              open-hax.contract-runtime.agent.text-delta}}}
+   :compiler-options
+   {:output-feature-set :es-next
+    :optimizations :simple
+    :source-map true
+    :infer-externs false}}}}

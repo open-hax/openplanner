@@ -10,14 +10,13 @@ This package establishes the shared pattern for cache-backed stores:
 - `openplanner.stores.cache.layered` composes hot/warm/durable-ish cache layers.
 - `openplanner.stores.cache.boundary` is the JS/CLJS export boundary.
 
-The important semantic rule: **a cache value is a projection of a canonical store object**. Redis/LMDB/etc. are not truth; they are hot read models with source refs, schema versions, and watermarks.
+The important semantic rule: **a cache value is a projection of a canonical store object**. LMDB/memory/etc. are not truth; they are hot read models with source refs, schema versions, and watermarks.
 
 ## Naming pattern
 
 Use backend adapter namespaces when the code is about a physical store:
 
 - `openplanner.stores.cache.adapters.memory`
-- `openplanner.stores.cache.adapters.redis`
 - `openplanner.stores.cache.adapters.lmdb`
 
 Use domain namespaces when the code is about an OpenPlanner domain:
@@ -35,7 +34,6 @@ That keeps the dependency direction clean: domain stores depend on protocols and
 This package includes only adapters already exercised by OpenPlanner today:
 
 - memory LRU/TTL
-- Redis-client TTL cache
 - LMDB-handle TTL cache
 - layered cache promotion
 
@@ -45,13 +43,12 @@ Future adapters like MongoDB, PostgreSQL, ChromaDB, DuckDB, and SQLite should be
 
 Connection lifecycle remains at the application edge. Adapters wrap caller-owned clients/handles:
 
-- Redis adapter requires a connected node-redis client.
 - LMDB adapter requires an opened LMDB database handle.
 - Memory adapter owns only its atom.
 
 ## Projection envelope
 
-Use `projectionEnvelope` / `projection-envelope` to make Redis values legible as projections:
+Use `projectionEnvelope` / `projection-envelope` to make cached values legible as projections:
 
 ```clojure
 {:projection/name :openplanner.sessions/session-index
