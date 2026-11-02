@@ -68,6 +68,48 @@
                     (is false (str "layered cache failed: " err))
                     (done)))))))
 
+(deftest layered-cache-skips-rejected-reads-test
+  (async done
+    (let [calls (atom [])
+          client #js {:get (fn [k] (swap! calls conj [:get k])
+                             (js/Promise.reject (js/Error. "unavailable")))
+                      :set (fn [k v] (swap! calls conj [:set k v])
+                             (js/Promise.resolve "OK"))}
+          hot (boundary/create-redis-cache #js {:client client})
+          warm (boundary/create-memory-lru-cache #js {:maxEntries 2})
+          layered (boundary/create-layered-cache #js [hot warm])]
+      (boundary/cache-put-js warm "k" "v")
+      (-> (boundary/cache-get-js layered "k")
+          (p-> (fn [value]
+                 (is (= "v" value))
+                 (is (= [[:get "k"] [:set "k" "v"]] @calls))
+                 (boundary/cache-get-js layered "missing")))
+          (p-> (fn [value]
+                 (is (nil? value))
+                 (is (= [[:get "k"] [:set "k" "v"] [:get "missing"]] @calls))
+                 (done)))
+          (.catch (fn [err]
+                    (is false (str "rejected read fallback failed: " err))
+                    (done)))))))
+
+(deftest layered-cache-does-not-retry-after-promotion-throws-test
+  (async done
+    (let [reads (atom 0)
+          client #js {:get (fn [_] (js/Promise.resolve nil))
+                      :set (fn [& _] (throw (js/Error. "promotion failed")))}
+          hot (boundary/create-redis-cache #js {:client client})
+          warm-client #js {:get (fn [_] (swap! reads inc) (js/Promise.resolve "v"))}
+          warm (boundary/create-redis-cache #js {:client warm-client})
+          layered (boundary/create-layered-cache #js [hot warm])]
+      (-> (boundary/cache-get-js layered "k")
+          (.then (fn [_]
+                   (is false "promotion failure must propagate")
+                   (done))
+                 (fn [err]
+                   (is (= "promotion failed" (.-message err)))
+                   (is (= 1 @reads))
+                   (done)))))))
+
 (deftest redis-cache-adapter-delegates-to-client-test
   (async done
     (let [calls (atom [])

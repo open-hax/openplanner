@@ -15,16 +15,16 @@
               (if (empty? remaining)
                 (core/promise nil)
                 (let [layer (first remaining)]
-                  (-> (cache-get layer k)
-                      (core/pthen (fn [v]
-                                    (if (some? v)
-                                      (do
-                                        (doseq [prior seen]
-                                          (cache-put! prior k v nil))
-                                        v)
-                                      (try-layer (conj seen layer) (rest remaining)))))
-                      (.catch (fn [_]
-                                (try-layer (conj seen layer) (rest remaining))))))))]
+                  (.then (core/promise (cache-get layer k))
+                         (fn [v]
+                           (if (some? v)
+                             (do
+                               (doseq [prior seen]
+                                 (cache-put! prior k v nil))
+                               v)
+                             (try-layer (conj seen layer) (rest remaining))))
+                         (fn [_]
+                           (try-layer (conj seen layer) (rest remaining)))))))]
       (try-layer [] layers)))
 
   (cache-put! [_ k v opts]
