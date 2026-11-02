@@ -45,7 +45,7 @@
     (let [db (mock-db)
           record (um/->MongoUserManagement db)]
       (await (protocols/create-user record {:username "alice" :password "secret"}))
-      (let [result (await (protocols/authenticate record {:username "alice"}))]
+      (let [result (await (protocols/authenticate record {:username "alice" :password "secret"}))]
         (is (= "user.login.success" (:event/type result)))
         (is (some? (get-in result [:payload :userId])))))))
 
