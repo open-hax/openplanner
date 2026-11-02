@@ -13,11 +13,10 @@ Generic cache protocols and adapters now live in `@open-hax/openplanner-store-ca
 Document hydration still re-exports the cache helpers as a compatibility facade for existing JavaScript/TypeScript callers:
 
 - `createMemoryLruCache`
-- `createRedisCache`
 - `createLmdbCache`
 - `createLayeredCache`
 - `cacheGet` / `cachePut` / `cacheEvict` / `cacheTouch` / `cacheCleanup` / `cacheStats`
 
 New domain store packages should import `@open-hax/openplanner-store-cache` directly instead of depending on document hydration for cache behavior.
 
-I/O remains outside this package. Callers fetch source text from filesystem/URL/etc, then pass it into `hydrateDocumentRow`. Redis and LMDB drivers wrap caller-owned clients/handles so connection lifecycle stays at the application edge.
+I/O remains outside this package. Callers fetch source text from filesystem/URL/etc, then pass it into `hydrateDocumentRow`. The LMDB adapter wraps a caller-owned handle so connection lifecycle stays at the application edge.
