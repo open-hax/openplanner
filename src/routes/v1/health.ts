@@ -4,7 +4,10 @@ const VEXX_BASE_URL = String(process.env.VEXX_BASE_URL ?? "").trim();
 const VEXX_API_KEY = String(process.env.VEXX_API_KEY ?? "").trim();
 const VEXX_ENFORCE = /^(1|true|yes|on)$/i.test(String(process.env.VEXX_ENFORCE ?? ""));
 const HEALTH_DEEP_DEFAULT = /^(1|true|yes|on)$/i.test(String(process.env.OPENPLANNER_HEALTH_DEEP_DEFAULT ?? ""));
-const HEALTH_MONGO_TIMEOUT_MS = Math.max(250, Math.min(10_000, Number(process.env.OPENPLANNER_HEALTH_MONGO_TIMEOUT_MS ?? 1500)));
+const parsedHealthMongoTimeoutMs = Number(process.env.OPENPLANNER_HEALTH_MONGO_TIMEOUT_MS ?? 1500);
+const HEALTH_MONGO_TIMEOUT_MS = Number.isFinite(parsedHealthMongoTimeoutMs)
+  ? Math.max(250, Math.min(10_000, parsedHealthMongoTimeoutMs))
+  : 1500;
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout | null = null;
@@ -115,7 +118,8 @@ async function getDependencyHealth(app: any) {
 export const healthRoutes: FastifyPluginAsync = async (app) => {
   app.get("/health", async (req: any, reply) => {
     const embeddingRuntime = (app as any).embeddingRuntime;
-    const deep = req.query?.deep === "true" || req.query?.deep === true || HEALTH_DEEP_DEFAULT;
+    const deepParam = req.query?.deep;
+    const deep = deepParam === "true" || deepParam === true || (deepParam === undefined && HEALTH_DEEP_DEFAULT);
     const mongo = deep ? { ok: true as const } : await checkMongoPing(app);
     const dependencyHealth = deep
       ? await getDependencyHealth(app)
