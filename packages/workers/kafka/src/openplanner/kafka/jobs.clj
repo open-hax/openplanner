@@ -109,6 +109,13 @@
     (= "openplanner.event.v1" (:schema payload)) payload
     :else nil))
 
+(defn parse-date
+  [value]
+  (try
+    (Date/from (Instant/parse (str value)))
+    (catch Throwable _
+      nil)))
+
 (defn validate-event!
   [event]
   (when-not (= "openplanner.event.v1" (:schema event))
@@ -134,13 +141,6 @@
                           xs)
     (keyword? value) (name value)
     :else value))
-
-(defn parse-date
-  [value]
-  (try
-    (Date/from (Instant/parse (str value)))
-    (catch Throwable _
-      nil)))
 
 (defn norm
   [value]
