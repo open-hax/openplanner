@@ -32,6 +32,15 @@
     (is (true? (:valid? (schema/explain-projection-envelope envelope))))
     (is (false? (:valid? (schema/explain-projection-envelope (dissoc envelope :projection/source-key)))))))
 
+(deftest projection-envelope-accepts-documented-keyword-identifiers
+  (let [envelope (schema/projection-envelope {:name :openplanner.sessions/session-index
+                                              :source-store :mongo
+                                              :source-key "session:abc"
+                                              :value {}})]
+    (is (true? (:valid? (schema/explain-projection-envelope envelope))))
+    (is (false? (:valid? (schema/explain-projection-envelope
+                          (assoc envelope :projection/source-key :session/abc)))))))
+
 (deftest boundary-schema-functions-return-js-objects-test
   (let [entry (boundary/cache-entry-js #js {:key "k" :value "v" :ttlMs 5 :nowMs 1})
         envelope (boundary/projection-envelope-js #js {:name "n"

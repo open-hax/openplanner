@@ -29,6 +29,10 @@
   (and (string? value)
        (boolean (core/nonblank value))))
 
+(defn valid-projection-identifier?
+  [value]
+  (or (keyword? value) (valid-cache-key? value)))
+
 (defn valid-ms?
   [value]
   (and (number? value) (not (js/Number.isNaN value)) (not (neg? value))))
@@ -119,15 +123,15 @@
 (defn projection-envelope-errors
   [envelope]
   (cond-> []
-    (not (valid-cache-key? (:projection/name envelope)))
-    (conj {:path [:projection/name] :error :required-nonblank-string :value (:projection/name envelope)})
+    (not (valid-projection-identifier? (:projection/name envelope)))
+    (conj {:path [:projection/name] :error :required-identifier :value (:projection/name envelope)})
 
     (not (and (number? (:projection/version envelope))
               (pos? (:projection/version envelope))))
     (conj {:path [:projection/version] :error :positive-number :value (:projection/version envelope)})
 
-    (not (valid-cache-key? (:projection/source-store envelope)))
-    (conj {:path [:projection/source-store] :error :required-nonblank-string :value (:projection/source-store envelope)})
+    (not (valid-projection-identifier? (:projection/source-store envelope)))
+    (conj {:path [:projection/source-store] :error :required-identifier :value (:projection/source-store envelope)})
 
     (not (valid-cache-key? (:projection/source-key envelope)))
     (conj {:path [:projection/source-key] :error :required-nonblank-string :value (:projection/source-key envelope)})
