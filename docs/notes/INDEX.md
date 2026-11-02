@@ -6,7 +6,7 @@ the revision and environment where they were observed.
 
 | Note | Disposition | Summary |
 |---|---|---|
-| [2026.04.13.13.57.07.md](2026.04.13.13.57.07.md) | retain; verification-record candidate | Reports a working graph view, exact node/edge/chunk counts, a Mongo vector-search implementation, removed chunk text, and follow-up risks. The evidence is useful for the referenced revision, but the counts and “DB becomes index, not store” interpretation are not permanent architecture authority. |
+| [2026.04.13.13.57.07.md](https://github.com/open-hax/openplanner/blob/fa94c948cb01347507334c8e87f4e8e6cd6a24dd/docs/notes/2026.04.13.13.57.07.md) | historical Git record; verification-record candidate | Reports a working graph view, exact node/edge/chunk counts, a Mongo vector-search implementation, removed chunk text, and follow-up risks. The note was removed from the current tree; the link pins its historical source. Its observations need independent verification, and the counts and “DB becomes index, not store” interpretation are not permanent architecture authority. |
 
 ## Interpretation rules
 
