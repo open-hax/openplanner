@@ -1,42 +1,55 @@
-# Π handoff — TS→CLJS gate, labels fix, services deploy workflows (openplanner)
+# Π handoff — PR #89 CodeRabbit/Kimi review fixes (openplanner)
 
-- time: 2026-06-03T20:34:00Z
-- branch: `pi/fork-tax/20260529T022118Z-main-softreset-all-dirt-openplanner`
-- base target: `origin/staging`
-- tag: `Π/20260603T203400Z-openplanner-ts-gate-deploy-workflows`
+- time: 2026-06-14T03:09:30Z
+- branch: `fix/kanban-event-ledger-edn-admission`
+- base target: `origin/fix/kanban-event-ledger-edn-admission`
+- tag: `Π/20260614T030930Z-openplanner-pr89-review-fixes`
 
 ## Commits in this Π
 
-1. `feat: TS-to-CLJS migration roadmap + no-new-TypeScript inventory gate`
-   — scripts/check-no-new-typescript.mjs + 756-entry allowlist, code-quality
-   job, docs/architecture roadmap + inventory, kanban epic/tasks.
-2. `fix(labels): persist reaction labels on vectors and clear TTL expiry`
-3. `ci: deploy workflows via open-hax/services module` — deploy-staging,
-   deploy-production, and label-gated deploy-testing (PR head → shared
-   staging slot via deploy-promethean.yml@main, service: openplanner).
-4. Π process commit — receipts.edn (+8), kanban board snapshots, knoxx
-   submodule pointer → 58629bd1 (pushed on open-hax/knoxx
-   test/coverage-improvement), .ημ artifacts.
-5. Merge of `origin/staging` (its deploy-workflow fixes supersede the local
-   stale copies: no recursive submodule checkout on runners — the
-   `file:///` openplanner-migration-tools submodule breaks it —
-   `checkout_submodules: false` for the service module).
+1. All 19 unresolved CodeRabbit/Kimi review comments resolved on PR #89:
+   - mutex race condition fix
+   - filter-spec not applied fix
+   - async ensure-dir! discarded fix
+   - non-atomic append-events! fix
+   - silent parse errors fix
+   - node:crypto import fix
+   - get-in-config flat key lookup fix
+   - privilege escalation on capabilities fix
+   - swapped watcher args fix
+   - read-events API mismatch fix
+   - timeout-promise resolve/reject fix
+   - foreignObject name check fix
+   - path traversal in watcher fix
+   - non-SVG regex fix
+   - missing test require fix
+   - TS allowlist update
+   - session/event collection discriminator fix
+   - authentication bypass fix
 
-## Known constraints
+## Files changed
 
-- `check:no-new-typescript` requires the knoxx submodule checked out
-  (allowlist entries beneath it go stale otherwise); the code-quality job
-  inits GitHub-hosted submodules explicitly, never the `file:///` one.
-- `pull_request_target` workflows execute from the base branch:
-  deploy-testing.yml activates for labeled PRs only after this merges to
-  staging.
+- packages/axxium/src/cljs/axxium/auth/session.cljs
+- packages/axxium/src/cljs/axxium/config.cljs
+- packages/axxium/src/cljs/axxium/routes/actor.cljs
+- packages/event-ledger/src/promethean/event_ledger/watcher.cljs
+- packages/openplanner-protocols/src/promethean/records/edn/event_admission.cljs
+- packages/openplanner-protocols/src/promethean/records/mongo/user_management.cljs
+- packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/mcp_server.cljs
+- packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/notifier.cljs
+- packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/renderer.cljs
+- packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/validator.cljs
+- packages/services/graphics-svg-pipeline/src/cljs/graphics_svg_pipeline/watcher.cljs
+- packages/services/graphics-svg-pipeline/test/cljs/graphics_svg_pipeline/ledger_test.cljs
+- scripts/typescript-inventory-allowlist.json
+- src/lib/protocol-adapters.ts
+- receipts.edn
 
 ## Verification
 
-- `node scripts/check-no-new-typescript.mjs` → pass (756/756, local with submodules)
-- `actionlint` deploy-testing/staging/production → clean
-- build/test run in PR CI (staging-preflight gates)
+- CI re-run pending on push to PR branch
 
 ## Concurrent dirt left untouched
 
-- none in this repo at snapshot time
+- packages/agents/eta-mu-sol/ — untracked new project (concurrent work)
+- packages/agents/opencode — stale untracked entry (no files found)

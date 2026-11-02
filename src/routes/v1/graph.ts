@@ -258,6 +258,7 @@ type GraphNodeEmbeddingCandidate = {
   project?: string;
   score?: number;
   embedding?: number[];
+  embedding_model?: string;
 };
 
 type SemanticFieldParticle = {
@@ -846,31 +847,37 @@ function filterGraphMemorySeedScores(params: {
 async function fallbackGraphMemorySeedSearch(params: {
   graphNodeEmbeddings: any;
   queryEmbedding: number[];
+  embedModel?: string;
+  lakes?: string[] | null;
   lakeRegexes: RegExp[];
   nodeTypes: string[] | null;
   minVectorSimilarity: number;
   maxCandidates: number;
   k: number;
 }): Promise<GraphMemorySeedScore[]> {
-  const { graphNodeEmbeddings, queryEmbedding, lakeRegexes, nodeTypes, minVectorSimilarity, maxCandidates, k } = params;
+  const { graphNodeEmbeddings, queryEmbedding, embedModel, lakes, lakeRegexes, nodeTypes, minVectorSimilarity, maxCandidates, k } = params;
 
-  const embedFilter: Record<string, unknown> = { embedding: { $exists: true } };
-  if (lakeRegexes.length > 0) {
+  // Keep filter aligned with { project: 1, updated_at: -1 } / { updated_at: -1 } B-tree indexes
+  // rather than forcing a 1.6M-doc COLLSCAN via countDocuments or $exists predicates.
+  const embedFilter: Record<string, unknown> = {};
+  if (Array.isArray(lakes) && lakes.length > 0) {
+    embedFilter.project = lakes.length === 1 ? lakes[0] : { $in: lakes };
+  } else if (lakeRegexes.length > 0) {
     embedFilter.node_id = { $in: lakeRegexes };
   }
 
-  const totalCandidates = await graphNodeEmbeddings.countDocuments(embedFilter);
-  const fetchLimit = Math.min(50000, Math.max(k, maxCandidates), totalCandidates);
+  const fetchLimit = Math.min(3000, Math.max(k * 40, Math.min(maxCandidates, 3000)));
   const scored: GraphMemorySeedScore[] = [];
 
-  const vexxBaseUrl = process.env.VEXX_BASE_URL || "http://host.docker.internal:8791";
-  const vexxTimeoutMs = 30000;
+  const vexxBaseUrl = String(process.env.VEXX_BASE_URL ?? "").trim();
+  const vexxTimeoutMs = Math.min(1500, Math.max(250, Number(process.env.VEXX_FALLBACK_TIMEOUT_MS ?? 1200)));
   const fetchBatchSize = 500;
+  let vexxUnavailable = !vexxBaseUrl;
 
   const cursor = graphNodeEmbeddings.find(
     embedFilter,
-    { projection: { node_id: 1, embedding: 1, project: 1 } },
-  ).limit(fetchLimit).batchSize(fetchBatchSize);
+    { projection: { node_id: 1, embedding: 1, embedding_model: 1, project: 1 } },
+  ).sort({ updated_at: -1 }).limit(fetchLimit).batchSize(fetchBatchSize);
 
   let done = false;
   while (!done) {
@@ -885,44 +892,50 @@ async function fallbackGraphMemorySeedSearch(params: {
     }
 
     const validDocs = batchDocs.filter((doc) => {
+      if (embedModel && doc.embedding_model && doc.embedding_model !== embedModel) return false;
+      const nodeId = String(doc.node_id ?? doc._id ?? "");
+      if (lakeRegexes.length > 0 && !lakeRegexes.some((pattern: RegExp) => pattern.test(nodeId))) return false;
       const embedding = doc.embedding as number[] | undefined;
       return Array.isArray(embedding) && embedding.length === queryEmbedding.length;
     });
     if (validDocs.length === 0) continue;
 
-    const batchEmbeddings = validDocs.map((doc) => doc.embedding as number[]);
+    if (!vexxUnavailable) {
+      const batchEmbeddings = validDocs.map((doc) => doc.embedding as number[]);
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), vexxTimeoutMs);
+        const res = await fetch(`${vexxBaseUrl}/v1/cosine/matrix`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            left: [queryEmbedding],
+            right: batchEmbeddings,
+            device: "AUTO",
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), vexxTimeoutMs);
-      const res = await fetch(`${vexxBaseUrl}/v1/cosine/matrix`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          left: [queryEmbedding],
-          right: batchEmbeddings,
-          device: "AUTO",
-        }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const payload = await res.json() as { matrix?: number[] };
-        const matrix = payload.matrix;
-        if (Array.isArray(matrix) && matrix.length === validDocs.length) {
-          for (let i = 0; i < validDocs.length; i += 1) {
-            const similarity = matrix[i]!;
-            const doc = validDocs[i]!;
-            const nodeId = String(doc.node_id ?? doc._id ?? "");
-            if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
-            scored.push({ nodeId, score: similarity, project: String(doc.project ?? "") });
+        if (res.ok) {
+          const payload = await res.json() as { matrix?: number[] };
+          const matrix = payload.matrix;
+          if (Array.isArray(matrix) && matrix.length === validDocs.length) {
+            for (let i = 0; i < validDocs.length; i += 1) {
+              const similarity = matrix[i]!;
+              const doc = validDocs[i]!;
+              const nodeId = String(doc.node_id ?? doc._id ?? "");
+              if (similarity < minVectorSimilarity || !matchesNodeType(nodeId, nodeTypes)) continue;
+              scored.push({ nodeId, score: similarity, project: String(doc.project ?? "") });
+            }
+            continue;
           }
-          continue;
+        } else {
+          vexxUnavailable = true;
         }
+      } catch {
+        vexxUnavailable = true;
       }
-    } catch {
-      // Fall through to local cosine.
     }
 
     for (const doc of validDocs) {
@@ -1856,7 +1869,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
   // Materialize node embeddings (generate + store)
   app.post("/graph/node-embeddings/materialize", async (req: any, reply) => {
     const inputs = Array.isArray(req.body?.inputs) ? req.body.inputs : [];
-    const model = req.body?.model ?? "qwen3-embedding:0.6b";
+    const model = req.body?.model ?? "nomic-embed-text";
 
     if (inputs.length === 0) {
       return { vectors: [] };
@@ -1897,9 +1910,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           parentId: id,
           text: String(input.body),
           forceChunking: false,
-          targetChunkTokens: 28_000,
-          targetChunkChars: 80_000,
-          overlapChars: 500,
+          targetChunkTokens: 1_000,
+          targetChunkChars: 4_000,
+          overlapChars: 100,
         });
 
         if (prepared.chunkCount <= 1) {
@@ -3642,7 +3655,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         node_id: nodeId,
         source_event_id: eventId,
         project: chunk.project || "devel",
-        embedding_model: chunk.embedding_model || "qwen3-embedding:0.6b",
+        embedding_model: chunk.embedding_model || "nomic-embed-text",
         embedding_dimensions: chunk.embedding_dimensions || 1024,
         embedding: chunk.embedding,
         chunk_index: chunk.chunk_index ?? 0,
@@ -3738,7 +3751,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           target_node_id: e.target_node_id,
           similarity: e.similarity,
           edge_type: "semantic_knn",
-          embedding_model: "qwen3-embedding:0.6b",
+          embedding_model: "nomic-embed-text",
           graph_version: graphVersion,
         })),
       );
@@ -3896,7 +3909,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           target_node_id: e.target_node_id,
           similarity: e.similarity,
           edge_type: "semantic_knn",
-          embedding_model: "qwen3-embedding:0.6b",
+          embedding_model: "nomic-embed-text",
           graph_version: graphVersion,
         })),
       );
@@ -4517,7 +4530,7 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const embeddingRuntime = (app as any).embeddingRuntime;
-    const embedModel = process.env.EMBED_PROVIDER_MODEL ?? "qwen3-embedding:0.6b";
+    const embedModel = process.env.EMBED_PROVIDER_MODEL ?? "nomic-embed-text";
     const embeddingProvider = embeddingRuntime?.hot?.getEmbeddingFunctionForModel?.(embedModel);
 
     if (!embeddingProvider) {
@@ -4567,6 +4580,8 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
           fallbackVectorSearch: () => fallbackGraphMemorySeedSearch({
             graphNodeEmbeddings: app.mongo.graphNodeEmbeddings,
             queryEmbedding,
+            embedModel,
+            lakes,
             lakeRegexes,
             nodeTypes,
             minVectorSimilarity,
@@ -4581,6 +4596,53 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
     } catch (err) {
       return reply.status(500).send({ error: "embedding generation failed", details: String(err) });
+    }
+
+    const trimmedQuery = q.trim();
+    if (trimmedQuery.length >= 2) {
+      try {
+        const looksLikeNodeToken = !/\s/.test(trimmedQuery) && trimmedQuery.length <= 180;
+        const [textDocs, nodeIdDocs] = await Promise.all([
+          app.mongo.events.find(
+            {
+              $text: { $search: trimmedQuery },
+              kind: { $in: ["discord.message", "graph.node", "knoxx.message", "knoxx.claim"] },
+            },
+            { projection: { id: 1, kind: 1, "extra.node_id": 1, "extra.node_kind": 1 } },
+          ).limit(Math.max(k * 2, 20)).maxTimeMS(800).toArray().catch(() => []),
+          looksLikeNodeToken
+            ? app.mongo.events.find(
+                {
+                  kind: "graph.node",
+                  "extra.node_id": new RegExp(escapeRegex(trimmedQuery), "i"),
+                },
+                { projection: { id: 1, kind: 1, "extra.node_id": 1, "extra.node_kind": 1 } },
+              ).limit(Math.max(k, 15)).maxTimeMS(500).toArray().catch(() => [])
+            : Promise.resolve([]),
+        ]);
+        const lexicalDocs = [...nodeIdDocs, ...textDocs];
+
+        for (const doc of lexicalDocs) {
+          const extra = (doc.extra ?? {}) as Record<string, unknown>;
+          const nodeKind = String(extra.node_kind ?? doc.kind ?? "");
+          if (nodeKind === "sentence") continue;
+          const candidateId = String(extra.node_id ?? doc.id ?? "").trim();
+          if (!candidateId) continue;
+          if (lakeRegexes.length > 0 && !lakeRegexes.some((pattern: RegExp) => pattern.test(candidateId))) continue;
+          if (!matchesNodeType(candidateId, nodeTypes)) continue;
+          const prev = seedScoresMap.get(candidateId) ?? 0;
+          const boosted = Math.max(prev, 0.86);
+          seedScoresMap.set(candidateId, boosted);
+          if (!seedNodeIds.includes(candidateId)) {
+            seedNodeIds.push(candidateId);
+          }
+        }
+        seedNodeIds = seedNodeIds
+          .sort((a, b) => (seedScoresMap.get(b) ?? 0) - (seedScoresMap.get(a) ?? 0))
+          .slice(0, Math.max(k, 15));
+      } catch (err) {
+        req.log.warn({ err }, "lexical seed lookup failed in /v1/graph/memory");
+      }
     }
 
     if (seedNodeIds.length === 0) {
@@ -4641,8 +4703,17 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       ],
     };
 
+    const fetchIndexedStructuralEdges = async (ids: string[], perDirLimit: number) => {
+      if (ids.length === 0) return [];
+      const [outRows, inRows] = await Promise.all([
+        app.mongo.graphEdges.find({ source_node_id: { $in: ids } }).sort({ updated_at: -1 }).limit(perDirLimit).toArray().catch(() => []),
+        app.mongo.graphEdges.find({ target_node_id: { $in: ids } }).sort({ updated_at: -1 }).limit(perDirLimit).toArray().catch(() => []),
+      ]);
+      return [...outRows, ...inRows].filter((row: any) => String(row.edge_kind ?? "") !== "contains_sentence");
+    };
+
     const trailSince = new Date(Date.now() - (trailLookbackSeconds * 1000));
-    const [forceSamples, activeClaimRows, priorTrailRows] = await Promise.all([
+    const [forceSamples, activeClaimRows, priorTrailRows, structuralEdges] = await Promise.all([
       app.mongo.graphSemanticForceSamples.find({
         $and: [
           seedBoundaryFilter,
@@ -4659,7 +4730,34 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         node_ids: { $in: edgeLookupNodeIds },
         emitted_at: { $gte: trailSince },
       }).limit(5000).toArray(),
+      fetchIndexedStructuralEdges(edgeLookupNodeIds, 350),
     ]);
+
+    // Bounded 2nd-hop structural expansion across user, channel, server (guild), reply, and URL hubs
+    // so cross-channel / cross-server messages sharing an author, channel mention, server, or link connect.
+    const seedBoundarySet = new Set(edgeLookupNodeIds);
+    const hop1BridgeHubs: string[] = [];
+    const seenHop1Hubs = new Set<string>();
+    for (const edge of structuralEdges) {
+      for (const endpoint of [String(edge.source_node_id ?? "").trim(), String(edge.target_node_id ?? "").trim()]) {
+        if (!endpoint || seedBoundarySet.has(endpoint) || seenHop1Hubs.has(endpoint)) continue;
+        if (
+          endpoint.startsWith("discord:user:") ||
+          endpoint.startsWith("discord:channel:") ||
+          endpoint.startsWith("discord:guild:") ||
+          endpoint.startsWith("web:url:") ||
+          endpoint.startsWith("discord:")
+        ) {
+          seenHop1Hubs.add(endpoint);
+          hop1BridgeHubs.push(endpoint);
+          if (hop1BridgeHubs.length >= 28) break;
+        }
+      }
+      if (hop1BridgeHubs.length >= 28) break;
+    }
+
+    const hop2StructuralEdges = await fetchIndexedStructuralEdges(hop1BridgeHubs, 200);
+    const allStructuralEdges = [...structuralEdges, ...hop2StructuralEdges];
 
     const trailNodeInfluence = new Map<string, number>();
     const trailEdgeInfluence = new Map<string, number>();
@@ -4711,11 +4809,22 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     };
 
     const adjacency = new Map<string, DaimoiEdge[]>();
+    const directedStructuralEdges: Array<{ source: string; target: string; edge: Omit<DaimoiEdge, "neighbor"> }> = [];
+    const seenDirectedStructural = new Set<string>();
     const addDaimoiEdge = (sourceId: string, targetId: string, edge: Omit<DaimoiEdge, "neighbor">) => {
       if (lakeRegexes.length > 0) {
         const sourceAllowed = lakeRegexes.some((pattern: RegExp) => pattern.test(sourceId));
         const targetAllowed = lakeRegexes.some((pattern: RegExp) => pattern.test(targetId));
-        if (!sourceAllowed || !targetAllowed) return;
+        const crossLakeStructuralBridge = edge.compatibilityKind === "graph_edge" && (sourceAllowed || targetAllowed);
+        if (!crossLakeStructuralBridge && (!sourceAllowed || !targetAllowed)) return;
+      }
+
+      if (edge.compatibilityKind === "graph_edge") {
+        const dKey = `${sourceId}|${targetId}|${edge.edgeKind}`;
+        if (!seenDirectedStructural.has(dKey)) {
+          seenDirectedStructural.add(dKey);
+          directedStructuralEdges.push({ source: sourceId, target: targetId, edge });
+        }
       }
 
       const edgeKey = undirectedEdgeKey(sourceId, targetId);
@@ -4783,6 +4892,22 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         confidence,
         claimId: claim.claim_id,
         compatibilityKind: "edge_claim",
+      });
+    }
+
+    for (const edge of allStructuralEdges) {
+      const rawSource = String(edge.source_node_id ?? "").trim();
+      const rawTarget = String(edge.target_node_id ?? "").trim();
+      if (!rawSource || !rawTarget) continue;
+      const sourceId = compactMemberToViewNode.get(rawSource) ?? rawSource;
+      const targetId = compactMemberToViewNode.get(rawTarget) ?? rawTarget;
+      if (sourceId === targetId) continue;
+      const edgeKind = String(edge.edge_kind ?? "related").trim() || "related";
+      addDaimoiEdge(sourceId, targetId, {
+        cost: 0.25,
+        edgeKind,
+        confidence: 0.9,
+        compatibilityKind: "graph_edge",
       });
     }
 
@@ -4854,7 +4979,11 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const traversedEdges: Array<Record<string, unknown>> = [];
+    const emittedEdgeKeys = new Set<string>();
     for (const [nodeId, pred] of predecessors) {
+      const eKey = `${pred.from}|${nodeId}|${pred.edge.edgeKind}`;
+      emittedEdgeKeys.add(eKey);
+      emittedEdgeKeys.add(`${nodeId}|${pred.from}|${pred.edge.edgeKind}`);
       traversedEdges.push({
         source: pred.from,
         target: nodeId,
@@ -4871,14 +5000,28 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
 
     const lakeCluster = (id: string): string => {
       if (id.startsWith("view:compact:")) return "view";
-      for (const lake of ["devel", "web", "bluesky", "knoxx-session"]) {
+      for (const lake of ["devel", "web", "bluesky", "knoxx-session", "discord", "topic", "desktop"]) {
         if (id.startsWith(lake + ":")) return lake;
       }
+      if (id.startsWith("window:") || id.startsWith("workspace:") || id.startsWith("app:")) return "desktop";
       return "other";
     };
 
     const nodeTypeOf = (id: string): string => {
       if (id.startsWith("view:compact:")) return "compact_view";
+      if (id.startsWith("discord:user:")) return "discord.user";
+      if (id.startsWith("discord:channel:")) return "discord.channel";
+      if (id.startsWith("discord:guild:")) return "discord.guild";
+      if (id.startsWith("discord:reaction:")) return "discord.reaction";
+      if (id.startsWith("discord:attachment:")) return "discord.attachment";
+      if (id.startsWith("discord:")) return "discord.message";
+      if (id.startsWith("web:url:")) return "web.url";
+      if (id.startsWith("topic:")) return "topic";
+      if (id.startsWith("bluesky:user:")) return "bluesky.user";
+      if (id.startsWith("bluesky:post:")) return "bluesky.post";
+      if (id.startsWith("window:") || id.startsWith("desktop:window:")) return "desktop.window";
+      if (id.startsWith("workspace:") || id.startsWith("desktop:workspace:")) return "desktop.workspace";
+      if (id.startsWith("app:") || id.startsWith("desktop:app:")) return "desktop.app";
       const parts = id.split(":");
       return parts.length >= 2 ? parts[1] : "unknown";
     };
@@ -5006,6 +5149,24 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    const resultNodeIdSet = new Set(resultNodes.map((n: any) => String(n.id)));
+    const maxTotalEdges = Math.max(80, maxNodes * 4);
+    for (const item of directedStructuralEdges) {
+      if (traversedEdges.length >= maxTotalEdges) break;
+      if (!resultNodeIdSet.has(item.source) || !resultNodeIdSet.has(item.target)) continue;
+      const eKey = `${item.source}|${item.target}|${item.edge.edgeKind}`;
+      if (emittedEdgeKeys.has(eKey)) continue;
+      emittedEdgeKeys.add(eKey);
+      emittedEdgeKeys.add(`${item.target}|${item.source}|${item.edge.edgeKind}`);
+      traversedEdges.push({
+        source: item.source,
+        target: item.target,
+        edgeKind: item.edge.edgeKind,
+        confidence: item.edge.confidence,
+        compatibilityKind: item.edge.compatibilityKind,
+      });
+    }
+
     for (const node of resultNodes) {
       const clusterKey = node.lake;
       if (!clusterMap.has(clusterKey)) clusterMap.set(clusterKey, []);
@@ -5013,16 +5174,85 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
     }
 
     let textMap: Map<string, string> | null = null;
+    const nodeMetaMap = new Map<string, Record<string, unknown>>();
+    const nodeLabelMap = new Map<string, string>();
     if (includeText && resultNodes.length > 0) {
       textMap = new Map();
-      const sample = resultNodes.slice(0, 20);
-      const nodeDocs = await app.mongo.events.find(
-        { id: { $in: sample.map((n: any) => n.id) } },
-        { projection: { id: 1, text: 1, "extra.preview": 1 } }
-      ).toArray();
+      const sampleIds = resultNodes.slice(0, 60).map((n: any) => String(n.id));
+      const [byIdDocs, byNodeIdDocs, embedDocs] = await Promise.all([
+        app.mongo.events.find(
+          { id: { $in: sampleIds } },
+          {
+            projection: {
+              id: 1,
+              ts: 1,
+              author: 1,
+              text: 1,
+              "extra.node_id": 1,
+              "extra.preview": 1,
+              "extra.label": 1,
+              "extra.channel_id": 1,
+              "extra.channel_name": 1,
+              "extra.guild_id": 1,
+              "extra.guild_name": 1,
+              "extra.urls": 1,
+            },
+          },
+        ).maxTimeMS(1000).toArray().catch(() => []),
+        app.mongo.events.find(
+          { kind: "graph.node", "extra.node_id": { $in: sampleIds } },
+          {
+            projection: {
+              id: 1,
+              ts: 1,
+              text: 1,
+              "extra.node_id": 1,
+              "extra.preview": 1,
+              "extra.label": 1,
+              "extra.channel_id": 1,
+              "extra.channel_name": 1,
+              "extra.guild_id": 1,
+              "extra.guild_name": 1,
+              "extra.user_id": 1,
+              "extra.username": 1,
+              "extra.url": 1,
+            },
+          },
+        ).maxTimeMS(1000).toArray().catch(() => []),
+        app.mongo.graphNodeEmbeddings.find(
+          { node_id: { $in: sampleIds } },
+          { projection: { node_id: 1, text: 1 } },
+        ).maxTimeMS(1000).toArray().catch(() => []),
+      ]);
+      const nodeDocs = [...byIdDocs, ...byNodeIdDocs];
+      for (const doc of embedDocs) {
+        const nid = String(doc.node_id ?? "");
+        const txt = String(doc.text ?? "").replace(/^passage:\s*/i, "").trim();
+        if (nid && txt) textMap.set(nid, txt.slice(0, 320));
+      }
       for (const doc of nodeDocs) {
-        const txt = doc.text || (doc.extra as any)?.preview || "";
-        if (txt) textMap.set(doc.id, typeof txt === "string" ? txt.slice(0, 300) : String(txt).slice(0, 300));
+        const extra = (doc.extra ?? {}) as Record<string, unknown>;
+        const txt = String(doc.text || extra.preview || extra.label || "").trim();
+        const label = String(extra.label ?? "").trim();
+        const meta: Record<string, unknown> = {};
+        if (doc.author) meta.author = String(doc.author);
+        if (doc.ts) meta.ts = doc.ts instanceof Date ? doc.ts.toISOString() : String(doc.ts);
+        for (const k of ["channel_id", "channel_name", "guild_id", "guild_name", "user_id", "username", "url", "urls"] as const) {
+          if (extra[k] !== undefined && extra[k] !== null && extra[k] !== "") meta[k] = extra[k];
+        }
+        const assignFor = (key: string) => {
+          if (txt) textMap!.set(key, txt.slice(0, 320));
+          if (label && !nodeLabelMap.has(key)) nodeLabelMap.set(key, label);
+          if (Object.keys(meta).length > 0) {
+            nodeMetaMap.set(key, { ...(nodeMetaMap.get(key) ?? {}), ...meta });
+          }
+        };
+        if (doc.id && sampleIds.includes(String(doc.id))) {
+          assignFor(String(doc.id));
+        }
+        if (extra.node_id && sampleIds.includes(String(extra.node_id))) {
+          assignFor(String(extra.node_id));
+        }
       }
     }
 
@@ -5033,7 +5263,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         id: n.id,
         score: n.score,
         nodeType: n.nodeType,
+        label: nodeLabelMap.get(n.id) ?? undefined,
         text: textMap?.get(n.id) ?? null,
+        data: nodeMetaMap.get(n.id) ?? undefined,
       })),
     })).sort((a, b) => b.count - a.count);
 
@@ -5042,7 +5274,9 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
       clusters,
       nodes: resultNodes.map((n: any) => ({
         ...n,
+        label: nodeLabelMap.get(n.id) ?? undefined,
         text: textMap?.get(n.id) ?? null,
+        data: nodeMetaMap.get(n.id) ?? undefined,
       })),
       edges: traversedEdges,
       daimoi: emittedDaimoi,
@@ -5065,6 +5299,389 @@ export const graphRoutes: FastifyPluginAsync = async (app) => {
         persistedDaimoiTrails: persistedTrailCount,
         clusters: clusters.length,
         mode: "query_daimoi_fill",
+      },
+    };
+  });
+
+  app.post("/graph/connections", async (req: any, reply) => {
+    const q = typeof req.body?.query === "string" ? req.body.query.trim() : (typeof req.body?.q === "string" ? req.body.q.trim() : "");
+    const requestedLakes: string[] = Array.isArray(req.body?.lakes) && req.body.lakes.length > 0
+      ? req.body.lakes
+      : ["discord", "bluesky", "desktop", "web", "topic"];
+    const maxNodes = Math.min(1000, Math.max(1, Number(req.body?.max_nodes ?? req.body?.maxNodes ?? 250)));
+    const seedNodeIds: string[] = Array.isArray(req.body?.seed_node_ids ?? req.body?.seedNodeIds)
+      ? req.body.seed_node_ids ?? req.body.seedNodeIds
+      : [];
+    const includeDesktop = req.body?.include_desktop !== false && req.body?.includeDesktop !== false;
+
+    // Helper functions within route
+    const lakeClusterOf = (id: string): string => {
+      if (id.startsWith("view:compact:")) return "view";
+      for (const lake of ["devel", "web", "bluesky", "knoxx-session", "discord", "topic", "desktop"]) {
+        if (id.startsWith(lake + ":")) return lake;
+      }
+      if (id.startsWith("window:") || id.startsWith("workspace:") || id.startsWith("app:")) return "desktop";
+      return "other";
+    };
+
+    const isAllowedNode = (id: string): boolean => {
+      const lake = lakeClusterOf(id);
+      if (lake === "desktop") {
+        if (!includeDesktop) return false;
+        if (!requestedLakes.includes("desktop")) return false;
+      } else {
+        if (!requestedLakes.includes(lake)) return false;
+      }
+      return true;
+    };
+
+    const nodeTypeOfLocal = (id: string): string => {
+      if (id.startsWith("view:compact:")) return "compact_view";
+      if (id.startsWith("discord:user:")) return "discord.user";
+      if (id.startsWith("discord:channel:")) return "discord.channel";
+      if (id.startsWith("discord:guild:")) return "discord.guild";
+      if (id.startsWith("discord:reaction:")) return "discord.reaction";
+      if (id.startsWith("discord:attachment:")) return "discord.attachment";
+      if (id.startsWith("discord:")) return "discord.message";
+      if (id.startsWith("web:url:")) return "web.url";
+      if (id.startsWith("topic:")) return "topic";
+      if (id.startsWith("bluesky:user:")) return "bluesky.user";
+      if (id.startsWith("bluesky:post:")) return "bluesky.post";
+      if (id.startsWith("window:") || id.startsWith("desktop:window:")) return "desktop.window";
+      if (id.startsWith("workspace:") || id.startsWith("desktop:workspace:")) return "desktop.workspace";
+      if (id.startsWith("app:") || id.startsWith("desktop:app:")) return "desktop.app";
+      const parts = id.split(":");
+      return parts.length >= 2 ? parts[1] : "unknown";
+    };
+
+    // 1. Identify seeds
+    const seeds = new Set<string>();
+    for (const sid of seedNodeIds) {
+      if (seeds.size >= maxNodes) break;
+      if (isAllowedNode(sid)) seeds.add(sid);
+    }
+
+    if (seeds.size === 0 && q) {
+      try {
+        const hits = await app.mongo.graphNodeEmbeddings.find(
+          { $text: { $search: q } },
+          { projection: { node_id: 1, score: { $meta: "textScore" } } }
+        ).sort({ score: { $meta: "textScore" } }).limit(25).toArray();
+        for (const hit of hits) {
+          if (hit.node_id && isAllowedNode(String(hit.node_id))) {
+            seeds.add(String(hit.node_id));
+            if (seeds.size >= maxNodes) break;
+          }
+        }
+      } catch (_e) {
+        // text index search fallback
+      }
+
+      if (seeds.size === 0) {
+        try {
+          const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const hits = await app.mongo.events.find(
+            {
+              $or: [
+                { message: { $regex: escaped, $options: "i" } },
+                { text: { $regex: escaped, $options: "i" } }
+              ]
+            },
+            { projection: { id: 1, "extra.node_id": 1 } }
+          ).limit(25).toArray();
+          for (const r of hits) {
+            const nid = String((r.extra as any)?.node_id || r.id);
+            if (isAllowedNode(nid)) {
+              seeds.add(nid);
+              if (seeds.size >= maxNodes) break;
+            }
+          }
+        } catch (_e) {
+          // regex fallback
+        }
+      }
+    }
+
+    // Only fallback to recent events if no query was specified and seeds are empty
+    if (seeds.size === 0 && !q) {
+      const recent = await app.mongo.events.find(
+        { kind: { $in: ["discord.message", "graph.node", "discord.reaction"] } },
+        { projection: { id: 1, "extra.node_id": 1 } }
+      ).sort({ ts: -1 }).limit(30).toArray();
+      for (const r of recent) {
+        const nid = String((r.extra as any)?.node_id || r.id);
+        if (isAllowedNode(nid)) {
+          seeds.add(nid);
+          if (seeds.size >= maxNodes) break;
+        }
+      }
+    }
+
+    // 2. Multi-hop traversal via graph_edges
+    const visitedNodes = new Set<string>([...seeds].slice(0, maxNodes));
+    const collectedEdges = new Map<string, any>();
+    let currentFrontier = [...visitedNodes];
+
+    for (let hop = 0; hop < 2 && visitedNodes.size < maxNodes; hop++) {
+      if (currentFrontier.length === 0) break;
+      const nextFrontier: string[] = [];
+
+      const edges = await app.mongo.graphEdges.find({
+        $or: [
+          { source_node_id: { $in: currentFrontier } },
+          { target_node_id: { $in: currentFrontier } }
+        ]
+      }).limit(500).toArray();
+
+      for (const edge of edges) {
+        const s = String(edge.source_node_id);
+        const t = String(edge.target_node_id);
+        const k = String(edge.edge_kind || "edge");
+        const edgeKey = `${s}||${t}||${k}`;
+        if (!collectedEdges.has(edgeKey)) {
+          collectedEdges.set(edgeKey, {
+            source: s,
+            target: t,
+            kind: k,
+            layer: edge.layer ?? null,
+            data: edge.data ?? null,
+          });
+        }
+        if (isAllowedNode(s) && !visitedNodes.has(s) && visitedNodes.size < maxNodes) {
+          visitedNodes.add(s);
+          nextFrontier.push(s);
+        }
+        if (isAllowedNode(t) && !visitedNodes.has(t) && visitedNodes.size < maxNodes) {
+          visitedNodes.add(t);
+          nextFrontier.push(t);
+        }
+      }
+      currentFrontier = nextFrontier;
+    }
+
+    // 3. Hydrate nodes
+    const nodeIds = [...visitedNodes].slice(0, maxNodes);
+    const [eventsById, eventsByNodeId] = await Promise.all([
+      app.mongo.events.find({ id: { $in: nodeIds } }).toArray().catch(() => []),
+      app.mongo.events.find({ "extra.node_id": { $in: nodeIds } }).toArray().catch(() => []),
+    ]);
+
+    const eventDocMap = new Map<string, any>();
+    for (const doc of [...eventsById, ...eventsByNodeId]) {
+      if (doc.id) eventDocMap.set(String(doc.id), doc);
+      if ((doc.extra as any)?.node_id) eventDocMap.set(String((doc.extra as any).node_id), doc);
+    }
+
+    // 4. Group into clusters & compute layout coordinates
+    const nodes: any[] = [];
+    const peopleBridgesMap = new Map<string, {
+      userId: string;
+      label: string;
+      guilds: Set<string>;
+      channels: Set<string>;
+      blueskyProfiles: Set<string>;
+      messageCount: number;
+    }>();
+
+    let earliestMsg: { id: string; ts: string; permalink: string } | null = null;
+    let latestMsg: { id: string; ts: string; permalink: string } | null = null;
+
+    const clusterCenters: Record<string, [number, number]> = {
+      "discord.user": [-350, 0],
+      "topic": [0, 0],
+      "discord.guild": [0, -350],
+      "discord.channel": [150, -250],
+      "discord.message": [250, 100],
+      "discord.attachment": [350, 250],
+      "bluesky": [450, -100],
+      "desktop": [-250, 350],
+      "web": [400, 50],
+      "other": [-100, -100],
+    };
+
+    const clusterCounters: Record<string, number> = {};
+
+    for (let i = 0; i < nodeIds.length; i++) {
+      const id = nodeIds[i];
+      const doc = eventDocMap.get(id);
+      const extra = doc?.extra ?? {};
+      const nodeType = nodeTypeOfLocal(id);
+      const lake = lakeClusterOf(id);
+
+      let label = extra.label || doc?.message || id;
+      let text = doc?.text || extra.preview || "";
+      let permalink: string | null = null;
+
+      // Handle Discord Message
+      if (nodeType === "discord.message") {
+        const guildId = extra.guild_id || doc?.session || "";
+        const channelId = extra.channel_id || "";
+        const messageId = extra.message_id || id.split(":").pop() || "";
+        if (guildId && channelId && messageId) {
+          permalink = `https://discord.com/channels/${guildId}/${channelId}/${messageId}`;
+        }
+        if (doc?.ts) {
+          const iso = new Date(doc.ts).toISOString();
+          if (!earliestMsg || iso < earliestMsg.ts) earliestMsg = { id, ts: iso, permalink: permalink || "" };
+          if (!latestMsg || iso > latestMsg.ts) latestMsg = { id, ts: iso, permalink: permalink || "" };
+        }
+      }
+
+      // Track People Bridges
+      if (nodeType === "discord.user") {
+        const uid = extra.user_id || id.replace(/^discord:user:/, "");
+        if (!peopleBridgesMap.has(uid)) {
+          peopleBridgesMap.set(uid, {
+            userId: uid,
+            label: String(label),
+            guilds: new Set(),
+            channels: new Set(),
+            blueskyProfiles: new Set(),
+            messageCount: 0,
+          });
+        }
+      }
+
+      // Assign cluster and deterministic coordinate
+      let clusterKey = nodeType;
+      if (lake === "bluesky" || nodeType.startsWith("bluesky.")) clusterKey = "bluesky";
+      else if (lake === "desktop" || nodeType.startsWith("desktop.")) clusterKey = "desktop";
+      else if (nodeType === "web.url") clusterKey = "web";
+      else if (!clusterCenters[clusterKey]) clusterKey = "other";
+
+      const [cx, cy] = clusterCenters[clusterKey] || [0, 0];
+      const counter = (clusterCounters[clusterKey] ?? 0);
+      clusterCounters[clusterKey] = counter + 1;
+
+      // Deterministic golden spiral around cluster center
+      const angle = counter * 2.399963;
+      const radius = 25 + Math.sqrt(counter) * 28;
+      const x = Math.round(cx + Math.cos(angle) * radius);
+      const y = Math.round(cy + Math.sin(angle) * radius);
+
+      // Node styling for WebGL shader
+      let color: [number, number, number, number] = [0.5, 0.6, 0.7, 0.9];
+      let sizePx = 10;
+
+      if (nodeType === "discord.user") {
+        color = [0.35, 0.65, 1.0, 1.0]; // Bright cyan-blue
+        sizePx = 18;
+      } else if (nodeType === "topic") {
+        color = [1.0, 0.75, 0.2, 1.0]; // Gold/Amber
+        sizePx = 22;
+      } else if (nodeType === "discord.guild") {
+        color = [0.45, 0.4, 0.95, 1.0]; // Discord purple
+        sizePx = 24;
+      } else if (nodeType === "discord.channel") {
+        color = [0.3, 0.5, 0.85, 0.9];
+        sizePx = 14;
+      } else if (nodeType === "discord.message") {
+        color = [0.7, 0.75, 0.8, 0.8];
+        sizePx = 9;
+      } else if (nodeType === "discord.attachment") {
+        color = [0.95, 0.35, 0.55, 1.0]; // Magenta
+        sizePx = 12;
+      } else if (nodeType.startsWith("bluesky.")) {
+        color = [0.1, 0.7, 1.0, 1.0]; // Bluesky azure
+        sizePx = 16;
+      } else if (nodeType.startsWith("desktop.")) {
+        color = [0.2, 0.9, 0.6, 1.0]; // Emerald green
+        sizePx = 15;
+      }
+
+      nodes.push({
+        id,
+        label: String(label),
+        kind: nodeType,
+        lake,
+        x,
+        y,
+        sizePx,
+        color,
+        data: {
+          nodeType,
+          lake,
+          text,
+          permalink,
+          extra,
+          ts: doc?.ts ? new Date(doc.ts).toISOString() : undefined,
+          author: doc?.author || extra.username || undefined,
+        },
+      });
+    }
+
+    // Connect Social Bridges with guild/channel/bluesky details
+    for (const edge of collectedEdges.values()) {
+      if (edge.kind === "in_guild" || edge.kind === "authored_by" || edge.kind === "mentions_user") {
+        const uNode = edge.source.startsWith("discord:user:") ? edge.source : (edge.target.startsWith("discord:user:") ? edge.target : "");
+        if (uNode) {
+          const uid = uNode.replace(/^discord:user:/, "");
+          const bridge = peopleBridgesMap.get(uid);
+          if (bridge) {
+            if (edge.data?.guild_id) bridge.guilds.add(String(edge.data.guild_id));
+            if (edge.data?.channel_id) bridge.channels.add(String(edge.data.channel_id));
+            if (edge.kind === "authored_by") bridge.messageCount++;
+          }
+        }
+      }
+      if (edge.kind === "mentions_bluesky_user" || edge.kind === "mentions_bluesky_post") {
+        const s = edge.source;
+        const t = edge.target;
+        const bskyHandle = edge.data?.handle || t.replace(/^bluesky:user:/, "");
+        const doc = eventDocMap.get(s);
+        const authorId = doc?.extra?.user_id || doc?.author;
+        if (authorId) {
+          const bridge = peopleBridgesMap.get(String(authorId));
+          if (bridge && bskyHandle) bridge.blueskyProfiles.add(String(bskyHandle));
+        }
+      }
+    }
+
+    // Format Edges for WebGL View (strictly drop dangling edges)
+    const returnedNodeIdSet = new Set(nodes.map((n) => n.id));
+    const edges: any[] = [];
+    for (const e of collectedEdges.values()) {
+      if (!returnedNodeIdSet.has(e.source) || !returnedNodeIdSet.has(e.target)) {
+        continue;
+      }
+      let color: [number, number, number, number] = [0.4, 0.45, 0.5, 0.5];
+      if (e.kind === "mentions_topic") color = [1.0, 0.75, 0.2, 0.7];
+      else if (e.kind === "authored_by" || e.kind === "mentions_user") color = [0.35, 0.65, 1.0, 0.7];
+      else if (e.kind === "preceded_by") color = [0.6, 0.6, 0.7, 0.4];
+      else if (e.kind === "has_attachment") color = [0.95, 0.35, 0.55, 0.7];
+      else if (e.kind.includes("bluesky")) color = [0.1, 0.7, 1.0, 0.7];
+      else if (e.kind.includes("window") || e.kind.includes("desktop")) color = [0.2, 0.9, 0.6, 0.7];
+
+      edges.push({
+        source: e.source,
+        target: e.target,
+        kind: e.kind,
+        color,
+        data: { kind: e.kind, layer: e.layer, ...(e.data ?? {}) },
+      });
+    }
+
+    const peopleBridges = [...peopleBridgesMap.values()].map((b) => ({
+      userId: b.userId,
+      label: b.label,
+      guilds: [...b.guilds],
+      channels: [...b.channels],
+      blueskyProfiles: [...b.blueskyProfiles],
+      messageCount: b.messageCount,
+      isCrossGuild: b.guilds.size > 1,
+      isBlueskyConnected: b.blueskyProfiles.size > 0,
+    })).sort((a, b) => b.guilds.length - a.guilds.length || b.messageCount - a.messageCount);
+
+    return {
+      query: q || null,
+      nodes,
+      edges,
+      stats: {
+        totalNodes: nodes.length,
+        totalEdges: edges.length,
+        peopleBridgesCount: peopleBridges.length,
+        peopleBridges: peopleBridges.slice(0, 20),
+        timeframe: (earliestMsg && latestMsg) ? { earliest: earliestMsg, latest: latestMsg } : null,
       },
     };
   });

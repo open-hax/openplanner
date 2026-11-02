@@ -4,7 +4,7 @@ import { parseModelMap, resolveEmbeddingModel, type EmbeddingModelConfig } from 
 
 function config(overrides: Partial<EmbeddingModelConfig> = {}): EmbeddingModelConfig {
   return {
-    defaultModel: "qwen3-embedding:0.6b",
+    defaultModel: "nomic-embed-text",
     bySource: {},
     byKind: {},
     byProject: {},
@@ -50,5 +50,5 @@ test("resolveEmbeddingModel falls back correctly", () => {
   });
   assert.equal(resolveEmbeddingModel(cfg, { source: "chatgpt-export", kind: "message" }), "source-model");
   assert.equal(resolveEmbeddingModel(cfg, { kind: "message" }), "kind-model");
-  assert.equal(resolveEmbeddingModel(cfg, { source: "unknown" }), "qwen3-embedding:0.6b");
+  assert.equal(resolveEmbeddingModel(cfg, { source: "unknown" }), "nomic-embed-text");
 });

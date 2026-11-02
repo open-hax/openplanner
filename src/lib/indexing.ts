@@ -6,13 +6,13 @@ const HTML_DOCUMENT_RE = /<!doctype html|<html\b|<body\b|<main\b|<article\b/i;
 const HTML_ARTIFACT_LINE_RE = /^\s*<\/?(?:div|span|section|article|main|header|footer|nav|aside|figure|figcaption|form|button|picture|source|template)[^>]*>\s*$/gim;
 const DANGEROUS_BLOCK_RE = /<(script|style|noscript|iframe|object|embed|svg)[^>]*>[\s\S]*?<\/\1>/gi;
 const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g;
-const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 5_000;
-const DEFAULT_TARGET_CHUNK_TOKENS = 4_000;
-const DEFAULT_TARGET_CHUNK_CHARS = 16_000;
-const DEFAULT_OVERLAP_CHARS = 400;
-const DEFAULT_BATCH_TOKEN_BUDGET = 40_000;
-const DEFAULT_BATCH_ITEM_LIMIT = 256;
-const HARD_MIN_CHUNK_CHARS = 3_000;
+const DEFAULT_TOKEN_OVERFLOW_THRESHOLD = 1_200;
+const DEFAULT_TARGET_CHUNK_TOKENS = 1_000;
+const DEFAULT_TARGET_CHUNK_CHARS = 4_000;
+const DEFAULT_OVERLAP_CHARS = 100;
+const DEFAULT_BATCH_TOKEN_BUDGET = 6_000;
+const DEFAULT_BATCH_ITEM_LIMIT = 64;
+const HARD_MIN_CHUNK_CHARS = 1_000;
 
 const turndown = new TurndownService({
   headingStyle: "atx",
@@ -253,7 +253,7 @@ export function isContextOverflowError(error: unknown): boolean {
   // We treat "input too large" (embed provider / OpenAI-style errors) the same as
   // context overflow, because the fix is the same: split the batch into smaller
   // pieces.
-  return /context window|context size has been exceeded|ollama_context_overflow|exceeds model context window|exceed_context_size|embed_input_too_large|embedding input is too large|input is too large|maximum:\s*200000/i.test(message);
+  return /context window|context size has been exceeded|ollama_context_overflow|exceeds model context window|exceed_context_size|embed_input_too_large|embedding input is too large|input is too large|input length exceeds the context length|invalid string length|invalid_string_length|maximum:\s*200000/i.test(message);
 }
 
 export function batchPreparedChunks(

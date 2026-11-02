@@ -1,0 +1,25 @@
+{:source-paths ["src" "test"]
+ :dependencies [[metosin/malli "0.16.4"]]
+ :builds
+ {:lib
+  {:target :esm
+   :output-dir "dist"
+   :modules {:index {:entries [promethean.event-ledger]
+                     :exports {:appendEvent promethean.event-ledger.core/append-event-js
+                               :appendEvents promethean.event-ledger.core/append-events-js
+                               :setupIndexes promethean.event-ledger.core/setup-indexes-js
+                               :watchLedger promethean.event-ledger.watcher/watch-ledger-js
+                               :watchOnce promethean.event-ledger.watcher/watch-once-js
+                               :closeWatcher promethean.event-ledger.watcher/close-watcher-js
+                               :closeAllWatchers promethean.event-ledger.watcher/close-all-watchers-js
+                               :validateEnvelope promethean.event-ledger.schema/validate-envelope-js
+                               :appendRestEvent promethean.event-ledger.rest-adapter/append-rest-event
+                               :appendRestEvents promethean.event-ledger.rest-adapter/append-rest-events
+                               :restEventToEnvelope promethean.event-ledger.rest-adapter/rest_event__GT_envelope}}}
+   :compiler-options {:output-feature-set :es-next}}
+  :test
+  {:target :node-test
+   :output-to "target/test.cjs"
+   :ns-regex ["promethean.event-ledger.*-test$"]
+   :autorun true
+   :compiler-options {:output-feature-set :es-next}}}}

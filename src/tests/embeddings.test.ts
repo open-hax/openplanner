@@ -27,7 +27,7 @@ function makeOkFetch(texts: string[]): typeof globalThis.fetch {
     } catch { /* use defaults */ }
     return makeResponse(200, JSON.stringify({
       embeddings: inputTexts.map(() =>
-        Array.from({ length: 1024 }, (_, i) => (i % 100) / 100)
+        Array.from({ length: 768 }, (_, i) => (i % 100) / 100)
       ),
     }));
   };
@@ -65,7 +65,7 @@ test("EmbedProviderFunction returns vectors for single text", async () => {
   try {
     const vectors = await fn.generate(["hello world"]);
     assert.equal(vectors.length, 1, "should return 1 vector");
-    assert.equal(vectors[0]!.length, 1024, "vector should be 1024 dims");
+    assert.equal(vectors[0]!.length, 768, "vector should be 768 dims");
   } finally {
     globalThis.fetch = origFetch;
   }
@@ -90,7 +90,7 @@ test("EmbedProviderFunction batches multiple texts", async () => {
 test("EmbedProviderFunction MAX_CHARS limits are enforced", () => {
   const fn = new EmbedProviderFunction("test-model", "http://localhost:9999");
   assert.equal((fn as any).MAX_CHARS_PER_BATCH, 4_000, "MAX_CHARS_PER_BATCH should be 4k");
-  assert.equal((fn as any).MAX_SINGLE_ENTRY_CHARS, 4_000, "MAX_SINGLE_ENTRY_CHARS should be 4k");
+  assert.equal((fn as any).MAX_SINGLE_ENTRY_CHARS, 2_000, "MAX_SINGLE_ENTRY_CHARS should be 2k");
 });
 
 test("EmbedProviderFunction maxBatchItems and maxConcurrentBatches are set", () => {

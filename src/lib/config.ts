@@ -71,7 +71,7 @@ export function loadConfig(): OpenPlannerConfig {
   const apiKey = mustGet("OPENPLANNER_API_KEY", "change-me");
   const embedProviderBaseUrl = mustGet("EMBED_PROVIDER_BASE_URL", "http://host.docker.internal:8789");
   const embedProviderApiKey = process.env.EMBED_PROVIDER_API_KEY ?? process.env.OPEN_HAX_OPENAI_PROXY_AUTH_TOKEN ?? undefined;
-  const defaultEmbedModel = mustGet("EMBED_PROVIDER_MODEL", "qwen3-embedding:0.6b");
+  const defaultEmbedModel = mustGet("EMBED_PROVIDER_MODEL", "nomic-embed-text");
   const compactEmbedModel = mustGet("EMBED_PROVIDER_COMPACT_MODEL", defaultEmbedModel);
   const embedProviderBatchWindowMs = parsePositiveInt(process.env.EMBED_PROVIDER_BATCH_WINDOW_MS, 50);
   const embedProviderMaxBatchItems = parsePositiveInt(process.env.EMBED_PROVIDER_MAX_BATCH_ITEMS, 256);

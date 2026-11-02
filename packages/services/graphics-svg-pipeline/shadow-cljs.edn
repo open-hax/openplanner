@@ -1,0 +1,42 @@
+{:source-paths ["src/cljs" "test/cljs"
+                "../../event-ledger/src"
+                "../../openplanner-protocols/src"]
+ :dependencies [[metosin/malli "0.16.4"]]
+ :builds
+ {:server
+  {:target :esm
+   :runtime :node
+   :output-dir "dist"
+   :modules {:server {:init-fn graphics-svg-pipeline.entrypoint/init}}
+   :js-options {:js-provider :import
+                :keep-as-import #{"chokidar" "puppeteer-core" "@xmldom/xmldom"
+                                  "@modelcontextprotocol/sdk" "zod"
+                                  "node:crypto" "node:fs" "node:fs/promises"
+                                  "node:path" "node:http" "node:https"
+                                  "http" "https"}}
+   :compiler-options {:output-feature-set :es-next
+                      :source-map true
+                      :infer-externs false}}
+  :server-dev
+  {:target :esm
+   :runtime :node
+   :output-dir "dist-dev"
+   :modules {:server {:init-fn graphics-svg-pipeline.entrypoint/init}}
+   :js-options {:js-provider :import
+                :keep-as-import #{"chokidar" "puppeteer-core" "@xmldom/xmldom"
+                                  "@modelcontextprotocol/sdk" "zod"
+                                  "node:crypto" "node:fs" "node:fs/promises"
+                                  "node:path" "node:http" "node:https"
+                                  "http" "https"}}
+   :devtools {:autoload true
+              :preloads [shadow.cljs.devtools.client.node-esm]
+              :before-load-async graphics-svg-pipeline.entrypoint/stop-before-load!
+              :after-load-async graphics-svg-pipeline.entrypoint/start-after-load!}
+   :compiler-options {:output-feature-set :es-next
+                      :source-map true
+                      :infer-externs false}}
+  :test
+  {:target :node-test
+   :output-to "target/test.cjs"
+   :ns-regexp "-test$"
+   :compiler-options {:output-feature-set :es-next}}}}
