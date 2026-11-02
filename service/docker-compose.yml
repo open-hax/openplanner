@@ -1,0 +1,38 @@
+# OpenPlanner Compose REDACTED_SECRET. Service definitions live under ./compose/; see README.md.
+name: openplanner
+include:
+- compose/storage.yml
+- compose/kafka.yml
+- compose/openplanner.yml
+- compose/dev.yml
+- compose/graph-core.yml
+- compose/graph-layout.yml
+- compose/ingestion.yml
+- compose/proxx.yml
+volumes:
+  openplanner-mongodb-data: null
+  openplanner-proxx-db-data: null
+  openplanner-redpanda-data: null
+  shuvcrawl-data: null
+  shuvcrawl-output: null
+  knoxx-postgres-data: null
+  knoxx-redis-data: null
+  knoxx-models: null
+  knoxx-runs: null
+  knoxx-stt-models: null
+  knoxx-frontend-REDACTED_SECRET-modules: null
+  knoxx-knoxx-REDACTED_SECRET-modules: null
+  shibboleth-data: null
+  openplanner-atlas-data:
+    external: true
+    name: openplanner_openplanner-atlas-data
+  openplanner-atlas-config:
+    external: true
+    name: openplanner_openplanner-atlas-config
+networks:
+  default: {}
+  knoxx-internal:
+    name: ${KNOXX_INTERNAL_NETWORK:-knoxx-internal}
+  ai-infra:
+    external: true
+    name: ${AI_INFRA_NETWORK:-ai-infra}

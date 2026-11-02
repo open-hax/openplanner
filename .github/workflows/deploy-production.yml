@@ -1,4 +1,9 @@
-name: Deploy Production
+name: Production Release Preflight
+
+# Application validation stays with OpenPlanner. The production data plane is
+# consumed in-process by Knoxx, and stack deployment is centrally authorized by
+# a reviewed open-hax/services PR carrying `deploy`. This workflow intentionally
+# contains no deployment job.
 
 on:
   push:
@@ -9,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: openplanner-production
+  group: openplanner-production-preflight
   cancel-in-progress: false
 
 jobs:
@@ -46,15 +51,3 @@ jobs:
         run: |
           pnpm run build
           pnpm test
-
-  deploy-production:
-    name: deploy-production
-    needs: production-preflight
-    uses: open-hax/services/.github/workflows/deploy-promethean.yml@main
-    with:
-      environment: production
-      service: openplanner
-      source_repository: ${{ github.repository }}
-      source_ref: ${{ github.sha }}
-      checkout_submodules: false
-    secrets: inherit

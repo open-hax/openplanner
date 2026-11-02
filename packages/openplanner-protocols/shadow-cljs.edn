@@ -1,0 +1,21 @@
+{:source-paths ["src" "test"]
+ :dependencies [[metosin/malli "0.17.0"]]
+ :builds
+ {:lib
+  {:target :esm
+   :runtime :node
+   :output-dir "dist"
+   :exports {"createEdnEventAdmission" promethean.records.edn.event-admission/create-edn-event-admission
+             "validateEnvelope" promethean.openplanner-protocols/validate-envelope
+             "makeEnvelope" promethean.openplanner-protocols/make-envelope}
+   :js-options {:js-provider :import
+                :keep-as-import #{"fs" "fs/promises" "path"}}
+   :modules {:main {:init-fn promethean.openplanner-protocols/init
+                    :entries [promethean.records.edn.event-admission]}}
+   :compiler-options {:output-feature-set :es-next}}
+  :test
+  {:target :node-test
+   :output-to "target/test.cjs"
+   :ns-regex ["promethean.*-test$"]
+   :autorun true
+   :compiler-options {:output-feature-set :es-next}}}}

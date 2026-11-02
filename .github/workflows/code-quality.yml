@@ -11,6 +11,21 @@ permissions:
   contents: read
 
 jobs:
+  deployment-boundary:
+    name: Deployment boundary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Reject retired deployment authority
+        run: |
+          node scripts/check-deployment-boundary.mjs --self-test
+          node scripts/check-deployment-boundary.mjs
+
   no-new-typescript:
     name: No new TypeScript
     runs-on: ubuntu-latest
@@ -24,7 +39,7 @@ jobs:
       - name: Init GitHub-hosted submodules for inventory
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
+          git submodule update --init --depth 1 packages/vexx
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -51,7 +66,7 @@ jobs:
       - name: Init GitHub-hosted submodules
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
-          git submodule update --init --depth 1 packages/agents/knoxx packages/vexx
+          git submodule update --init --depth 1 packages/vexx
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

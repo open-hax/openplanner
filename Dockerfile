@@ -14,16 +14,23 @@ COPY packages/gardens/publication-components/package.json ./packages/gardens/pub
 COPY packages/stores/cache/package.json ./packages/stores/cache/package.json
 COPY packages/stores/document-hydration/package.json ./packages/stores/document-hydration/package.json
 COPY packages/translations/translation-core/package.json ./packages/translations/translation-core/package.json
+COPY packages/openplanner-sdk/package.json ./packages/openplanner-sdk/package.json
 
 RUN corepack enable && corepack prepare pnpm@10 --activate
 RUN pnpm install --no-frozen-lockfile
 
+# Shared base tsconfig: every workspace package extends ../../../config/tsconfig.base.json
+# (skipLibCheck / esModuleInterop / moduleResolution: Bundler). Without it the
+# in-image `pnpm build` falls back to tsc defaults and dies on dependency .d.ts
+# (e.g. @open-hax/uxx). Must land before `pnpm build`.
+COPY config ./config
 COPY src ./src
 COPY packages/graph/graph-claim-core ./packages/graph/graph-claim-core
 COPY packages/gardens/publication-components ./packages/gardens/publication-components
 COPY packages/stores/cache ./packages/stores/cache
 COPY packages/stores/document-hydration ./packages/stores/document-hydration
 COPY packages/translations/translation-core ./packages/translations/translation-core
+COPY packages/openplanner-sdk ./packages/openplanner-sdk
 COPY .env.example ./.env.example
 
 RUN pnpm build
