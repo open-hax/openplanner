@@ -17,7 +17,7 @@ import { eventMigrationState, OPENPLANNER_SCHEMA_TARGETS, type MigrationState } 
 const DEFAULT_EVENTS_TTL_SECONDS = 0;
 // Compact memories: 90 days default (they're summarized, so keep longer)
 const DEFAULT_COMPACTED_TTL_SECONDS = 0;
-const DEFAULT_GRAPH_NODE_EMBEDDING_DIMENSIONS = 1024;
+const DEFAULT_GRAPH_NODE_EMBEDDING_DIMENSIONS = 768;
 
 function parsePositiveIntEnv(name: string): number {
   const parsed = Number.parseInt(process.env[name] ?? "0", 10);
@@ -602,6 +602,9 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const gardens = db.collection<GardenDocument>("gardens");
 
   // Create indexes for events
+  await events.createIndex({ id: 1 }, { name: "id_1" });
+  await events.createIndex({ "extra.node_id": 1 }, { name: "extra.node_id_1", sparse: true });
+  await events.createIndex({ "extra.channel_id": 1, ts: -1 }, { name: "extra.channel_id_1_ts_-1", sparse: true });
   await events.createIndex({ ts: -1 });
   await events.createIndex({ source: 1, ts: -1 });
   await events.createIndex({ kind: 1, ts: -1 });
@@ -1193,15 +1196,28 @@ export async function upsertGraphEdges(
 ): Promise<number> {
   if (rows.length === 0) return 0;
   const now = new Date();
+  const dedupedByKey = new Map<string, (typeof rows)[number]>();
+  for (const row of rows) {
+    const edgeId = `${row.source_node_id}||${row.target_node_id}||${row.edge_kind}`;
+    const prev = dedupedByKey.get(edgeId);
+    dedupedByKey.set(
+      edgeId,
+      prev && prev.data && row.data
+        ? { ...prev, ...row, data: { ...prev.data, ...row.data } }
+        : row,
+    );
+  }
+  const uniqueRows = Array.from(dedupedByKey.entries());
 
   await collection.bulkWrite(
-    rows.map((row) => {
-      // Edge ID includes kind to allow multiple edge types between same nodes
-      const edgeId = `${row.source_node_id}||${row.target_node_id}||${row.edge_kind}`;
-
+    uniqueRows.map(([edgeId, row]) => {
       return {
         updateOne: {
-          filter: { _id: edgeId },
+          filter: {
+            source_node_id: row.source_node_id,
+            target_node_id: row.target_node_id,
+            edge_kind: row.edge_kind,
+          },
           update: {
             $set: {
               source_node_id: row.source_node_id,
@@ -1215,6 +1231,7 @@ export async function upsertGraphEdges(
               updatedAt: now,
             },
             $setOnInsert: {
+              _id: edgeId,
               createdAt: now,
             },
           },

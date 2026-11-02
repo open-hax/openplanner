@@ -30,6 +30,12 @@ test("isContextOverflowError matches exceed_context_size_error from embed provid
   assert.ok(isContextOverflowError(err2), "nested exceed_context_size_error should be detected");
 });
 
+test("isContextOverflowError matches Invalid string length", () => {
+  assert.ok(isContextOverflowError(new Error("Invalid string length")));
+  assert.ok(isContextOverflowError(new Error("upstream returned invalid string length")));
+  assert.ok(isContextOverflowError(new Error('Embedding upstream rejected the request: {"error":"the input length exceeds the context length"}')));
+});
+
 test("isContextOverflowError returns false for unrelated errors", () => {
   assert.ok(!isContextOverflowError(new Error("connection refused")));
   assert.ok(!isContextOverflowError(new Error("model not found")));
@@ -134,17 +140,17 @@ test("batchPreparedChunks handles single chunk", () => {
   assert.equal(batches[0]!.length, 1);
 });
 
-test("DEFAULT limits are conservative for 8k context", () => {
+test("DEFAULT limits are conservative for 2k context", () => {
   const result = prepareIndexDocument({
     parentId: "limit-check",
     text: "Word ".repeat(7_000),
-    targetChunkTokens: 4_000,
-    targetChunkChars: 16_000,
+    targetChunkTokens: 1_000,
+    targetChunkChars: 4_000,
   });
   for (const chunk of result.chunks) {
     assert.ok(
-      chunk.text.length <= 16_000,
-      `chunk chars ${chunk.text.length} exceeds 16k limit`
+      chunk.text.length <= 4_000,
+      `chunk chars ${chunk.text.length} exceeds 4k limit`
     );
   }
 });

@@ -32,7 +32,7 @@ export class EmbedProviderFunction implements IEmbeddingFunction {
   private activeBatches = 0;
   private batchQueue: Array<() => Promise<void>> = [];
   private readonly MAX_CHARS_PER_BATCH = 4_000;
-  private readonly MAX_SINGLE_ENTRY_CHARS = 4_000;
+  private readonly MAX_SINGLE_ENTRY_CHARS = 2_000;
 
   constructor(
     model: string,

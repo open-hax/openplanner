@@ -194,18 +194,18 @@ export const jobRoutes: FastifyPluginAsync = async (app) => {
       try {
         await jobs().update(job.id, { status: "running" });
         const embeddingRuntime = (app as any).embeddingRuntime;
-        const embedFn = embeddingRuntime?.hot?.getEmbeddingFunctionForModel?.("qwen3-embedding:0.6b");
+        const embedFn = embeddingRuntime?.hot?.getEmbeddingFunctionForModel?.("nomic-embed-text");
 
         if (!embedFn) {
           throw new Error("embedding runtime not available");
         }
 
-        const model = "qwen3-embedding:0.6b";
-        const dims = 1024;
+        const model = "nomic-embed-text";
+        const dims = 768;
         const concurrency = 8;
         const batchSize = 1;
         const mongoBatch = 200;
-        const maxChunkChars = 12000;
+        const maxChunkChars = 4000;
 
         const total = await app.mongo.events.countDocuments({
           kind: "graph.node",

@@ -286,9 +286,9 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
             text: body,
             extra,
             forceChunking: false,
-            targetChunkTokens: 32_000,
-            targetChunkChars: 180_000,
-            overlapChars: 1_000,
+            targetChunkTokens: 1_000,
+            targetChunkChars: 4_000,
+            overlapChars: 100,
           });
 
           if (prepared.chunkCount <= 1) {
@@ -441,6 +441,413 @@ export const eventRoutes: FastifyPluginAsync = async (app) => {
           text: preview,
           chunkCount: 1,
         });
+
+        if (ev.kind === "discord.message") {
+          const eventTs = new Date(ev.ts);
+          const authorId = norm((meta as any).author_id)?.trim() ?? "";
+          const authorUsername = norm((meta as any).author_username)?.trim() ?? "";
+          const authorGlobal = norm((meta as any).author_global_name)?.trim() ?? "";
+          const authorLabel = authorGlobal || authorUsername || author || authorId;
+          const guildId = norm(extra.guild_id)?.trim() ?? norm((sr as any).session)?.trim() ?? "";
+          const guildName = norm(extra.guild_name)?.trim() ?? "";
+          const channelId = norm(extra.channel_id)?.trim() ?? "";
+          const channelName = norm(extra.channel_name)?.trim() ?? "";
+
+          if (guildId) {
+            const guildNodeId = `discord:guild:${guildId}`;
+            const guildLabel = guildName || `server:${guildId}`;
+            const guildText = `Discord server ${guildLabel} [${guildId}]`;
+            queueDerivedGraphNodeEvent({
+              id: `graph.node:${guildNodeId}`,
+              ts: eventTs,
+              project,
+              nodeId: guildNodeId,
+              nodeKind: "discord.guild",
+              label: guildLabel,
+              preview: guildText,
+              extra: { guild_id: guildId, guild_name: guildName || undefined },
+            });
+            queueNodeEmbedding({ nodeId: guildNodeId, sourceEventId: ev.id, project, text: guildText, chunkCount: 1 });
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: guildNodeId,
+              edge_kind: "in_guild",
+              layer: "structural",
+              project,
+              source: ev.source,
+              data: { guild_id: guildId, guild_name: guildName || undefined, channel_id: channelId || undefined },
+              updated_at: eventTs,
+            });
+          }
+
+          if (authorId && authorId !== "unknown") {
+            const userNodeId = `discord:user:${authorId}`;
+            const userText = `Discord user ${authorLabel || authorId}${authorUsername && authorUsername !== authorLabel ? ` (@${authorUsername})` : ""} [${authorId}]`;
+            queueDerivedGraphNodeEvent({
+              id: `graph.node:${userNodeId}`,
+              ts: eventTs,
+              project,
+              nodeId: userNodeId,
+              nodeKind: "discord.user",
+              label: authorLabel || authorId,
+              preview: userText,
+              extra: { user_id: authorId, username: authorUsername || undefined, global_name: authorGlobal || undefined, guild_id: guildId, guild_name: guildName || undefined },
+            });
+            queueNodeEmbedding({ nodeId: userNodeId, sourceEventId: ev.id, project, text: userText, chunkCount: 1 });
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: userNodeId,
+              edge_kind: "authored_by",
+              layer: "social",
+              project,
+              source: ev.source,
+              data: { user_id: authorId, author: authorLabel || authorId, channel_id: channelId, guild_id: guildId, guild_name: guildName || undefined },
+              updated_at: eventTs,
+            });
+          }
+
+          if (channelId) {
+            const channelNodeId = `discord:channel:${channelId}`;
+            const channelLabel = channelName ? `#${channelName}` : `#${channelId}`;
+            const channelText = `Discord channel ${channelLabel}${guildName ? ` in ${guildName}` : ""} [${channelId}]`;
+            queueDerivedGraphNodeEvent({
+              id: `graph.node:${channelNodeId}`,
+              ts: eventTs,
+              project,
+              nodeId: channelNodeId,
+              nodeKind: "discord.channel",
+              label: channelLabel,
+              preview: channelText,
+              extra: { channel_id: channelId, channel_name: channelName || undefined, guild_id: guildId, guild_name: guildName || undefined },
+            });
+            queueNodeEmbedding({ nodeId: channelNodeId, sourceEventId: ev.id, project, text: channelText, chunkCount: 1 });
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: channelNodeId,
+              edge_kind: "in_channel",
+              layer: "structural",
+              project,
+              source: ev.source,
+              data: { channel_id: channelId, channel_name: channelName || undefined, guild_id: guildId, guild_name: guildName || undefined },
+              updated_at: eventTs,
+            });
+            if (guildId) {
+              projectedGraphEdges.push({
+                source_node_id: channelNodeId,
+                target_node_id: `discord:guild:${guildId}`,
+                edge_kind: "channel_in_guild",
+                layer: "structural",
+                project,
+                source: ev.source,
+                data: { channel_id: channelId, channel_name: channelName || undefined, guild_id: guildId, guild_name: guildName || undefined },
+                updated_at: eventTs,
+              });
+            }
+          }
+
+          const mentionIds = new Set<string>([
+            ...(Array.isArray(extra.mentions) ? extra.mentions.map((m) => String(m ?? "").trim()) : []),
+            ...Array.from(preview.matchAll(/<@!?(\d+)>/g), (m) => m[1] ?? ""),
+          ].filter(Boolean));
+          for (const mentionedUid of mentionIds) {
+            const targetUserNodeId = `discord:user:${mentionedUid}`;
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: targetUserNodeId,
+              edge_kind: "mentions_user",
+              layer: "social",
+              project,
+              source: ev.source,
+              data: { mentioned_user_id: mentionedUid, channel_id: channelId, guild_id: guildId },
+              updated_at: eventTs,
+            });
+          }
+
+          const mentionChannels = new Set<string>([
+            ...(Array.isArray(extra.mention_channels) ? extra.mention_channels.map((c) => String(c ?? "").trim()) : []),
+            ...Array.from(preview.matchAll(/<#(\d+)>/g), (m) => m[1] ?? ""),
+          ].filter(Boolean));
+          for (const mentionedCid of mentionChannels) {
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: `discord:channel:${mentionedCid}`,
+              edge_kind: "mentions_channel",
+              layer: "structural",
+              project,
+              source: ev.source,
+              data: { mentioned_channel_id: mentionedCid, channel_id: channelId, guild_id: guildId },
+              updated_at: eventTs,
+            });
+          }
+
+          const replyMid = norm(extra.reply_to_message_id)?.trim() ?? norm((extra.reply_to as any)?.message_id)?.trim() ?? "";
+          if (replyMid) {
+            const replyTargetId = `discord:${guildId}:${channelId}:${replyMid}`;
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: replyTargetId,
+              edge_kind: "replies_to",
+              layer: "conversational",
+              project,
+              source: ev.source,
+              data: { reply_to_message_id: replyMid, channel_id: channelId, guild_id: guildId },
+              updated_at: eventTs,
+            });
+          }
+
+          // Preceded by sequential channel message order
+          let previousMessageId = norm(extra.previous_message_id)?.trim() || "";
+          if (!previousMessageId && channelId) {
+            try {
+              const prev = await app.mongo.events.findOne(
+                { kind: "discord.message", "extra.channel_id": channelId, ts: { $lt: eventTs } },
+                { sort: { ts: -1 }, projection: { id: 1 } }
+              );
+              if (prev?.id) {
+                previousMessageId = String(prev.id);
+              }
+            } catch (_err) {
+              // ignore lookup error
+            }
+          }
+          if (previousMessageId && previousMessageId !== nodeId) {
+            const prevTargetId = previousMessageId.startsWith("discord:")
+              ? previousMessageId
+              : `discord:${guildId}:${channelId}:${previousMessageId}`;
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: prevTargetId,
+              edge_kind: "preceded_by",
+              layer: "conversational",
+              project,
+              source: ev.source,
+              data: { channel_id: channelId, guild_id: guildId, previous_message_id: previousMessageId },
+              updated_at: eventTs,
+            });
+          }
+
+          // Topics as first-class graph nodes
+          const rawTopics = Array.isArray(extra.topics)
+            ? extra.topics
+            : typeof extra.topic === "string"
+              ? [extra.topic]
+              : [];
+          const topicList = [...new Set(rawTopics.map((t) => String(t ?? "").trim()).filter(Boolean))];
+          for (const topicStr of topicList) {
+            const topicSlug = labelSlug(topicStr);
+            const topicNodeId = `topic:${topicSlug}`;
+            const topicPreview = `Topic: ${topicStr}`;
+            queueDerivedGraphNodeEvent({
+              id: `graph.node:${topicNodeId}`,
+              ts: eventTs,
+              project: "topic",
+              nodeId: topicNodeId,
+              nodeKind: "topic",
+              label: topicStr,
+              preview: topicPreview,
+              extra: { topic: topicStr, slug: topicSlug },
+            });
+            queueNodeEmbedding({ nodeId: topicNodeId, sourceEventId: ev.id, project: "topic", text: topicPreview, chunkCount: 1 });
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: topicNodeId,
+              edge_kind: "mentions_topic",
+              layer: "semantic",
+              project,
+              source: ev.source,
+              data: { topic: topicStr, channel_id: channelId, guild_id: guildId },
+              updated_at: eventTs,
+            });
+          }
+
+          // Attachments as multimodal graph nodes
+          if (Array.isArray(extra.attachments) && extra.attachments.length > 0) {
+            for (const att of extra.attachments as any[]) {
+              if (!att) continue;
+              const attId = String(att.id || computeTextHash(att.url || JSON.stringify(att)));
+              const attNodeId = `discord:attachment:${attId}`;
+              const attLabel = String(att.filename || "attachment");
+              const attPreview = `Attachment ${attLabel} (${att.content_type || "file"}, ${att.size || 0} bytes)`;
+              queueDerivedGraphNodeEvent({
+                id: `graph.node:${attNodeId}`,
+                ts: eventTs,
+                project,
+                nodeId: attNodeId,
+                nodeKind: "discord.attachment",
+                label: attLabel,
+                preview: attPreview,
+                extra: { ...att, message_id: nodeId, channel_id: channelId, guild_id: guildId },
+              });
+              queueNodeEmbedding({ nodeId: attNodeId, sourceEventId: ev.id, project, text: attPreview, chunkCount: 1 });
+              projectedGraphEdges.push({
+                source_node_id: nodeId,
+                target_node_id: attNodeId,
+                edge_kind: "has_attachment",
+                layer: "multimodal",
+                project,
+                source: ev.source,
+                data: { filename: attLabel, url: att.url, content_type: att.content_type, size: att.size },
+                updated_at: eventTs,
+              });
+              if (att.url) {
+                const attUrlNodeId = `web:url:${att.url}`;
+                projectedGraphEdges.push({
+                  source_node_id: attNodeId,
+                  target_node_id: attUrlNodeId,
+                  edge_kind: "has_url",
+                  layer: "citation",
+                  project,
+                  source: ev.source,
+                  data: { url: att.url },
+                  updated_at: eventTs,
+                });
+              }
+            }
+          }
+
+          const urls = new Set<string>([
+            ...(Array.isArray(extra.urls) ? extra.urls.map((u) => String(u ?? "").trim()) : []),
+            ...(Array.isArray(extra.attachments) ? extra.attachments.map((a: any) => String(a?.url ?? "").trim()) : []),
+            ...(Array.isArray(extra.embeds) ? extra.embeds.map((e: any) => String(e?.url ?? "").trim()) : []),
+            ...Array.from(preview.matchAll(/https?:\/\/[^\s<>"')\]]+/g), (m) => (m[0] ?? "").replace(/[.,;:!?]+$/, "")),
+          ].filter(Boolean));
+          for (const url of urls) {
+            const urlNodeId = `web:url:${url}`;
+            queueDerivedGraphNodeEvent({
+              id: `graph.node:${urlNodeId}`,
+              ts: eventTs,
+              project: "web",
+              nodeId: urlNodeId,
+              nodeKind: "web.url",
+              label: url,
+              preview: url,
+              extra: { url, source_event_id: ev.id },
+            });
+            projectedGraphEdges.push({
+              source_node_id: nodeId,
+              target_node_id: urlNodeId,
+              edge_kind: "mentions_web_url",
+              layer: "citation",
+              project,
+              source: ev.source,
+              data: { url, channel_id: channelId, guild_id: guildId },
+              updated_at: eventTs,
+            });
+
+            // Bluesky profile & post bridge
+            const bskyMatch = url.match(/bsky\.app\/profile\/([^/\s?#]+)(?:\/post\/([^/\s?#]+))?/i);
+            if (bskyMatch) {
+              const handle = bskyMatch[1];
+              const rkey = bskyMatch[2];
+              const bskyUserNodeId = `bluesky:user:${handle}`;
+              queueDerivedGraphNodeEvent({
+                id: `graph.node:${bskyUserNodeId}`,
+                ts: eventTs,
+                project: "bluesky",
+                nodeId: bskyUserNodeId,
+                nodeKind: "bluesky.user",
+                label: `@${handle}`,
+                preview: `Bluesky user @${handle}`,
+                extra: { handle },
+              });
+              queueNodeEmbedding({ nodeId: bskyUserNodeId, sourceEventId: ev.id, project: "bluesky", text: `Bluesky user @${handle}`, chunkCount: 1 });
+
+              if (rkey) {
+                const bskyPostNodeId = `bluesky:post:${handle}:${rkey}`;
+                queueDerivedGraphNodeEvent({
+                  id: `graph.node:${bskyPostNodeId}`,
+                  ts: eventTs,
+                  project: "bluesky",
+                  nodeId: bskyPostNodeId,
+                  nodeKind: "bluesky.post",
+                  label: `Bluesky post by @${handle}`,
+                  preview: `Bluesky post by @${handle} [${rkey}]`,
+                  extra: { handle, rkey, url },
+                });
+                projectedGraphEdges.push({
+                  source_node_id: nodeId,
+                  target_node_id: bskyPostNodeId,
+                  edge_kind: "mentions_bluesky_post",
+                  layer: "social",
+                  project,
+                  source: ev.source,
+                  data: { handle, rkey, url },
+                  updated_at: eventTs,
+                });
+                projectedGraphEdges.push({
+                  source_node_id: bskyPostNodeId,
+                  target_node_id: bskyUserNodeId,
+                  edge_kind: "authored_by",
+                  layer: "social",
+                  project: "bluesky",
+                  source: ev.source,
+                  data: { handle },
+                  updated_at: eventTs,
+                });
+              } else {
+                projectedGraphEdges.push({
+                  source_node_id: nodeId,
+                  target_node_id: bskyUserNodeId,
+                  edge_kind: "mentions_bluesky_user",
+                  layer: "social",
+                  project,
+                  source: ev.source,
+                  data: { handle, url },
+                  updated_at: eventTs,
+                });
+              }
+            }
+          }
+        }
+
+        if (ev.kind === "discord.reaction") {
+          const eventTs = new Date(ev.ts);
+          const userId = norm(extra.user_id)?.trim() ?? "";
+          const messageId = norm(extra.message_id)?.trim() ?? "";
+          const emoji = norm(extra.emoji)?.trim() ?? norm(extra.emoji_name)?.trim() ?? "reaction";
+          const guildId = norm(extra.guild_id)?.trim() ?? "";
+          const channelId = norm(extra.channel_id)?.trim() ?? "";
+
+          const reactionNodeId = `discord:reaction:${ev.id}`;
+          const reactionLabel = `Reaction ${emoji}`;
+          queueDerivedGraphNodeEvent({
+            id: `graph.node:${reactionNodeId}`,
+            ts: eventTs,
+            project,
+            nodeId: reactionNodeId,
+            nodeKind: "discord.reaction",
+            label: reactionLabel,
+            preview: `Reaction ${emoji} on message ${messageId} by ${userId}`,
+            extra: { emoji, user_id: userId, message_id: messageId, channel_id: channelId, guild_id: guildId },
+          });
+
+          if (messageId) {
+            const targetMessageId = messageId.startsWith("discord:") ? messageId : `discord:${guildId}:${channelId}:${messageId}`;
+            projectedGraphEdges.push({
+              source_node_id: reactionNodeId,
+              target_node_id: targetMessageId,
+              edge_kind: "reacted_to",
+              layer: "conversational",
+              project,
+              source: ev.source,
+              data: { emoji, user_id: userId, channel_id: channelId, guild_id: guildId },
+              updated_at: eventTs,
+            });
+          }
+          if (userId) {
+            const userNodeId = `discord:user:${userId}`;
+            projectedGraphEdges.push({
+              source_node_id: userNodeId,
+              target_node_id: reactionNodeId,
+              edge_kind: "reacted_with",
+              layer: "social",
+              project,
+              source: ev.source,
+              data: { emoji, message_id: messageId },
+              updated_at: eventTs,
+            });
+          }
+        }
       }
 
       if (shouldIndexEventHotVectors(ev)) {
