@@ -1,42 +1,107 @@
-# Π handoff — TS→CLJS gate, labels fix, services deploy workflows (openplanner)
+# Π handoff — OpenPlanner SDK extraction
 
-- time: 2026-06-03T20:34:00Z
-- branch: `pi/fork-tax/20260529T022118Z-main-softreset-all-dirt-openplanner`
-- base target: `origin/staging`
-- tag: `Π/20260603T203400Z-openplanner-ts-gate-deploy-workflows`
+- time: 2026-07-10T20:07:21Z
+- branch: `main`
+- remote: `origin` (git@github.com:open-hax/openplanner.git)
+- tag: `Π/20260710T200721Z-openplanner-sdk-extraction`
 
-## Commits in this Π
+## What is in this Π
 
-1. `feat: TS-to-CLJS migration roadmap + no-new-TypeScript inventory gate`
-   — scripts/check-no-new-typescript.mjs + 756-entry allowlist, code-quality
-   job, docs/architecture roadmap + inventory, kanban epic/tasks.
-2. `fix(labels): persist reaction labels on vectors and clear TTL expiry`
-3. `ci: deploy workflows via open-hax/services module` — deploy-staging,
-   deploy-production, and label-gated deploy-testing (PR head → shared
-   staging slot via deploy-promethean.yml@main, service: openplanner).
-4. Π process commit — receipts.edn (+8), kanban board snapshots, knoxx
-   submodule pointer → 58629bd1 (pushed on open-hax/knoxx
-   test/coverage-improvement), .ημ artifacts.
-5. Merge of `origin/staging` (its deploy-workflow fixes supersede the local
-   stale copies: no recursive submodule checkout on runners — the
-   `file:///` openplanner-migration-tools submodule breaks it —
-   `checkout_submodules: false` for the service module).
+1. Extract the OpenPlanner data-plane into a new workspace package `@open-hax/openplanner-sdk`.
+   - Source files moved from `src/lib/*` and `src/types/turndown.d.ts` to `packages/openplanner-sdk/src/*`.
+   - Old `src/lib/*` paths become thin shims that re-export from the SDK package so existing app imports stay stable.
+   - New SDK entrypoints: `sdk.ts`, `index.ts`, `ingest.ts`, `search-core.ts`, `sessions-core.ts`, `mongo-browse.ts`.
+2. Remove the `packages/agents/eta-mu-sol` and `packages/agents/knoxx` submodules.
+   - Their commit pointers (gitlinks) are deleted; `knoxx` entry is removed from `.gitmodules`.
+   - `eta-mu-sol` was already absent from `.gitmodules` in HEAD.
+3. Update `.ημ/PRINCIPLE.edn` skill registry paths from `~/.pi/agent/skills` to `~/.agents/skills`.
+4. Add `service/` deployment infrastructure (Docker Compose, k8s manifests, nginx configs, READMEs).
+5. Refactor `src/routes/v1/events.ts`, `mongo.ts`, `search.ts`, `sessions.ts` to delegate to the SDK.
+6. Update root `package.json` and `pnpm-lock.yaml` to include the SDK workspace dependency.
 
-## Known constraints
+## Files changed
 
-- `check:no-new-typescript` requires the knoxx submodule checked out
-  (allowlist entries beneath it go stale otherwise); the code-quality job
-  inits GitHub-hosted submodules explicitly, never the `file:///` one.
-- `pull_request_target` workflows execute from the base branch:
-  deploy-testing.yml activates for labeled PRs only after this merges to
-  staging.
+### Git metadata
+- `.gitmodules`
+- `.ημ/PRINCIPLE.edn`
+
+### Workspace manifests
+- `package.json`
+- `pnpm-lock.yaml`
+- `packages/openplanner-sdk/package.json`
+- `packages/openplanner-sdk/tsconfig.json`
+
+### Moved to SDK (with re-export shims left behind)
+- `src/lib/config.ts` → `packages/openplanner-sdk/src/config.ts`
+- `src/lib/embedding-cache.ts` → `packages/openplanner-sdk/src/embedding-cache.ts`
+- `src/lib/embedding-models.ts` → `packages/openplanner-sdk/src/embedding-models.ts`
+- `src/lib/embedding-runtime.ts` → `packages/openplanner-sdk/src/embedding-runtime.ts`
+- `src/lib/embedding-text.ts` → `packages/openplanner-sdk/src/embedding-text.ts`
+- `src/lib/embeddings.ts` → `packages/openplanner-sdk/src/embeddings.ts`
+- `src/lib/indexing.ts` → `packages/openplanner-sdk/src/indexing.ts`
+- `src/lib/mongodb.ts` → `packages/openplanner-sdk/src/mongodb.ts`
+- `src/lib/mongo-vectors.ts` → `packages/openplanner-sdk/src/mongo-vectors.ts`
+- `src/lib/protocol-adapters.ts` → `packages/openplanner-sdk/src/protocol-adapters.ts`
+- `src/lib/schema-versions.ts` → `packages/openplanner-sdk/src/schema-versions.ts`
+- `src/lib/sentence-split.ts` → `packages/openplanner-sdk/src/sentence-split.ts`
+- `src/lib/source-hydration.ts` → `packages/openplanner-sdk/src/source-hydration.ts`
+- `src/lib/types.ts` → `packages/openplanner-sdk/src/types.ts`
+- `src/lib/vector-search.ts` → `packages/openplanner-sdk/src/vector-search.ts`
+- `src/types/turndown.d.ts` → `packages/openplanner-sdk/src/turndown.d.ts`
+
+### New SDK files
+- `packages/openplanner-sdk/src/index.ts`
+- `packages/openplanner-sdk/src/ingest.ts`
+- `packages/openplanner-sdk/src/mongo-browse.ts`
+- `packages/openplanner-sdk/src/sdk.ts`
+- `packages/openplanner-sdk/src/search-core.ts`
+- `packages/openplanner-sdk/src/sessions-core.ts`
+
+### New shim files (re-export from SDK)
+- `src/lib/config.ts`
+- `src/lib/embedding-cache.ts`
+- `src/lib/embedding-models.ts`
+- `src/lib/embedding-runtime.ts`
+- `src/lib/embedding-text.ts`
+- `src/lib/embeddings.ts`
+- `src/lib/indexing.ts`
+- `src/lib/mongodb.ts`
+- `src/lib/mongo-vectors.ts`
+- `src/lib/protocol-adapters.ts`
+- `src/lib/schema-versions.ts`
+- `src/lib/sentence-split.ts`
+- `src/lib/source-hydration.ts`
+- `src/lib/types.ts`
+- `src/lib/vector-search.ts`
+
+### Refactored routes
+- `src/routes/v1/events.ts`
+- `src/routes/v1/mongo.ts`
+- `src/routes/v1/search.ts`
+- `src/routes/v1/sessions.ts`
+
+### Deleted submodules
+- `packages/agents/eta-mu-sol`
+- `packages/agents/knoxx`
+
+### Added deployment/service directory
+- `service/`
 
 ## Verification
 
-- `node scripts/check-no-new-typescript.mjs` → pass (756/756, local with submodules)
-- `actionlint` deploy-testing/staging/production → clean
-- build/test run in PR CI (staging-preflight gates)
+- `pnpm install` — success.
+- `pnpm --filter @open-hax/openplanner-sdk build` — success.
+- `npx tsc --noEmit` at root — success.
+- `npx eslint --config eslint.config.mjs packages/openplanner-sdk/src src/lib --max-warnings=0` — 0 errors, 1903 pre-existing warnings (the moved files retain their original warnings; shims are clean). Lint did not pass the zero-warnings gate because of legacy code style.
 
 ## Concurrent dirt left untouched
 
-- none in this repo at snapshot time
+Local-only / secret / runtime artifacts are intentionally excluded by `service/.gitignore` and were not staged:
+
+- `service/.env`
+- `service/runtime-secrets/`
+- `service/openplanner-lake/`
+- `service/openplanner-proxx-data/`
+- `packages/openplanner-sdk/dist/` (build output, ignored by root `dist/` rule)
+
+If these need to travel with a future handoff, redact them first.

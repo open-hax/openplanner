@@ -1,0 +1,210 @@
+# Knoxx full stack for VPS deployment.
+#
+# Usage from ~/devel/services/openplanner:
+#   docker compose -f docker-compose.knoxx.yml up -d --build
+#
+# Proxx and OpenPlanner are expected on the host (PM2) and are reached
+# via host.docker.internal. Set PROXX_AUTH_TOKEN and OPENPLANNER_API_KEY
+# in .env.knoxx or as environment variables before starting.
+#
+# Build contexts are relative to this file's location (services/openplanner/).
+# The backend Dockerfile requires dist/ to be pre-built; rsync it from local
+# before building if the VPS is not doing a full shadow-cljs compile.
+
+name: knoxx
+
+services:
+  knoxx-postgres:
+    image: postgres:16-bookworm
+    ports:
+      - "127.0.0.1:5432:5432"
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:REDACTED_SECRET}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:REDACTED_SECRET}
+      POSTGRES_DB: ${POSTGRES_DB:-knoxx}
+    volumes:
+      - knoxx-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:REDACTED_SECRET} -d ${POSTGRES_DB:-knoxx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - knoxx-internal
+
+  knoxx-redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    expose:
+      - "6379"
+    volumes:
+      - knoxx-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - knoxx-internal
+
+  backend:
+    build:
+      context: ../../orgs/open-hax/openplanner/packages/agents/knoxx/backend
+      dockerfile: Dockerfile
+    user: "${DOCKER_USER:-1000:1000}"
+    group_add:
+      # Permit non-REDACTED_SECRET backend user to access the host Docker socket for TTL-bound sandbox containers.
+      - "${DOCKER_GID:-999}"
+    depends_on:
+      knoxx-postgres:
+        condition: service_healthy
+      knoxx-redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
+    env_file:
+      - path: ../../orgs/open-hax/openplanner/packages/agents/knoxx/.env
+        required: false
+    environment:
+      # Container-specific overrides — take precedence over .env
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "8000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:REDACTED_SECRET}:${POSTGRES_PASSWORD:REDACTED_SECRET}@knoxx-postgres:5432/${POSTGRES_DB:-knoxx}
+      KNOXX_POLICY_DATABASE_URL: postgresql://${POSTGRES_USER:REDACTED_SECRET}:${POSTGRES_PASSWORD:REDACTED_SECRET}@knoxx-postgres:5432/${POSTGRES_DB:-knoxx}
+      REDIS_URL: redis://knoxx-redis:6379
+      PROXX_BASE_URL: http://host.docker.internal:8789
+      OPENPLANNER_BASE_URL: http://host.docker.internal:7777
+      CONTRACTS_DIR: /app/contracts
+      KMS_INGESTION_URL: http://knoxx-ingestion:3003
+      KNOXX_PUBLIC_BASE_URL: https://knoxx.promethean.rest
+      KNOXX_GITHUB_OAUTH_PRIVATE_KEY_FILE: REDACTED_SECRET
+      KNOXX_SHUTDOWN_GRACE_MS: "25000"
+      PI_CACHE_RETENTION: long
+      KNOXX_SANDBOX_ROOT_DIR: ${KNOXX_SANDBOX_ROOT_DIR:-/home/error/devel/services/openplanner/runtime/knoxx-sandboxes}
+      KNOXX_SANDBOX_BUILD_CONTEXT: /app/docker/sandbox
+      KNOXX_SANDBOX_DOCKERFILE: /app/docker/sandbox/Dockerfile
+    volumes:
+      - knoxx-workspace:/app/workspace
+      - knoxx-runs:/runs/knoxx-agent
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${KNOXX_SANDBOX_ROOT_DIR:-/home/error/devel/services/openplanner/runtime/knoxx-sandboxes}:${KNOXX_SANDBOX_ROOT_DIR:-/home/error/devel/services/openplanner/runtime/knoxx-sandboxes}
+      - ../../orgs/open-hax/openplanner/packages/agents/knoxx/contracts:/app/contracts:ro
+      - ./cloud/github-app-key.pem:REDACTED_SECRET:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "REDACTED_SECRET", "-e", "fetch('http://127.0.0.1:8000/health',{headers:{'X-API-Key':process.env.KNOXX_API_KEY||'change-me'}}).then(r=>process.exit(r.ok||r.status===401?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - knoxx-internal
+
+  frontend:
+    build:
+      context: ../../orgs/open-hax/openplanner/packages/agents/knoxx/frontend
+      dockerfile: Dockerfile
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - knoxx-internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      frontend:
+        condition: service_started
+    ports:
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - ./cloud/nginx/promethean.conf:/etc/nginx/conf.d/promethean.conf:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-webREDACTED_SECRET:/var/www/certbot:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - knoxx-internal
+
+  certbot:
+    image: certbot/dns-cloudflare:latest
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webREDACTED_SECRET:/var/www/certbot
+      - /home/error/.secrets/cloudflare.ini:/cloudflare.ini:ro
+    entrypoint: >
+      /bin/sh -c "trap exit TERM;
+      while :; do
+        certbot renew --dns-cloudflare --dns-cloudflare-credentials /cloudflare.ini --quiet;
+        sleep 12h & wait $${!};
+      done"
+    restart: unless-stopped
+
+  knoxx-ingestion:
+    build:
+      context: ../../orgs/open-hax/openplanner/packages/agents/knoxx/ingestion
+      dockerfile: Dockerfile
+    user: "${DOCKER_USER:-1000:1000}"
+    depends_on:
+      knoxx-postgres:
+        condition: service_healthy
+    environment:
+      PORT: "3003"
+      DATABASE_URL: postgresql://${POSTGRES_USER:REDACTED_SECRET}:${POSTGRES_PASSWORD:REDACTED_SECRET}@knoxx-postgres:5432/${POSTGRES_DB:-knoxx}
+      REDIS_URL: redis://knoxx-redis:6379
+      KNOXX_BACKEND_URL: http://backend:8000
+      OPENPLANNER_BASE_URL: ${OPENPLANNER_BASE_URL:-http://host.docker.internal:7777}
+      OPENPLANNER_API_KEY: ${OPENPLANNER_API_KEY:REDACTED_SECRET}
+      PROXX_BASE_URL: ${PROXX_BASE_URL:-http://host.docker.internal:8789}
+      PROXX_AUTH_TOKEN: ${PROXX_AUTH_TOKEN:REDACTED_SECRET-open-hax-proxy-token}
+      KNOXX_API_KEY: ${KNOXX_API_KEY:REDACTED_SECRET}
+      WORKSPACE_PATH: /app/workspace
+      WORKSPACE_PROJECT_NAME: ${WORKSPACE_PROJECT_NAME:-workspace}
+      KNOXX_OPENPLANNER_PROJECT: ${WORKSPACE_PROJECT_NAME:-workspace}
+      AUDIO_INDEXING_ENABLED: "false"
+    volumes:
+      - knoxx-workspace:/app/workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - knoxx-internal
+
+networks:
+  knoxx-internal:
+    name: knoxx-internal
+    external: true
+
+volumes:
+  knoxx-postgres-data:
+  knoxx-redis-data:
+  knoxx-workspace:
+  knoxx-runs:
+  letsencrypt:
+  certbot-webREDACTED_SECRET:

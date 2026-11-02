@@ -18,6 +18,11 @@ COPY packages/translations/translation-core/package.json ./packages/translations
 RUN corepack enable && corepack prepare pnpm@10 --activate
 RUN pnpm install --no-frozen-lockfile
 
+# Shared base tsconfig: every workspace package extends ../../../config/tsconfig.base.json
+# (skipLibCheck / esModuleInterop / moduleResolution: Bundler). Without it the
+# in-image `pnpm build` falls back to tsc defaults and dies on dependency .d.ts
+# (e.g. @open-hax/uxx). Must land before `pnpm build`.
+COPY config ./config
 COPY src ./src
 COPY packages/graph/graph-claim-core ./packages/graph/graph-claim-core
 COPY packages/gardens/publication-components ./packages/gardens/publication-components
