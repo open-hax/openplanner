@@ -113,13 +113,22 @@
     (= "openplanner.event.v1" (:schema payload)) payload
     :else nil))
 
+(defn parse-date
+  [value]
+  (try
+    (Date/from (Instant/parse (str value)))
+    (catch Throwable _
+      nil)))
+
 (defn validate-event!
   [event]
   (when-not (= "openplanner.event.v1" (:schema event))
     (throw (ex-info "event.schema must be openplanner.event.v1" {:event event})))
   (doseq [k [:id :ts :source :kind]]
     (when (str/blank? (str (get event k)))
-      (throw (ex-info (str (name k) " required") {:event-id (:id event) :field k})))))
+      (throw (ex-info (str (name k) " required") {:event-id (:id event) :field k}))))
+  (when (nil? (parse-date (:ts event)))
+    (throw (ex-info "event.ts must be a valid ISO date" {:event-id (:id event) :field :ts}))))
 
 (defn bson-value
   [value]
@@ -136,13 +145,6 @@
                           xs)
     (keyword? value) (name value)
     :else value))
-
-(defn parse-date
-  [value]
-  (try
-    (Date/from (Instant/parse (str value)))
-    (catch Throwable _
-      (Date.))))
 
 (defn norm
   [value]
