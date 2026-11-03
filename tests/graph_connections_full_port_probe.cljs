@@ -55,6 +55,60 @@
 (defn test-stalled-supplement [base]
   (-> (js/import "node:net") (.then #(run-stalled-supplement base %))))
 
+(defn inflight-candidate [base app started-promise reference closed payload]
+  (let [start (js/Date.now) graph (request base payload true "/v1/graph/connections")]
+    (-> started-promise
+        (.then (fn [] (js/Promise.all #js [graph (js/fetch (str base "/v1/health")) (.. app -mongo -db (command #js {:ping 1}))])))
+        (.then (fn [responses]
+                 (let [graph-result (aget responses 0) health (aget responses 1) elapsed (- (js/Date.now) start)]
+                   (println "APP INFLIGHT elapsed-ms" elapsed "status" (:status graph-result) "closed" (pr-str @closed))
+                   (check! "in-flight supplemental abort preserves reference response" reference graph-result)
+                   (check! "concurrent application health succeeds" 200 (.-status health))
+                   (check! "concurrent app-pool Mongo ping succeeds" 1 (.-ok (aget responses 2)))
+                   (check! "app Mongo pool reports connection closure" true (boolean (some #{"error"} @closed)))
+                   (check! "in-flight supplemental abort returns promptly" true (< elapsed 3000))
+                   (-> (.. app -mongo -db (command #js {:ping 1}))
+                       (.then (fn [result] (check! "application shared pool recovers" 1 (.-ok result)))))))))))
+(defn test-inflight-supplement [base]
+  (let [app @active-app collection (.. app -mongo -graphEdges) client (.. app -mongo -client)
+        original (.-find collection) closed (atom []) started (atom nil)
+        started-promise (js/Promise. (fn [resolve _] (reset! started resolve)))
+        on-close (fn [event] (swap! closed conj (.-reason event)))]
+    (.on client "connectionClosed" on-close)
+    (set! (.-find collection)
+      (fn [& args]
+        (let [options (second args) cursor (js-obj)]
+          (aset cursor "limit" (fn [_] cursor)) (aset cursor "maxTimeMS" (fn [_] cursor))
+          (aset cursor "toArray" (fn []
+            (@started)
+            (.toArray (.aggregate collection #js [#js {:$limit 1} #js {:$addFields #js {:delay #js {:$function #js {:body "function() { sleep(3000); return 1; }" :args #js [] :lang "js"}}}}]
+                                     #js {:signal (.-signal options)}))))
+          cursor)))
+    (reset! reference-mode true)
+    (-> (request base {:seed_node_ids ["topic:inflight"] :max_nodes 1} true "/v1/graph/connections")
+        (.then (fn [reference] (reset! reference-mode false) (inflight-candidate base app started-promise reference closed {:seed_node_ids ["topic:inflight"] :max_nodes 1})))
+        (.finally (fn [] (reset! reference-mode false) (set! (.-find collection) original) (.removeListener client "connectionClosed" on-close))))))
+
+(defn test-inflight-authors [base]
+  (let [app @active-app collection (.. app -mongo -graphEdges) client (.. app -mongo -client)
+        original (.-aggregate collection) closed (atom []) started (atom nil)
+        started-promise (js/Promise. (fn [resolve _] (reset! started resolve)))
+        payload {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 4}
+        on-close (fn [event] (swap! closed conj (.-reason event)))]
+    (.on client "connectionClosed" on-close)
+    (set! (.-aggregate collection)
+      (fn [& args]
+        (let [options (second args) cursor (.call original collection
+                          #js [#js {:$limit 1} #js {:$addFields #js {:delay #js {:$function #js {:body "function() { sleep(3000); return 1; }" :args #js [] :lang "js"}}}}]
+                          #js {:signal (.-signal options)})
+              to-array (.-toArray cursor)]
+          (set! (.-toArray cursor) (fn [] (@started) (.call to-array cursor)))
+          cursor)))
+    (reset! reference-mode true)
+    (-> (request base payload true "/v1/graph/connections")
+        (.then (fn [reference] (reset! reference-mode false) (inflight-candidate base app started-promise reference closed payload)))
+        (.finally (fn [] (reset! reference-mode false) (set! (.-aggregate collection) original) (.removeListener client "connectionClosed" on-close))))))
+
 (defn run-cases [base db]
   (test-dedup-workload)
   (-> (request base {} false "/v1/graph/connections")
@@ -327,6 +381,8 @@
                           (.then (fn [r] (check! "cap failure preserves traversal edges" #{["discord:g:c:m" "discord:user:42" "authored_by"] ["discord:g:c:m" "bluesky:user:alice.example" "mentions_bluesky_user"]} (set (map (juxt :source :target :kind) (get-in r [:body :edges]))))
                                    (check! "cap failure preserves successful author fix" ["alice.example"] (get-in r [:body :stats :peopleBridges 0 :blueskyProfiles]))))
                           (.finally #(set! (.-find collection) original))))))
+      (.then (fn [] (test-inflight-supplement base)))
+      (.then (fn [] (test-inflight-authors base)))
       (.then (fn [] (test-stalled-supplement base)))
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-find collection)]
                      (set! (.-find collection) (fn [& _] (throw (js/Error. "synthetic supplemental read failure"))))

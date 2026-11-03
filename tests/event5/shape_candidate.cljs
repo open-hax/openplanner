@@ -1,11 +1,77 @@
-;; Test-composed /v1 registration over loopback HTTP; disposable MongoDB only.
 ;; Run from repo root: OPENPLANNER_E2E_MONGO_URI=mongodb://127.0.0.1:PORT NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/shape_candidate.cljs
+;; Real buildApp /v1 registration and loopback HTTP; disposable loopback MongoDB only.
 (ns shape-candidate (:require [event-slice :as slice] [lossless-json :as lj]))
 
 (def uri (.-OPENPLANNER_E2E_MONGO_URI js/process.env))
 (def db-name (str "openplanner5_app_" (.replaceAll (str (random-uuid)) "-" "")))
 (def failures (atom 0))
+(declare check!)
+(def detached-warnings (atom []))
+(def io-errors (atom []))
+(def io-observation (atom {:started 0 :succeeded 0 :failed 0 :active 0 :generation-started 0 :generation-settled 0}))
+(def instrumented-collections (js/WeakSet.))
+(defn observe-promise [promise success-key failure-key operation]
+  (if (and promise (.-then promise))
+    (do (swap! io-observation #(-> % (update :started inc) (update :active inc)))
+        (.then promise (fn [_] (swap! io-observation #(-> % (update success-key inc) (update :active dec))) nil)
+               (fn [error] (swap! io-observation #(-> % (update failure-key inc) (update :active dec))) (swap! io-errors conj (assoc operation :error (.-message error))) nil))
+        promise)
+    promise))
+(defn instrument-collection! [collection]
+  (when (and collection (.-bulkWrite collection) (not (.has instrumented-collections collection)))
+    (.add instrumented-collections collection)
+    (doseq [method ["bulkWrite" "deleteMany" "updateOne" "updateMany" "insertOne" "createIndex"]]
+      (when-let [original (aget collection method)]
+        (let [bound (.bind original collection)]
+          (aset collection method (fn [& args] (observe-promise (.apply bound nil (to-array args)) :succeeded :failed {:method method :collection (.-collectionName collection)})))))))
+  collection)
+(defn instrument-mongo! [app]
+  (let [mongo (.-mongo app) db (.-db mongo) original (.bind (.-collection db) db)]
+    (doseq [key (vec (js/Object.keys mongo))] (instrument-collection! (aget mongo key)))
+    (set! (.-collection db) (fn [& args] (instrument-collection! (.apply original nil (to-array args)))))))
+(defn wait-io-quiescent [remaining previous stable]
+  (let [state @io-observation ready? (and (zero? (:active state)) (= (:generation-started state) (:generation-settled state)))
+        stable-next (if (and ready? (= state previous)) (inc stable) 0)]
+    (if (or (>= stable-next 15) (zero? remaining))
+      (do (check! "tracked Mongo writes and synthetic generations settled" true (and ready? (>= stable-next 15)))
+          (check! "actual Mongo writes observed" true (pos? (:started state)))
+          (check! "all expected synthetic generator calls observed" [39 39] [(:generation-started state) (:generation-settled state)])
+          (let [terminal (filter #(or (and (= "event_chunks" (:collection %)) (.includes (or (:error %) "") "'_id' value cannot be of type array"))
+                                     (and (= "graph_node_embeddings" (:collection %)) (.includes (or (:error %) "") "E11000 duplicate key"))) @io-errors)
+                retryable (filter #(.includes (or (:error %) "") "Please retry your operation or multi-document transaction") @io-errors)]
+            (check! "five terminal write failures observed" {["bulkWrite" "event_chunks"] 3 ["bulkWrite" "graph_node_embeddings"] 2} (frequencies (map (juxt :method :collection) terminal)))
+            (check! "all other failed write attempts classified as retryable conflicts" (count @io-errors) (+ (count terminal) (count retryable)))
+            (println "RETRYABLE-WRITE-ATTEMPTS" (count retryable) "subsequent retry outcome not inferred")
+            (doseq [attempt retryable] (println "RETRYABLE-WRITE-FAILURE" (pr-str attempt))))
+          (println "OBSERVED-WORK" (pr-str state)) (doseq [error @io-errors] (println "OBSERVED-WRITE-FAILURE" (pr-str error))) (js/Promise.resolve))
+      (-> (js/Promise. #(js/setTimeout %1 20)) (.then #(wait-io-quiescent (dec remaining) state stable-next))))))
+
+(defn capture-log! [line]
+  (try (let [record (js->clj (js/JSON.parse line) :keywordize-keys true)
+             msg (:msg record) error (get-in record [:err :message])]
+         (when (contains? #{"Failed to index event into MongoDB vectors; preserving base event without embeddings" "Failed to materialize graph node embeddings during event ingest"} msg)
+           (swap! detached-warnings conj {:message msg :event-id (:eventId record) :count (:count record) :error error})))
+       (catch :default _ nil))
+  (.write (.-stdout js/process) line))
+(defn wait-warnings [remaining]
+  (if (or (>= (count @detached-warnings) 5) (zero? remaining)) (js/Promise.resolve)
+      (-> (js/Promise. #(js/setTimeout %1 20)) (.then #(wait-warnings (dec remaining))))))
+(defn check-detached! []
+  (let [vectors (filter #(= "Failed to index event into MongoDB vectors; preserving base event without embeddings" (:message %)) @detached-warnings)
+        graphs (filter #(= "Failed to materialize graph node embeddings during event ingest" (:message %)) @detached-warnings)]
+    (println "TERMINAL-ROUTE-FAILURES" (pr-str {:vector (count vectors) :graph (count graphs)}))
+    (check! "exact detached warning count" 5 (count @detached-warnings))
+    (check! "detached vector failure identities" #{["id" "arr"] ["reaction" "id"] ["message" "id"]} (set (map :event-id vectors)))
+    (check! "three vector failures are Mongo array-id errors" true (and (= 3 (count vectors)) (every? #(and (:error %) (.includes (:error %) "'_id' value cannot be of type array")) vectors)))
+    (check! "two graph failures report queue sizes and duplicate-key errors" true (and (= #{1 3} (set (map :count graphs))) (= 2 (count graphs)) (every? #(and (:error %) (.includes (:error %) "E11000 duplicate key")) graphs)))
+    (doseq [item @detached-warnings] (println "DETACHED-FAILURE" (pr-str item)))))
+
 (def background-tasks (atom []))
+(def registration-closed (atom false))
+(def late-registrations (atom 0))
+(defn record-task! [task]
+  (when @registration-closed (swap! late-registrations inc))
+  (swap! background-tasks conj task))
 (def wrapped-calls (atom []))
 (def model-scopes (atom []))
 (def model-generation-order (atom []))
@@ -14,9 +80,13 @@
   (if (or @slow-reject (zero? remaining)) (js/Promise.resolve (some? @slow-reject))
       (-> (js/Promise. #(js/setTimeout %1 20)) (.then #(wait-slow (dec remaining))))))
 (defn synthetic-embedding [texts]
-  (if (some #(= "Topic: Slow" %) (vec texts))
-    (js/Promise. (fn [_ reject] (reset! slow-reject reject)))
-    (js/Promise.resolve (clj->js (mapv (fn [_] [0.25 0.75]) (vec texts))))))
+  (let [p (if (some #(= "Topic: Slow" %) (vec texts))
+            (js/Promise. (fn [_ reject] (reset! slow-reject reject)))
+            (js/Promise.resolve (clj->js (mapv (fn [_] [0.25 0.75]) (vec texts)))))]
+    (swap! io-observation update :generation-started inc)
+    (.then p (fn [_] (swap! io-observation update :generation-settled inc) nil)
+           (fn [_] (swap! io-observation update :generation-settled inc) nil))
+    p))
 (def embedding-calls (atom []))
 (defn wait-embeddings [collection n]
   (letfn [(poll [remaining] (-> (.countDocuments collection #js {})
@@ -77,7 +147,7 @@
         (.then (fn [] (js/Promise. #(js/setTimeout %1 5000)))))))
 
 (defn compose-app [modules cfg]
-  (let [fastify (.-default (aget modules 3)) app (fastify #js {:logger true :bodyLimit (* 50 1024 1024) :pluginTimeout 120000})
+  (let [fastify (.-default (aget modules 3)) app (fastify #js {:logger #js {:stream #js {:write capture-log!}} :bodyLimit (* 50 1024 1024) :pluginTimeout 120000})
         targets (atom #{})]
     (aset app "openplannerConfig" cfg)
     (aset app "embeddingRuntime" #js {:hot #js {:getModel (fn [scope] (swap! model-scopes conj (js->clj scope :keywordize-keys true)) (let [p (.-project scope)] (if (and (string? p) (.startsWith p "order-")) p "synthetic-model")))
@@ -95,7 +165,7 @@
                                                 old (when target (.-bulkWrite target)) kafka (when (= id "fail-kafka") (.-kafkaEvents app)) old-kafka (when kafka (.-publishRawEvents kafka))]
                                             (when target (set! (.-bulkWrite target) (fn [& _] (js/Promise.reject (js/Error. "injected bulk failure")))))
                                             (when kafka (set! (.-publishRawEvents kafka) (fn [& _] (js/Promise.reject (js/Error. "injected kafka failure")))))
-                                            (-> (js/Promise.resolve (slice/handler app (.-eventAdmission ((.-createProtocols (aget modules 12)) app)) (.-counterInc (aget modules 13)) (.-indexTextInMongoVectors (aget modules 14)) (.-prepareIndexDocument (aget modules 15)) (.-splitSentences (aget modules 16)) (fn [task] (swap! background-tasks conj task)) req reply))
+                                            (-> (js/Promise.resolve (slice/handler app (.-eventAdmission ((.-createProtocols (aget modules 12)) app)) (.-counterInc (aget modules 13)) (.-indexTextInMongoVectors (aget modules 14)) (.-prepareIndexDocument (aget modules 15)) (.-splitSentences (aget modules 16)) record-task! req reply))
                                                 (.finally (fn [] (when target (set! (.-bulkWrite target) old)) (when kafka (set! (.-publishRawEvents kafka) old-kafka))))))))))))
 
     (-> (.register app (.-default (aget modules 5)))
@@ -116,9 +186,12 @@
         app-ref (atom nil)]
     (-> (.connect client)
         (.then (fn [] (compose-app modules ((.-loadConfig (aget modules 1))))) )
-        (.then (fn [app] (reset! app-ref app) (.listen app #js {:host "127.0.0.1" :port 0})))
+        (.then (fn [app] (reset! app-ref app) (instrument-mongo! app) (.listen app #js {:host "127.0.0.1" :port 0})))
         (.then (fn [base] (run-cases base db)))
-        (.then (fn [] (-> (js/Promise.allSettled (to-array @background-tasks)) (.then (fn [results] (check! "all tracked background tasks settled before cleanup" (count @background-tasks) (.-length results)))))))
+        (.then (fn [] (reset! registration-closed true) (-> (js/Promise.allSettled (to-array @background-tasks)) (.then (fn [results] (check! "all tracked background tasks settled before cleanup" (count @background-tasks) (.-length results)))))))
+        (.then (fn [] (wait-warnings 500)))
+        (.then (fn [] (wait-io-quiescent 500 nil 0)))
+        (.then (fn [] (check! "no task registration after response barrier" 0 @late-registrations) (check-detached!)))
         (.finally (fn [] (-> (if @app-ref (.close @app-ref) (js/Promise.resolve))
                              (.then #(.dropDatabase db))
                              (.then (fn [dropped] (println "Database dropped:" db-name dropped) (.close client)))))))))

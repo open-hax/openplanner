@@ -10,9 +10,12 @@
                                 :tags (nullish (.-tags meta) nil) :text (norm (nullish (.-text ev) "")) :attachments (nullish (.-attachments ev) nil)
                                 :extra (nullish (.-extra ev) nil) :schema_version (.-schema_version ev) :migration_state (.-migration_state ev)})))
 (defn prior! [app channel ts]
-  (-> (.findOne (.. app -mongo -events) #js {:kind "discord.message" :extra.channel_id channel :ts #js {:$lt ts}} #js {:sort #js {:ts -1} :projection #js {:id 1}})
-      (.then #(when % (.-id %)))
-      (.catch (fn [_] nil))))
+  (try
+    (-> (.findOne (.. app -mongo -events) #js {:kind "discord.message" :extra.channel_id channel :ts #js {:$lt ts}} #js {:sort #js {:ts -1} :projection #js {:id 1}})
+        (.then #(when % (.-id %)))
+        (.catch (fn [_] nil)))
+    (catch :default _ (js/Promise.resolve nil))))
+
 (defn- batches! [collection ops]
   (reduce (fn [p batch] (.then p (fn [] (.bulkWrite collection (lj/encode batch) #js {:ordered false})))) (js/Promise.resolve) (partition-all 1000 ops)))
 (defn writes! [app nodes labels edges now]
@@ -61,9 +64,9 @@
   ;; Begin model selection and the first Mongo lookup before metrics/Kafka,
   ;; then leave the rest detached, as the reference async IIFE does.
   (when (seq inputs)
-    (let [hot (.. app -embeddingRuntime -hot) collection (.. app -mongo -graphNodeEmbeddings)]
-      (try
-        (let [order (atom []) groups (reduce (fn [m row] (let [model (.getModel hot (clj->js {:source "graph-event" :kind "graph.node" :project (:project row)}))]
+    (try
+      (let [hot (.. app -embeddingRuntime -hot) collection (.. app -mongo -graphNodeEmbeddings)
+            order (atom []) groups (reduce (fn [m row] (let [model (.getModel hot (clj->js {:source "graph-event" :kind "graph.node" :project (:project row)}))]
                                            (when-not (contains? m model) (swap! order conj model))
                                            (update m model (fnil conj []) row))) {} inputs)
               run (fn run [entries]
@@ -71,18 +74,20 @@
                       (.then (embed-group! hot collection model rows) #(run (rest entries)))
                       (js/Promise.resolve)))]
           (.catch (run (mapv (fn [model] [model (get groups model)]) @order)) (fn [err] (.warn (.-log app) #js {:err err :count (count inputs)} "Failed to materialize graph node embeddings during event ingest"))))
-        (catch :default err (.warn (.-log app) #js {:err err :count (count inputs)} "Failed to materialize graph node embeddings during event ingest"))))))
+      (catch :default err
+        (.warn (.-log app) #js {:err err :count (count inputs)} "Failed to materialize graph node embeddings during event ingest")
+        (js/Promise.resolve)))))
 
 (defn start-event-vector! [app indexer ev]
   ;; Invoke the existing indexing boundary immediately; its promise is detached.
-  (let [sr (or (.-source_ref ev) #js {}) meta (or (.-meta ev) #js {}) extra (or (.-extra ev) #js {})
+  (try
+    (let [sr (or (.-source_ref ev) #js {}) meta (or (.-meta ev) #js {}) extra (or (.-extra ev) #js {})
         hot (.. app -embeddingRuntime -hot) project (when-not (nil? (.-project sr)) (js/String (.-project sr)))
         label-spec (.-openplanner_labels extra) raw-labels (when label-spec (.-labels label-spec))
         label-values (if (js/Array.isArray raw-labels) (->> (vec raw-labels) (map #(if (nil? %) "" (.trim (js/String %)))) (remove empty?) distinct vec) [])
         quality (if (or (nil? label-spec) (nil? (.-quality label-spec))) "" (.-quality label-spec))
-        scope #js {:source (.-source ev) :kind (.-kind ev) :project project}]
-    (try
-      (let [embedding (.getBackgroundEmbeddingFunction hot scope) model (.getModel hot scope)
+        scope #js {:source (.-source ev) :kind (.-kind ev) :project project}
+          embedding (.getBackgroundEmbeddingFunction hot scope) model (.getModel hot scope)
             metadata #js {:ts (.-ts ev) :source (.-source ev) :kind (.-kind ev) :project (.-project sr) :session (.-session sr)
                           :author (if (nil? (.-author meta)) "" (js/String (.-author meta))) :role (if (nil? (.-role meta)) "" (js/String (.-role meta)))
                           :model (if (nil? (.-model meta)) "" (js/String (.-model meta))) :embedding_model (or model "")
@@ -91,7 +96,7 @@
             p (indexer #js {:mongo (.-mongo app) :tier "hot" :parentId (.-id ev) :text (.-text ev) :extra extra :metadata metadata :embeddingFunction embedding})]
         (.catch (timeout p 30000 (str "event vector index " (.-id ev)))
                 (fn [err] (.warn (.-log app) #js {:err err :eventId (.-id ev)} "Failed to index event into MongoDB vectors; preserving base event without embeddings"))))
-      (catch :default err (.warn (.-log app) #js {:err err :eventId (.-id ev)} "Failed to index event into MongoDB vectors; preserving base event without embeddings") (js/Promise.resolve)))))
+    (catch :default err (.warn (.-log app) #js {:err err :eventId (.-id ev)} "Failed to index event into MongoDB vectors; preserving base event without embeddings") (js/Promise.resolve))))
 
 (defn prepare-document [prepare split-sentences node-id body extra]
   (let [prepared (prepare (lj/encode {:parentId node-id :text body :extra extra :forceChunking false :targetChunkTokens 1000 :targetChunkChars 4000 :overlapChars 100}))

@@ -40,7 +40,7 @@ The last command should report that no such container exists. A shell may treat 
 
 ## Test commands
 
-With the loopback URI set, run these separately; each uses its own database. `NODE_OPTIONS` loads the existing TypeScript reference through `tsx`. The focused shape tests intentionally trigger detached Mongo vector and graph-embedding failures for some inputs: their matching HTTP results do not prove those embeddings were persisted.
+With the loopback URI set, run these separately; each uses its own database. `NODE_OPTIONS` loads the existing TypeScript reference through `tsx`. The focused shape tests intentionally trigger detached Mongo vector and graph-embedding failures for some inputs: their matching HTTP results do not prove those embeddings were persisted. They observe and classify those warnings and Mongo write attempts over a bounded quiescence window; the reference has no complete detached-task signal, so no absence of later or uninstrumented work is implied.
 
 ```sh
 NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/graph_event_combined_probe.cljs
@@ -49,6 +49,10 @@ NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/slice_http.cljs
 NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/reference_http.cljs
 NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/shape_candidate.cljs
 NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/shape_reference.cljs
+NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/fault_candidate.cljs
+NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/fault_reference.cljs
+NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/duplicate_candidate.cljs
+NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/duplicate_reference.cljs
 NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/proto_boundary_mongo.cljs
 NODE_OPTIONS='--import tsx' nbb -cp src/cljs:tests tests/event5/discord_projection_test.cljs
 ```
