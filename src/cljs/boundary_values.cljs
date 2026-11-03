@@ -1,0 +1,6 @@
+(ns boundary-values (:require [lossless-json :as lj]))
+(defn date [value] (js/Date. value))
+(defn now [] (js/Date.))
+(defn js-string [value] (js/String (if (or (map? value) (vector? value)) (lj/encode value) value)))
+(defn truthy? [value] (js/Boolean (if (or (map? value) (vector? value)) (lj/encode value) value)))
+(defn json-stringify [value] (js/JSON.stringify (lj/encode value)))
