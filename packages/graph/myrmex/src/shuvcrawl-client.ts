@@ -6,6 +6,8 @@ export interface ShuvCrawlScrapeOptions {
   headers?: Record<string, string>;
   mobile?: boolean;
   rawHtml?: boolean;
+  readonly persistOutput?: boolean;
+  readonly artifacts?: boolean;
   onlyMainContent?: boolean;
 }
 
@@ -32,6 +34,7 @@ export interface ShuvCrawlScrapeResult {
     bypassMethod?: string;
     status: "success" | "partial" | "failed";
     elapsed: number;
+    readonly finalUrl?: string;
     author?: string;
     publishedAt?: string;
   };

@@ -4,6 +4,7 @@ import { ShuvCrawlClient } from "./shuvcrawl-client.js";
 import { ShuvCrawlFetchBackend } from "./shuvcrawl-backend.js";
 import { GraphStore } from "./graph-store.js";
 import { CheckpointManager } from "./checkpoint.js";
+import { createHash } from "node:crypto";
 
 type WeaverInstance = {
   seed: (urls: string[]) => void;
@@ -367,7 +368,7 @@ export class Myrmex {
           url: ev.url,
           title: ev.title ?? "",
           content: ev.content ?? "",
-          contentHash: hashString(ev.content ?? ev.url),
+          contentHash: hashString(ev.content ?? ""),
           metadata: {
             ...(ev.metadata ?? {}),
             status: ev.status !== undefined && ev.status >= 200 && ev.status < 400 ? "success" : "partial",
@@ -581,9 +582,5 @@ export class Myrmex {
 }
 
 function hashString(s: string): string {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
-  return `sha256:${Math.abs(h).toString(16)}`;
+  return `sha256:${createHash("sha256").update(s).digest("hex")}`;
 }

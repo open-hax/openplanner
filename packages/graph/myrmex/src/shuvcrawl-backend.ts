@@ -56,6 +56,8 @@ export class ShuvCrawlFetchBackend implements FetchBackend {
       const result = await this.client.scrape(url, {
         onlyMainContent: false,
         rawHtml: true,
+        persistOutput: false,
+        artifacts: false,
         wait: "networkidle",
       });
 
@@ -81,6 +83,11 @@ export class ShuvCrawlFetchBackend implements FetchBackend {
         content: result.content,
         title: result.metadata.title,
         metadata: {
+          requestId: result.metadata.requestId,
+          requestedUrl: url,
+          originalUrl: result.originalUrl,
+          finalUrl: result.metadata.finalUrl || baseUrl,
+          scrapeStatus: result.metadata.status,
           author: result.metadata.author,
           publishedAt: result.metadata.publishedAt,
           bypassMethod: result.metadata.bypassMethod,
