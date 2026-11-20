@@ -83,7 +83,7 @@
 (defn- ^:async append-to-file! [file-path event-str]
   (await (fsp/appendFile file-path event-str "utf8")))
 
-(defn- ^:async read-file-for-watch [file-path callback filter-spec]
+(defn- read-file-for-watch [file-path callback filter-spec]
   (let [watcher (.watch fs file-path)
         pred (when (seq filter-spec)
                (fn [event]
@@ -136,7 +136,7 @@
                                               (swap! results conj enriched))))))))
                          (js/Promise.resolve nil)
                          envelopes)
-                       (.then (fn [_] (clj->js @results)))))))
+                       (.then (fn [_] @results))))))
         (.finally (fn [] ((:release! mutex))))))
 
   (query-events [_ filter-spec]
@@ -171,3 +171,17 @@
     ;; flag creates the file when missing without truncating an existing ledger.
     (.closeSync fs (.openSync fs file-path "a"))
     (->EdnFileEventAdmission file-path (create-mutex))))
+
+
+(defn ^:export create-edn-event-admission-js [ledger-dir]
+  (let [admission (create-edn-event-admission ledger-dir)]
+    #js {"append-event!" (fn [envelope]
+                            (.then (protocols/append-event! admission (js->clj envelope :keywordize-keys true)) protocols/to-js))
+         "append-events!" (fn [envelopes]
+                             (.then (protocols/append-events! admission (js->clj envelopes :keywordize-keys true)) protocols/to-js))
+         "query-events" (fn [filter-spec]
+                           (.then (protocols/query-events admission (js->clj filter-spec :keywordize-keys true)) protocols/to-js))
+         "watch-events" (fn [filter-spec callback]
+                           (let [handle (protocols/watch-events admission (js->clj filter-spec :keywordize-keys true)
+                                                                 #(callback (protocols/to-js %)))]
+                             #js {"close" (:close! handle)}))}))

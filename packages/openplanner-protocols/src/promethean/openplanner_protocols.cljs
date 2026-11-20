@@ -189,3 +189,15 @@
   "Module init for ESM export; protocols are defined as protocol vars,
    no runtime state needed."
   [] {})
+
+(defn to-js [value]
+  (cond
+    (map? value) (let [obj #js {}]
+                   (doseq [[k v] value]
+                     (aset obj (if (keyword? k) (subs (str k) 1) (str k)) (to-js v)))
+                   obj)
+    (sequential? value) (into-array (map to-js value))
+    :else value))
+
+(defn ^:export make-envelope-js [event-type payload]
+  (to-js (make-envelope event-type (js->clj payload :keywordize-keys true))))

@@ -12,7 +12,8 @@
     "compile:lib": "shadow-cljs compile lib",
     "compile:test": "shadow-cljs compile test",
     "test": "node target/test.cjs",
-    "lint": "clj-kondo --lint src test"
+    "lint": "clj-kondo --lint src test",
+    "test:api": "shadow-cljs release lib && shadow-cljs compile api-test && node target/api-test.cjs"
   },
   "dependencies": {
     "shadow-cljs": "^3.0.0",
