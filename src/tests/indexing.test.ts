@@ -318,6 +318,20 @@ test("stored replay rejects ambiguous graph ownership and duplicate logical IDs"
     /Invalid stored event identity/);
 });
 
+test("an ordinary sentence event cannot claim a generated sentence vector key", () => {
+  const document = stored({ id: "event:document", kind: "graph.node", extra: { node_id: "node:document" } });
+  const sentenceId = `shared-project:sentence:${computeTextHash(passage)}`;
+  const ordinary = stored({ id: sentenceId, kind: "sentence" });
+  assert.throws(() => planStoredEventEmbeddingProjections([document, ordinary]), /Conflicting stored event owners/);
+});
+
+test("an explicit graph owner remains visible when its own sentence shadows its vector key", () => {
+  const document = stored({ id: "event:document", kind: "graph.node", extra: { node_id: "node:document" } });
+  const sentenceId = `shared-project:sentence:${computeTextHash(passage)}`;
+  const shadowed = stored({ id: "event:shadowed", kind: "graph.node", extra: { node_id: sentenceId } });
+  assert.throws(() => planStoredEventEmbeddingProjections([document, shadowed]), /Conflicting stored event owners/);
+});
+
 test("ordinary ingest retains event admission and its graph topology writes", async () => {
   const event: EventEnvelopeV1 = {
     ...envelope,

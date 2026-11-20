@@ -133,6 +133,7 @@ interface GraphProjectionPlan {
   readonly derivedGraphNodes: readonly DerivedGraphNodePlan[];
   readonly projectedGraphEdges: readonly GraphEdgePlan[];
   readonly graph: readonly GraphEmbeddingInput[];
+  readonly shareableSentenceKeys: ReadonlySet<string>;
 }
 
 interface DerivedGraphProjection {
@@ -141,7 +142,9 @@ interface DerivedGraphProjection {
   readonly embedding: GraphEmbeddingInput | null;
 }
 
-const emptyGraphPlan: GraphProjectionPlan = { derivedGraphNodes: [], projectedGraphEdges: [], graph: [] };
+const emptyGraphPlan: GraphProjectionPlan = {
+  derivedGraphNodes: [], projectedGraphEdges: [], graph: [], shareableSentenceKeys: new Set<string>(),
+};
 
 /** Serialize topology metadata exactly as the existing ingestion writer stores it. */
 export function derivedGraphNodeExtra(node: DerivedGraphNodePlan): Readonly<Record<string, unknown>> {
@@ -262,10 +265,15 @@ function planExplicitGraphNode(ev: EventEnvelopeV1, ctx: EventGraphContext): Gra
   const sentences = [...deduplicateByHash(candidates).values()].map((sentence) => planSentence(ctx, nodeId, sentence));
   const derived = [...chunks, ...sentences];
   const embeddings = [direct, ...derived.map(({ embedding }) => embedding)].filter((input) => input !== null);
+  const shareableSentenceKeys = new Set(sentences.map(({ node }) => node.nodeId));
+  // A sentence can shadow its own explicit key under normal last-write-wins.
+  // That key still has explicit provenance when checked across stored sources.
+  if (direct) shareableSentenceKeys.delete(direct.node_id);
   return {
     derivedGraphNodes: derived.map(({ node }) => node),
     projectedGraphEdges: derived.map(({ edge }) => edge),
     graph: [...new Map(embeddings.map((input) => [input.node_id, input])).values()],
+    shareableSentenceKeys,
   };
 }
 
@@ -294,7 +302,7 @@ function planOrdinaryGraphNode(
     },
   };
   const embedding = graphEmbedding(ctx, ev.id, preview, 1);
-  return { derivedGraphNodes: [node], projectedGraphEdges: [], graph: embedding ? [embedding] : [] };
+  return { ...emptyGraphPlan, derivedGraphNodes: [node], graph: embedding ? [embedding] : [] };
 }
 
 /** Plan graph embeddings and the topology that regular ingestion already materializes. */
@@ -420,11 +428,10 @@ export function planStoredEventEmbeddingProjections(rows: readonly StoredProject
   );
   const mirrored = events.filter(isMirror).map(({ row }) => row);
   const owners = verifiedDerivedOwners(mirrored, groupByKey(derived, ({ node }) => node.id));
-  const graphCandidates = planned.flatMap(({ plan }) => {
-    const sentenceIds = new Set(plan.derivedGraphNodes.filter(({ nodeKind }) => nodeKind === "sentence")
-      .map(({ nodeId }) => nodeId));
-    return plan.graph.map((input) => ({ input, derivedSentence: sentenceIds.has(input.node_id) }));
-  });
+  const graphCandidates = planned.flatMap(({ plan }) => plan.graph.map((input) => ({
+    input,
+    derivedSentence: plan.shareableSentenceKeys.has(input.node_id),
+  })));
   const graph = [...groupByKey(graphCandidates, ({ input }) => input.node_id).entries()]
     .map(([nodeId, candidates]) => resolveGraphCandidate(candidates, owners.get(nodeId)));
   return {
