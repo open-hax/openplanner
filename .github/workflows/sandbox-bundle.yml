@@ -36,12 +36,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     env:
-      OUT: ${{ runner.temp }}/sandbox-export
-      DEPS_OUT: ${{ runner.temp }}/sandbox-deps
       CLOJURE_TOOLS_VERSION: "1.12.5.1654"
       BABASHKA_VERSION: "1.13.219"
 
     steps:
+      - name: Set bundle paths
+        shell: bash
+        run: |
+          echo "OUT=$RUNNER_TEMP/sandbox-export" >> "$GITHUB_ENV"
+          echo "DEPS_OUT=$RUNNER_TEMP/sandbox-deps" >> "$GITHUB_ENV"
+
       - name: Check out full repository history
         uses: actions/checkout@v4
         with:
@@ -55,7 +59,7 @@ jobs:
           rm -rf "$OUT"
           mkdir -p "$OUT"/{source,runtime,logs,toolchain,metadata}
           repo_name="${GITHUB_REPOSITORY#*/}"
-          git bundle create "$OUT/source/${repo_name}.bundle" --all
+          git bundle create "$OUT/source/${repo_name}.bundle" --all HEAD
           git archive --format=tar.gz --prefix="${repo_name}/" --output="$OUT/source/source.tar.gz" HEAD
           git rev-parse HEAD > "$OUT/metadata/revision.txt"
           git status --short > "$OUT/metadata/worktree.txt"
@@ -130,7 +134,7 @@ jobs:
             node --version
             pnpm --version
             java -version
-            command -v clojure >/dev/null 2>&1 && clojure -Sdescribe || true
+            if command -v clojure >/dev/null 2>&1; then clojure -Sdescribe || true; fi
           } > "$OUT/metadata/tool-versions.txt" 2>&1
 
           cat > "$OUT/manifest.json" <<EOF
@@ -142,10 +146,11 @@ jobs:
             "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "validation": "${{ steps.validate.outcome }}",
             "entrypoint": "pnpm build",
-            "network_required_after_restore": false
+            "network_required_after_restore": true
           }
           EOF
-          (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum) > "$RUNNER_TEMP/sandbox-SHA256SUMS"
+          mv "$RUNNER_TEMP/sandbox-SHA256SUMS" "$OUT/SHA256SUMS"
 
       - name: Package optional dependency cache
         if: github.event_name == 'workflow_dispatch' && inputs.include_dependency_cache
@@ -164,7 +169,8 @@ jobs:
           if [[ -d "$HOME/.gitlibs" ]]; then
             tar -czf "$DEPS_OUT/gitlibs.tar.gz" -C "$HOME" .gitlibs
           fi
-          (cd "$DEPS_OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
+          (cd "$DEPS_OUT" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > "$RUNNER_TEMP/sandbox-deps-SHA256SUMS"
+          mv "$RUNNER_TEMP/sandbox-deps-SHA256SUMS" "$DEPS_OUT/SHA256SUMS"
 
       - name: Upload sandbox bundle
         if: always()
