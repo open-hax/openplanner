@@ -104,22 +104,28 @@
   (or (contains? #{"MongoNetworkError" "MongoNetworkTimeoutError" "MongoServerSelectionError"} (.-name err))
       (contains? #{6 7 89 91} (.-code err))
       (and (fn? (.-hasErrorLabel err)) (.hasErrorLabel err "RetryableReadError"))))
-(defn supplemental-or [req promise-fn fallback]
+(defn required-read [req promise-fn]
   (let [attempt (fn [] (-> (js/Promise.resolve nil) (.then promise-fn)))]
     (-> (attempt)
         (.catch (fn [err]
                   (if (transient-read-error? err)
                     (do (.warn (.-log req) #js {:err err} "transient graph correction read failed; retrying once") (attempt))
                     (js/Promise.reject err))))
-        (.catch (fn [err] (.warn (.-log req) #js {:err err} "graph correction unavailable; retaining reference behavior") fallback)))))
+        (.catch (fn [err]
+                  (.warn (.-log req) #js {:err err} "required graph correction read failed")
+                  (let [failure (js/Error. "Required graph correction read failed")]
+                    (set! (.-statusCode failure) 503)
+                    (set! (.-code failure) "GRAPH_CORRECTION_UNAVAILABLE")
+                    (set! (.-cause failure) err)
+                    (js/Promise.reject failure)))))))
 
 (defn handler [req _reply]
   (let [cfg (request-config req) mongo (.. req -server -mongo)]
     (-> (find-seeds mongo cfg)
         (.then #(traverse mongo cfg %))
-        (.then (fn [state] (let [signal (js/AbortSignal.timeout 1000)] (supplemental-or req #(supplement-cap mongo cfg state signal) state))))
+        (.then (fn [state] (required-read req #(supplement-cap mongo cfg state (js/AbortSignal.timeout 1000)))))
         (.then (fn [state]
                  (-> (hydrate mongo (:ids state))
                      (.then (fn [docs]
-                              (-> (let [signal (js/AbortSignal.timeout 1000)] (supplemental-or req #(find-authors mongo state docs signal) []))
+                              (-> (required-read req #(find-authors mongo state docs (js/AbortSignal.timeout 1000)))
                                   (.then (fn [authors] (data->foreign (render-result cfg state docs authors)))))))))))))

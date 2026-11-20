@@ -40,7 +40,7 @@
     (-> (request base {:seed_node_ids ["topic:stalled"] :max_nodes 1} true "/v1/graph/connections")
         (.then (fn [r] (let [elapsed (- (js/Date.now) start)]
                          (println "STALLED SUPPLEMENT elapsed-ms" elapsed "status" (:status r))
-                         (check! "stalled supplement preserves reference status" 200 (:status r))
+                         (check! "stalled supplement returns error" 503 (:status r))
                          (check! "stalled supplement response bounded" true (< elapsed 3000))
                          (check! "stalled supplement reached isolated server" true (pos? (count @sockets)))))))))
 (defn run-stalled-supplement [base net]
@@ -62,7 +62,7 @@
         (.then (fn [responses]
                  (let [graph-result (aget responses 0) health (aget responses 1) elapsed (- (js/Date.now) start)]
                    (println "APP INFLIGHT elapsed-ms" elapsed "status" (:status graph-result) "closed" (pr-str @closed))
-                   (check! "in-flight supplemental abort preserves reference response" reference graph-result)
+                   (check! "in-flight supplemental abort returns error" 503 (:status graph-result))
                    (check! "concurrent application health succeeds" 200 (.-status health))
                    (check! "concurrent app-pool Mongo ping succeeds" 1 (.-ok (aget responses 2)))
                    (check! "app Mongo pool reports connection closure" true (boolean (some #{"error"} @closed)))
@@ -144,13 +144,13 @@
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-aggregate collection) calls (atom 0)]
                  (set! (.-aggregate collection) (fn [& _] (swap! calls inc)
                    #js {:toArray (fn [] (let [e (js/Error. "synthetic persistent network failure")] (set! (.-name e) "MongoNetworkError") (js/Promise.reject e)))}))
-                 (-> (compare-case base {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 4} "persistent transient failure retains reference response")
+                 (-> (-> (request base {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 4} true "/v1/graph/connections") (.then #(check! "persistent transient failure returns error" [503 "GRAPH_CORRECTION_UNAVAILABLE"] [(:status %) (get-in % [:body :code])])))
                      (.then (fn [] (check! "persistent transient failure attempts at most twice" 2 @calls)))
                      (.finally #(set! (.-aggregate collection) original))))))
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-aggregate collection) calls (atom 0)]
                  (set! (.-aggregate collection) (fn [& _] (swap! calls inc)
                    #js {:toArray (fn [] (let [e (js/Error. "synthetic server timeout")] (set! (.-code e) 50) (js/Promise.reject e)))}))
-                 (-> (compare-case base {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 4} "server timeout retains reference response")
+                 (-> (-> (request base {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 4} true "/v1/graph/connections") (.then #(check! "server timeout returns error" [503 "GRAPH_CORRECTION_UNAVAILABLE"] [(:status %) (get-in % [:body :code])])))
                      (.then (fn [] (check! "server timeout is not retried" 1 @calls)))
                      (.finally #(set! (.-aggregate collection) original))))))
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-aggregate collection)]
@@ -246,6 +246,11 @@
       (.then (fn [] (.insertMany (.collection db "graph_node_embeddings") (clj->js [{:node_id 0 :embedding_model "synthetic" :embedding_dimensions 1 :text "SpecialToken"}
                                                                                      {:node_id "topic:text-hit" :embedding_model "synthetic" :embedding_dimensions 1 :text "SpecialToken"}]))))
       (.then (fn [] (compare-case base {:query "SpecialToken" :lakes ["topic"]} "text index ignores falsy node ids and matches reference")))
+      (.then (fn [] (.insertOne (.collection db "events") (clj->js {:id "devel:token" :kind "discord.message" :ts (js/Date. "2031-01-01T00:00:00Z") :text "SpecialToken"}))))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:disallowed"] :query "SpecialToken" :lakes ["devel"]} "disallowed explicit seed falls through text hits to event regex")))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:disallowed"] :query "a[b[c" :lakes ["devel"]} "disallowed seed and escaped regex match reference")))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:disallowed"] :query "does-not-exist" :lakes ["devel"]} "nonempty query does not use recent fallback")))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:disallowed"] :lakes ["devel"]} "disallowed seed without query uses recent fallback")))
       (.then (fn [] (let [events (.. @active-app -mongo -events) original (.-find events) fallback-calls (atom 0)]
                       (set! (.-find events) (fn [& args]
                         (when (aget (first args) "$or") (swap! fallback-calls inc))
@@ -253,6 +258,11 @@
                       (-> (compare-case base {:query "SpecialToken" :lakes ["topic"] :max_nodes "NaN"} "NaN text-hit response matches reference")
                           (.then (fn [] (check! "NaN text hit avoids regex fallback in both routes" 0 @fallback-calls)))
                           (.finally #(set! (.-find events) original))))))
+      (.then (fn [] (compare-case base {:seed_node_ids [{:id "topic:one"}]} "object seed matches reference error")))
+      (.then (fn [] (compare-case base {:seed_node_ids ["" "  " "topic:one"] :max_nodes 4} "empty and whitespace seed order matches reference")))
+      (.then (fn [] (.insertMany (.collection db "events") (clj->js [{:id "discord:g:c:bad-time" :ts "not-a-date"} {:id "topic:bad-time" :ts "not-a-date"}]))))
+      (.then (fn [] (compare-case base {:seed_node_ids ["discord:g:c:bad-time"] :max_nodes 2} "invalid Discord timestamp full error matches reference")))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:bad-time"] :max_nodes 2} "invalid generic timestamp full error matches reference")))
       (.then (fn [] (compare-case base {:seed_node_ids [42]} "invalid numeric seed matches reference error")))
       (.then (fn [] (compare-case base {:seed_node_ids [nil]} "null seed matches reference error")))
       (.then (fn [] (compare-case base {:seed_node_ids [false]} "false seed matches reference error")))
@@ -263,6 +273,23 @@
       (.then (fn [] (.insertMany (.collection db "events") (clj->js [{:id "topic:alias-a" :extra {:node_id "topic:alias-b" :label "first"}}
                                                                        {:id "topic:alias-b" :extra {:node_id "topic:alias-a" :label "second"}}]))))
       (.then (fn [] (compare-case base {:seed_node_ids ["topic:alias-a" "topic:alias-b"] :max_nodes 3} "hydration aliases match reference")))
+      (.then (fn [] (.insertMany (.collection db "events") (clj->js [{:id "topic:reverse-b" :extra {:node_id "topic:reverse-a" :label "reverse-first"}}
+                                                                       {:id "topic:reverse-a" :extra {:node_id "topic:reverse-b" :label "reverse-second"}}]))))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:reverse-a" "topic:reverse-b"] :max_nodes 3} "reverse hydration collision matches reference")))
+      (.then (fn [] (let [events (.. @active-app -mongo -events) original (.-find events) calls (atom 0)]
+        (set! (.-find events) (fn [& args] (if (aget (first args) "id")
+          (do (swap! calls inc) #js {:toArray (fn [] (js/Promise.reject (js/Error. "synthetic id hydration failure")))})
+          (.apply original events (clj->js args)))))
+        (-> (compare-case base {:seed_node_ids ["topic:alias-a" "topic:alias-b"] :max_nodes 3} "id hydration failure matches reference")
+            (.then (fn [] (check! "id hydration failed once per route" 2 @calls)))
+            (.finally #(set! (.-find events) original))))))
+      (.then (fn [] (let [events (.. @active-app -mongo -events) original (.-find events) calls (atom 0)]
+        (set! (.-find events) (fn [& args] (if (aget (first args) "extra.node_id")
+          (do (swap! calls inc) #js {:toArray (fn [] (js/Promise.reject (js/Error. "synthetic alias hydration failure")))})
+          (.apply original events (clj->js args)))))
+        (-> (compare-case base {:seed_node_ids ["topic:alias-a" "topic:alias-b"] :max_nodes 3} "alias hydration failure matches reference")
+            (.then (fn [] (check! "alias hydration failed once per route" 2 @calls)))
+            (.finally #(set! (.-find events) original))))))
       (.then (fn [] (.insertMany (.collection db "events") (clj->js [{:id "discord:g:c:time-a" :ts (js/Date. "2026-01-01T00:00:00Z") :extra {:guild_id "g" :channel_id "c"}}
                                                                        {:id "discord:g:c:time-b" :ts (js/Date. "2026-01-01T00:00:00Z") :extra {:guild_id "g" :channel_id "c"}}]))))
       (.then (fn [] (compare-case base {:seed_node_ids ["discord:g:c:time-a" "discord:g:c:time-b"] :max_nodes 3} "equal timestamp timeframe matches reference")))
@@ -310,6 +337,36 @@
       (.then (fn [] (.insertMany (.collection db "graph_edges")
                  (clj->js (conj (mapv (fn [i] {:source_node_id "topic:oversat" :target_node_id (str "topic:out-" i) :edge_kind "mentions_topic"}) (range 500))
                                 {:source_node_id "topic:oversat" :target_node_id "topic:desired" :edge_kind "mentions_topic"})))))
+      (.then (fn [] (.insertMany (.collection db "graph_edges")
+                 (clj->js (conj (mapv (fn [i] {:source_node_id "topic:frontier" :target_node_id (str "discord:g:c:off-" i) :edge_kind "edge"}) (range 500))
+                                {:source_node_id "topic:frontier" :target_node_id "topic:reachable" :edge_kind "edge"})))))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:frontier"] :max_nodes 2 :lakes ["topic"]} "mixed-lake 500-edge frontier matches reference")))
+      (.then (fn [] (request base {:seed_node_ids ["topic:frontier"] :max_nodes 2 :lakes ["topic"]} true "/v1/graph/connections")))
+      (.then (fn [r] (check! "saturated disallowed frontier omits 501st target" ["topic:frontier"] (mapv :id (get-in r [:body :nodes])))))
+      (.then (fn [] (.insertMany (.collection db "graph_edges")
+                 (clj->js (into [{:source_node_id "topic:hop-a" :target_node_id "topic:hop-b" :edge_kind "edge"}]
+                   (conj (mapv (fn [i] {:source_node_id "topic:hop-b" :target_node_id (str "discord:g:c:hop-off-" i) :edge_kind "edge"}) (range 500))
+                         {:source_node_id "topic:hop-b" :target_node_id "topic:hop-c" :edge_kind "edge"}))))))
+      (.then (fn [] (let [edges (.. @active-app -mongo -graphEdges) original (.-find edges) queries (atom [])]
+        (set! (.-find edges) (fn [& args] (when (aget (first args) "$or") (swap! queries conj (js->clj (first args))))
+                               (.apply original edges (clj->js args))))
+        (-> (compare-case base {:seed_node_ids ["topic:hop-a"] :max_nodes 3 :lakes ["topic"]} "two-hop saturated frontier matches reference")
+            (.then (fn [] (check! "two-hop frontier query sequence matches" (subvec @queries 0 2) (subvec @queries 2 4))))
+            (.finally #(set! (.-find edges) original))))))
+      (.then (fn [] (.insertMany (.collection db "graph_edges")
+                 (clj->js (into [{:source_node_id "topic:collision||topic:left" :target_node_id "topic:right" :edge_kind "edge" :data {:winner "first"}}
+                                 {:source_node_id "topic:collision" :target_node_id "topic:left||topic:right" :edge_kind "edge" :data {:winner "second"}}]
+                   (conj (mapv (fn [i] {:source_node_id "topic:collision" :target_node_id (str "discord:g:c:collision-off-" i) :edge_kind "edge"}) (range 498))
+                         {:source_node_id "topic:collision" :target_node_id "topic:collision-501" :edge_kind "edge"}))))))
+      (.then (fn [] (compare-case base {:seed_node_ids ["topic:collision||topic:left" "topic:right" "topic:collision" "topic:left||topic:right"] :max_nodes 5 :lakes ["topic"]} "500-row collision ordering full response matches reference")))
+      (.then (fn [] (-> (.find (.collection db "graph_edges") (clj->js {:$or [{:source_node_id {:$in ["topic:collision||topic:left" "topic:right" "topic:collision" "topic:left||topic:right"]}} {:target_node_id {:$in ["topic:collision||topic:left" "topic:right" "topic:collision" "topic:left||topic:right"]}}]})) (.limit 500) (.toArray))))
+      (.then (fn [raw] (let [rows (js->clj raw :keywordize-keys true)
+                             collisions (filter #(some? (get-in % [:data :winner])) rows)]
+                         (println "SATURATED RAW ORDER" (pr-str (mapv #(get-in % [:data :winner]) collisions)) "includes-501" (boolean (some #(= "topic:collision-501" (:target_node_id %)) rows)))
+                         (check! "raw cursor has 500 rows" 500 (count rows))
+                         (-> (request base {:seed_node_ids ["topic:collision||topic:left" "topic:right" "topic:collision" "topic:left||topic:right"] :max_nodes 5 :lakes ["topic"]} true "/v1/graph/connections")
+                             (.then (fn [r] (check! "collision winner follows raw cursor order" (get-in (first collisions) [:data :winner]) (get-in r [:body :edges 0 :data :winner]))
+                                            (check! "selected 501st inserted row follows cursor inclusion" (boolean (some #(= "topic:collision-501" (:target_node_id %)) rows)) (boolean (some #(= "topic:collision-501" (:id %)) (get-in r [:body :nodes]))))))))))
       (.then (fn [] (compare-case base {:seed_node_ids ["topic:oversat"] :max_nodes 3} "500-edge traversal matches reference")))
       (.then (fn [] (request base {:seed_node_ids ["topic:oversat" "topic:desired"] :max_nodes 2} true "/v1/graph/connections")))
       (.then (fn [r] (check! "cap selects desired edge beyond off-selection saturation" 1 (count (get-in r [:body :edges])))
@@ -354,12 +411,11 @@
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-aggregate collection)]
                      (set! (.-aggregate collection) (fn [& _] (throw (js/Error. "synthetic author read failure"))))
                      (-> (request base {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 3} true "/v1/graph/connections")
-                         (.then (fn [r] (check! "author failure preserves exact cap edges" #{["discord:g:c:m" "discord:user:42" "authored_by"] ["discord:g:c:m" "bluesky:user:alice.example" "mentions_bluesky_user"]} (set (map (juxt :source :target :kind) (get-in r [:body :edges]))))
-                                  (check! "author failure leaves profile uncorrected" [] (get-in r [:body :stats :peopleBridges 0 :blueskyProfiles]))))
+                         (.then (fn [r] (check! "author failure returns error" [503 "GRAPH_CORRECTION_UNAVAILABLE"] [(:status r) (get-in r [:body :code])])))
                          (.finally #(set! (.-aggregate collection) original))))))
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-aggregate collection)]
                      (set! (.-aggregate collection) (fn [& _] (throw (js/Error. "synthetic author read failure"))))
-                     (-> (compare-case base {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 4} "author query failure preserves reference response")
+                     (-> (-> (request base {:seed_node_ids ["discord:g:c:m" "discord:user:42" "bluesky:user:alice.example"] :max_nodes 4} true "/v1/graph/connections") (.then #(check! "author query failure returns error" 503 (:status %))))
                          (.finally #(set! (.-aggregate collection) original))))))
       (.then (fn [] (.insertOne (.collection db "graph_edges") (clj->js {:source_node_id "topic:retry-a" :target_node_id "topic:retry-b" :edge_kind "edge"}))))
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-find collection) calls (atom 0)]
@@ -372,26 +428,39 @@
                           (.then (fn [response] (check! "transient edge read retries once" 2 @calls)
                                    (check! "transient edge read recovers edge" 1 (count (get-in response [:body :edges])))))
                           (.finally #(set! (.-find collection) original))))))
+      (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-find collection) calls (atom 0) signals (atom [])]
+                      (set! (.-find collection) (fn [& args]
+                        (swap! calls inc)
+                        (swap! signals conj (.-signal (second args)))
+                        (let [cursor (js-obj)]
+                          (aset cursor "limit" (fn [_] cursor)) (aset cursor "maxTimeMS" (fn [_] cursor))
+                          (aset cursor "toArray" (fn [] (let [e (js/Error. "persistent edge network failure")] (set! (.-name e) "MongoNetworkError") (js/Promise.reject e)))) cursor)))
+                      (-> (request base {:seed_node_ids ["topic:retry-a" "topic:retry-b"] :max_nodes 2} true "/v1/graph/connections")
+                          (.then (fn [r] (check! "persistent edge failure returns error" [503 "GRAPH_CORRECTION_UNAVAILABLE"] [(:status r) (get-in r [:body :code])])
+                                   (check! "persistent edge failure attempts twice" 2 @calls)
+                                   (check! "edge retry uses fresh deadline" true (and (= 2 (count @signals)) (not (identical? (first @signals) (second @signals)))))))
+                          (.finally #(set! (.-find collection) original))))))
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-find collection)]
                       (set! (.-find collection) (fn [& args] (let [filter (first args)]
                         (if (and (.-source_node_id filter) (.-target_node_id filter))
                           (throw (js/Error. "synthetic cap read failure"))
                           (.apply original collection (clj->js args))))))
                       (-> (request base {:seed_node_ids ["discord:g:c:m"] :max_nodes 3} true "/v1/graph/connections")
-                          (.then (fn [r] (check! "cap failure preserves traversal edges" #{["discord:g:c:m" "discord:user:42" "authored_by"] ["discord:g:c:m" "bluesky:user:alice.example" "mentions_bluesky_user"]} (set (map (juxt :source :target :kind) (get-in r [:body :edges]))))
-                                   (check! "cap failure preserves successful author fix" ["alice.example"] (get-in r [:body :stats :peopleBridges 0 :blueskyProfiles]))))
+                          (.then (fn [r] (check! "cap failure returns error" [503 "GRAPH_CORRECTION_UNAVAILABLE"] [(:status r) (get-in r [:body :code])])))
                           (.finally #(set! (.-find collection) original))))))
       (.then (fn [] (test-inflight-supplement base)))
       (.then (fn [] (test-inflight-authors base)))
       (.then (fn [] (test-stalled-supplement base)))
       (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-find collection)]
                      (set! (.-find collection) (fn [& _] (throw (js/Error. "synthetic supplemental read failure"))))
-                     (-> (compare-case base {:seed_node_ids ["topic:error"] :max_nodes 1} "supplemental read failure preserves reference response")
+                     (-> (-> (request base {:seed_node_ids ["topic:error"] :max_nodes 1} true "/v1/graph/connections") (.then #(check! "supplemental read failure returns error" 503 (:status %))))
                          (.finally #(set! (.-find collection) original))))))
-      (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-find collection)]
-                     (set! (.-find collection) (fn [& _] (throw (js/Error. "synthetic graph read failure"))))
+      (.then (fn [] (let [collection (.. @active-app -mongo -graphEdges) original (.-find collection) original-aggregate (.-aggregate collection) finds (atom 0) aggregates (atom 0)]
+                     (set! (.-find collection) (fn [& _] (swap! finds inc) (throw (js/Error. "synthetic graph read failure"))))
+                     (set! (.-aggregate collection) (fn [& args] (swap! aggregates inc) (.apply original-aggregate collection (clj->js args))))
                      (-> (compare-case base {:seed_node_ids ["topic:error"] :max_nodes 2} "graph read failure matches reference")
-                         (.finally #(set! (.-find collection) original))))))))
+                         (.then (fn [] (check! "primary find fails once per route" 2 @finds) (check! "primary failure starts no author lookup" 0 @aggregates)))
+                         (.finally (fn [] (set! (.-find collection) original) (set! (.-aggregate collection) original-aggregate)))))))))
 
 (defn compose-app [modules cfg]
   (let [fastify (.-default (aget modules 3)) app (fastify #js {:logger true :bodyLimit (* 50 1024 1024) :pluginTimeout 120000})
