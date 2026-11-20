@@ -8,11 +8,18 @@
 import { createProtocols } from "./protocol-adapters.js";
 import { upsertGraphEdges, upsertGraphNodeEmbeddings } from "./mongodb.js";
 import type { MongoConnection } from "./mongodb.js";
-import { prepareIndexDocument } from "./indexing.js";
+import {
+  derivedGraphNodeExtra,
+  eventProjectionLabels,
+  planEventGraphProjections,
+  planHotEventProjection,
+  toNullableString as norm,
+  type DerivedGraphNodePlan,
+  type GraphEdgePlan,
+  type GraphEmbeddingInput,
+} from "./embedding-text.js";
 import { indexTextInMongoVectors } from "./mongo-vectors.js";
 import type { EventEnvelopeV1 } from "./types.js";
-import { splitSentences, deduplicateByHash, computeTextHash } from "./sentence-split.js";
-import { formatEmbeddingPassageText } from "./embedding-text.js";
 import { eventMigrationState, OPENPLANNER_SCHEMA_TARGETS } from "./schema-versions.js";
 import type { EmbeddingRuntime } from "./embedding-runtime.js";
 
@@ -46,10 +53,7 @@ export interface IngestResult {
   backgroundIndexing: Promise<void>;
 }
 
-function norm(v: any): string | null {
-  if (v === undefined || v === null) return null;
-  return String(v);
-}
+export { shouldIndexEventHotVectors } from "./embedding-text.js";
 
 export function validateEvent(ev: EventEnvelopeV1) {
   if (!ev || ev.schema !== "openplanner.event.v1") throw new Error("event.schema must be openplanner.event.v1");
@@ -59,34 +63,12 @@ export function validateEvent(ev: EventEnvelopeV1) {
   if (!ev.kind) throw new Error("event.kind required");
 }
 
-function hasIndexableEventText(ev: EventEnvelopeV1): boolean {
-  return typeof ev.text === "string" && ev.text.trim().length > 0;
-}
-
 function labelSlug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 96) || "label";
 }
 
 function graphLabelId(tenantId: string, label: string): string {
   return `label:${tenantId}:${labelSlug(label)}`;
-}
-
-function eventLabels(extra: Record<string, unknown>): string[] {
-  const labels = (extra.openplanner_labels as any)?.labels;
-  if (!Array.isArray(labels)) return [];
-  return [...new Set(labels.map((label) => String(label ?? "").trim()).filter(Boolean))];
-}
-
-export function shouldIndexEventHotVectors(ev: EventEnvelopeV1): boolean {
-  if (!hasIndexableEventText(ev)) return false;
-
-  // graph.node receives dedicated node-embedding materialization below, and
-  // graph.edge text is mostly structural glue (e.g. mentions_web URLs). Running
-  // both through the generic hot vector path just burns response time and can
-  // hold /v1/events open long enough for upstream header timeouts.
-  if (ev.kind === "graph.node" || ev.kind === "graph.edge") return false;
-
-  return true;
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -113,23 +95,8 @@ export async function ingestEvents(ctx: IngestContext, events: EventEnvelopeV1[]
   const ids: string[] = [];
   const acceptedEvents: EventEnvelopeV1[] = [];
   const eventVectorTasks: Array<Promise<void>> = [];
-  const projectedGraphEdges: Array<{
-    source_node_id: string;
-    target_node_id: string;
-    edge_kind: string;
-    layer?: string | null;
-    project?: string | null;
-    source?: string | null;
-    data?: Record<string, unknown> | null;
-    updated_at?: Date;
-  }> = [];
-  const graphNodeEmbeddingInputs = new Map<string, {
-    node_id: string;
-    source_event_id: string;
-    project?: string | null;
-    text: string;
-    chunk_count: number;
-  }>();
+  const projectedGraphEdges: GraphEdgePlan[] = [];
+  const graphNodeEmbeddingInputs = new Map<string, GraphEmbeddingInput>();
 
   const derivedGraphNodeOps: any[] = [];
   const graphLabelNodeOps: any[] = [];
@@ -137,16 +104,7 @@ export async function ingestEvents(ctx: IngestContext, events: EventEnvelopeV1[]
   const queuedGraphLabelIds = new Set<string>();
   const now = new Date();
 
-  const queueDerivedGraphNodeEvent = (params: {
-    id: string;
-    ts: Date;
-    project?: string | null;
-    nodeId: string;
-    nodeKind: string;
-    label: string;
-    preview: string;
-    extra?: Record<string, unknown>;
-  }): void => {
+  const queueDerivedGraphNodeEvent = (params: DerivedGraphNodePlan): void => {
     if (derivedEventIds.has(params.id)) return;
     derivedEventIds.add(params.id);
 
@@ -168,15 +126,7 @@ export async function ingestEvents(ctx: IngestContext, events: EventEnvelopeV1[]
             tags: null,
             text: "",
             attachments: null,
-            extra: {
-              node_id: params.nodeId,
-              node_kind: params.nodeKind,
-              label: params.label,
-              preview: params.preview,
-              content_hash: computeTextHash(params.preview),
-              lake: params.project ?? undefined,
-              ...(params.extra ?? {}),
-            },
+            extra: derivedGraphNodeExtra(params),
             schema_version: OPENPLANNER_SCHEMA_TARGETS.event,
             migration_state: eventMigrationState(now),
             updatedAt: now,
@@ -187,24 +137,6 @@ export async function ingestEvents(ctx: IngestContext, events: EventEnvelopeV1[]
         },
         upsert: true,
       },
-    });
-  };
-
-  const queueNodeEmbedding = (params: {
-    nodeId: string;
-    sourceEventId: string;
-    project?: string | null;
-    text: string;
-    chunkCount?: number;
-  }): void => {
-    const normalized = formatEmbeddingPassageText(params.text);
-    if (!normalized) return;
-    graphNodeEmbeddingInputs.set(params.nodeId, {
-      node_id: params.nodeId,
-      source_event_id: params.sourceEventId,
-      project: params.project ?? null,
-      text: normalized,
-      chunk_count: params.chunkCount ?? 1,
     });
   };
 
@@ -243,7 +175,7 @@ export async function ingestEvents(ctx: IngestContext, events: EventEnvelopeV1[]
 
     ids.push(ev.id);
 
-    const labels = eventLabels(extra);
+    const labels = eventProjectionLabels(extra);
     for (const label of labels) {
       const tenantId = String((extra.openplanner_labels as any)?.tenant_id ?? (extra as any).tenant_id ?? "default").trim() || "default";
       const labelId = graphLabelId(tenantId, label);
@@ -311,208 +243,24 @@ export async function ingestEvents(ctx: IngestContext, events: EventEnvelopeV1[]
       }
     }
 
-    if (ev.kind === "graph.node") {
-      const nodeId = norm(extra.node_id)?.trim() ?? norm((sr as any).message)?.trim() ?? "";
-      const preview = norm(extra.preview)?.trim() ?? "";
-      const directText = norm(ev.text)?.trim() ?? "";
-      const body = directText || preview;
-      if (nodeId && body) {
-        const label = String(extra.label ?? extra.path ?? (sr as any).message ?? nodeId).trim() || nodeId;
-        const prepared = prepareIndexDocument({
-          parentId: nodeId,
-          text: body,
-          extra,
-          forceChunking: false,
-          targetChunkTokens: 32_000,
-          targetChunkChars: 180_000,
-          overlapChars: 1_000,
-        });
+    const projections = planEventGraphProjections(ev);
+    for (const node of projections.derivedGraphNodes) queueDerivedGraphNodeEvent(node);
+    for (const edge of projections.projectedGraphEdges) projectedGraphEdges.push(edge);
+    for (const input of projections.graph) graphNodeEmbeddingInputs.set(input.node_id, input);
 
-        if (prepared.chunkCount <= 1) {
-          queueNodeEmbedding({
-            nodeId,
-            sourceEventId: ev.id,
-            project,
-            text: prepared.normalizedText,
-            chunkCount: 1,
-          });
-        } else {
-          for (const chunk of prepared.chunks) {
-            const chunkLabel = `${label} [chunk ${chunk.chunkIndex + 1}/${chunk.chunkCount}]`;
-            const chunkPreview = chunk.text.slice(0, 800);
-            const chunkEventId = `graph.node:doc_chunk:${chunk.id}`;
-
-            queueDerivedGraphNodeEvent({
-              id: chunkEventId,
-              ts: new Date(ev.ts),
-              project,
-              nodeId: chunk.id,
-              nodeKind: "doc_chunk",
-              label: chunkLabel,
-              preview: chunkPreview,
-              extra: {
-                parent_node_id: nodeId,
-                chunk_index: chunk.chunkIndex,
-                chunk_count: chunk.chunkCount,
-              },
-            });
-
-            projectedGraphEdges.push({
-              source_node_id: nodeId,
-              target_node_id: chunk.id,
-              edge_kind: "contains_chunk",
-              layer: "derived",
-              project,
-              source: "openplanner-derive",
-              data: {
-                parent_node_id: nodeId,
-                chunk_index: chunk.chunkIndex,
-                chunk_count: chunk.chunkCount,
-              },
-              updated_at: new Date(ev.ts),
-            });
-
-            queueNodeEmbedding({
-              nodeId: chunk.id,
-              sourceEventId: ev.id,
-              project,
-              text: chunk.text,
-              chunkCount: chunk.chunkCount,
-            });
-          }
-        }
-
-        const sentenceHashesInDoc = new Set<string>();
-        const sentenceNodeIdsQueued = new Set<string>();
-
-        const sentenceSources = prepared.chunkCount <= 1
-          ? [{ text: prepared.normalizedText }]
-          : prepared.chunks.map((chunk) => ({ text: chunk.text }));
-
-        for (const sourceChunk of sentenceSources) {
-          const sentences = splitSentences(sourceChunk.text);
-          const uniqueSentences = deduplicateByHash(sentences);
-
-          for (const [hash, sent] of uniqueSentences) {
-            if (sent.tokens <= 3) continue;
-            if (sentenceHashesInDoc.has(hash)) continue;
-            sentenceHashesInDoc.add(hash);
-
-            const sentenceNodeId = `${project ?? "devel"}:sentence:${hash}`;
-            const sentenceEventId = `graph.node:sentence:${sentenceNodeId}`;
-
-            if (!sentenceNodeIdsQueued.has(sentenceNodeId)) {
-              sentenceNodeIdsQueued.add(sentenceNodeId);
-              queueDerivedGraphNodeEvent({
-                id: sentenceEventId,
-                ts: new Date(ev.ts),
-                project,
-                nodeId: sentenceNodeId,
-                nodeKind: "sentence",
-                label: sent.sentence.length > 120 ? sent.sentence.slice(0, 117) + "..." : sent.sentence,
-                preview: sent.sentence,
-                extra: {
-                  derived_from_node_id: nodeId,
-                },
-              });
-            }
-
-            projectedGraphEdges.push({
-              source_node_id: nodeId,
-              target_node_id: sentenceNodeId,
-              edge_kind: "contains_sentence",
-              layer: "derived",
-              project,
-              source: "openplanner-derive",
-              data: {
-                sentence_hash: hash,
-              },
-              updated_at: new Date(ev.ts),
-            });
-
-            queueNodeEmbedding({
-              nodeId: sentenceNodeId,
-              sourceEventId: ev.id,
-              project,
-              text: sent.sentence,
-              chunkCount: 1,
-            });
-          }
-        }
-      }
-    }
-
-    // Auto-materialize arbitrary event kinds as graph nodes so the graph
-    // export and graph-weaver can see them without requiring every producer
-    // to emit `kind: "graph.node"`. We preserve the original kind in
-    // `extra.node_kind` and use the event id as the node id.
-    if (ev.kind !== "graph.node" && ev.kind !== "graph.edge" && hasIndexableEventText(ev)) {
-      const nodeId = ev.id;
-      const preview = norm(ev.text)?.trim() ?? "";
-      const derivedEventId = `graph.node:derive:${ev.id}`;
-      const label = String(
-        extra.label ?? (sr as any).message ?? (preview.length > 80 ? `${preview.slice(0, 77)}...` : preview) ?? nodeId,
-      ).trim() || nodeId;
-
-      queueDerivedGraphNodeEvent({
-        id: derivedEventId,
-        ts: new Date(ev.ts),
-        project,
-        nodeId,
-        nodeKind: ev.kind,
-        label,
-        preview,
-        extra: {
-          lake: project ?? undefined,
-          entity_key: ev.id,
-          source_event_id: ev.id,
-          source_kind: ev.kind,
-          ...extra,
-        },
-      });
-
-      queueNodeEmbedding({
-        nodeId,
-        sourceEventId: ev.id,
-        project,
-        text: preview,
-        chunkCount: 1,
-      });
-    }
-
-    if (shouldIndexEventHotVectors(ev)) {
+    const hotInput = planHotEventProjection(ev, labels);
+    if (hotInput) {
       eventVectorTasks.push((async () => {
         try {
-          const embeddingScope = {
-            source: ev.source,
-            kind: ev.kind,
-            project: project ?? undefined,
-          };
-
-          const embeddingFunction = embeddingRuntime.hot.getBackgroundEmbeddingFunction(embeddingScope);
-          const embeddingModel = embeddingRuntime.hot.getModel(embeddingScope);
+          const embeddingFunction = embeddingRuntime.hot.getBackgroundEmbeddingFunction(hotInput.scope);
+          const embeddingModel = embeddingRuntime.hot.getModel(hotInput.scope);
           await withTimeout(indexTextInMongoVectors({
             mongo,
             tier: "hot",
-            parentId: ev.id,
-            text: ev.text!,
-            extra,
-            metadata: {
-              ts: ev.ts,
-              source: ev.source,
-              kind: ev.kind,
-              project: (sr as any).project,
-              session: (sr as any).session,
-              author: author ?? "",
-              role: role ?? "",
-              model: model ?? "",
-              embedding_model: embeddingModel ?? "",
-              search_tier: "hot",
-              visibility: extra.visibility ?? "internal",
-              quality_label: ((extra.openplanner_labels as any)?.quality ?? ""),
-              labels,
-              title: extra.title ?? (sr as any).message ?? ev.id,
-            },
+            parentId: hotInput.parentId,
+            text: hotInput.text,
+            extra: hotInput.extra,
+            metadata: { ...hotInput.metadata, embedding_model: embeddingModel ?? "" },
             embeddingFunction,
           }), 30_000, `event vector index ${ev.id}`);
         } catch (err) {
@@ -543,14 +291,7 @@ export async function ingestEvents(ctx: IngestContext, events: EventEnvelopeV1[]
   const graphNodeEmbeddingTask = graphNodeEmbeddingInputs.size > 0
     ? (async () => {
         try {
-          type GraphNodeEmbeddingInput = {
-            node_id: string;
-            source_event_id: string;
-            project?: string | null;
-            text: string;
-            chunk_count: number;
-          };
-          const groupedByModel = new Map<string, GraphNodeEmbeddingInput[]>();
+          const groupedByModel = new Map<string, GraphEmbeddingInput[]>();
 
           for (const input of graphNodeEmbeddingInputs.values()) {
             const model = embeddingRuntime.hot.getModel({
