@@ -11,6 +11,7 @@
  */
 
 import { MongoClient, Db, Collection, IndexDirection } from "mongodb";
+import { DEFAULT_VECTOR_PARTITIONS_COLLECTION } from "./config.js";
 import { eventMigrationState, OPENPLANNER_SCHEMA_TARGETS, type MigrationState } from "./schema-versions.js";
 
 // Default TTL: 30 days in seconds (disabled if 0)
@@ -138,6 +139,7 @@ export interface MongoConfig {
   compactedCollection: string;
   vectorHotCollection: string;
   vectorCompactCollection: string;
+  readonly vectorPartitionsCollection?: string;
   graphLayoutCollection: string;
   graphNodeEmbeddingCollection: string;
   /** TTL for events in seconds (0 = no TTL) */
@@ -585,7 +587,9 @@ export async function openMongoDB(config: MongoConfig): Promise<MongoConnection>
   const compacted = db.collection<CompactedMemoryDocument>(config.compactedCollection);
   const hotVectors = db.collection<MongoVectorDocument>(config.vectorHotCollection);
   const compactVectors = db.collection<MongoVectorDocument>(config.vectorCompactCollection);
-  const vectorPartitions = db.collection<MongoVectorPartitionDocument>("vector_partitions");
+  const vectorPartitions = db.collection<MongoVectorPartitionDocument>(
+    config.vectorPartitionsCollection ?? DEFAULT_VECTOR_PARTITIONS_COLLECTION,
+  );
   const graphLayoutOverrides = db.collection<GraphLayoutOverrideDocument>(config.graphLayoutCollection);
   const graphNodeEmbeddings = db.collection<GraphNodeEmbeddingDocument>(config.graphNodeEmbeddingCollection);
   const graphSemanticEdges = db.collection<GraphSemanticEdgeDocument>("graph_semantic_edges");

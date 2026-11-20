@@ -46,6 +46,7 @@ export const mongodbPlugin = fp<OpenPlannerConfig>(async (app, cfg) => {
     compactedCollection,
     vectorHotCollection,
     vectorCompactCollection,
+    vectorPartitionsCollection: cfg.mongodb.vectorPartitionsCollection,
     graphLayoutCollection,
     graphNodeEmbeddingCollection,
     eventsTtlSeconds: isNaN(eventsTtlSeconds) ? 0 : eventsTtlSeconds,
@@ -54,7 +55,15 @@ export const mongodbPlugin = fp<OpenPlannerConfig>(async (app, cfg) => {
 
   app.decorate("mongo", mongo);
   app.log.info({ 
-    collections: { events: eventsCollection, compacted: compactedCollection, hotVectors: vectorHotCollection, compactVectors: vectorCompactCollection, graphLayout: graphLayoutCollection, graphNodeEmbeddings: graphNodeEmbeddingCollection },
+    collections: {
+      events: eventsCollection,
+      compacted: compactedCollection,
+      hotVectors: vectorHotCollection,
+      compactVectors: vectorCompactCollection,
+      vectorPartitions: mongo.vectorPartitions.collectionName,
+      graphLayout: graphLayoutCollection,
+      graphNodeEmbeddings: graphNodeEmbeddingCollection,
+    },
     ttl: { events: eventsTtlSeconds || "disabled", compacted: compactedTtlSeconds || "disabled" },
   }, "mongodb ready");
 

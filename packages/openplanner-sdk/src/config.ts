@@ -1,6 +1,8 @@
 import path from "node:path";
 import { parseModelMap, type EmbeddingModelConfig } from "./embedding-models.js";
 
+export const DEFAULT_VECTOR_PARTITIONS_COLLECTION = "vector_partitions";
+
 export type SemanticCompactionConfig = {
   enabled: boolean;
   minEventCount: number;
@@ -18,6 +20,7 @@ export type MongoConfig = {
   compactedCollection: string;
   vectorHotCollection: string;
   vectorCompactCollection: string;
+  readonly vectorPartitionsCollection?: string;
   graphLayoutCollection: string;
   graphNodeEmbeddingCollection: string;
   eventsTtlSeconds?: number;
@@ -102,6 +105,10 @@ export function loadConfig(): OpenPlannerConfig {
     compactedCollection: mustGet("MONGODB_COMPACTED_COLLECTION", "compacted_memories"),
     vectorHotCollection: mustGet("MONGODB_VECTOR_HOT_COLLECTION", "event_chunks"),
     vectorCompactCollection: mustGet("MONGODB_VECTOR_COMPACT_COLLECTION", "compacted_vectors"),
+    vectorPartitionsCollection: mustGet(
+      "MONGODB_VECTOR_PARTITIONS_COLLECTION",
+      DEFAULT_VECTOR_PARTITIONS_COLLECTION,
+    ),
     graphLayoutCollection: mustGet("MONGODB_GRAPH_LAYOUT_COLLECTION", "graph_layout_overrides"),
     graphNodeEmbeddingCollection: mustGet("MONGODB_GRAPH_NODE_EMBEDDING_COLLECTION", "graph_node_embeddings"),
     eventsTtlSeconds: eventsTtlSeconds > 0 ? eventsTtlSeconds : undefined,
