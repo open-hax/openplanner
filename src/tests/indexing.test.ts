@@ -166,6 +166,7 @@ const passage = "This synthetic passage has a stable embedding projection.";
 
 function stored(overrides: Partial<StoredProjectionEvent> = {}): StoredProjectionEvent {
   return {
+    _id: new ObjectId(),
     id: "event:synthetic",
     ts: new Date(timestamp),
     source: "fixture",
@@ -198,6 +199,7 @@ type DerivedTopology = ReturnType<typeof planEventGraphProjections>["derivedGrap
 
 function topologyMirror(derived: DerivedTopology): StoredProjectionEvent {
   return stored({
+    _id: derived.id,
     id: derived.id,
     ts: derived.ts,
     source: "openplanner-derive",
@@ -283,7 +285,25 @@ test("stored topology replay follows ordinary ingestion metadata overrides", () 
   assert.deepEqual(result.sharedGraphSources, []);
 });
 
-test("shared sentence coverage retains both sources and prefers the verified topology owner", () => {
+test("a caller-supplied source name does not give an admitted row mirror provenance", () => {
+  const caller = stored({
+    id: "graph.node:derive:synthetic-authoritative-source",
+    source: "openplanner-derive",
+    kind: "graph.node",
+    extra: { node_id: "node:caller" },
+  });
+  const replay = planStoredEventEmbeddingProjections([caller]);
+  assert.ok(replay.graph.some(({ node_id, source_event_id }) =>
+    node_id === "node:caller" && source_event_id === caller.id));
+});
+
+test("shared sentence coverage retains both sources and prefers the verified topology owner", (t) => {
+  const original = process.env.EMBED_PASSAGE_TEMPLATE;
+  process.env.EMBED_PASSAGE_TEMPLATE = "{text}";
+  t.after(() => {
+    if (original === undefined) delete process.env.EMBED_PASSAGE_TEMPLATE;
+    else process.env.EMBED_PASSAGE_TEMPLATE = original;
+  });
   const first = stored({ id: "event:one", kind: "graph.node", extra: { node_id: "node:one" } });
   const second = stored({ id: "event:two", kind: "graph.node", extra: { node_id: "node:two" } });
   const graph = planEventGraphProjections({
@@ -316,6 +336,25 @@ test("stored replay rejects ambiguous graph ownership and duplicate logical IDs"
   assert.throws(() => planStoredEventEmbeddingProjections([first, first]), /Duplicate stored event identity/);
   assert.throws(() => planStoredEventEmbeddingProjections([stored({ ts: new Date(Number.NaN) })]),
     /Invalid stored event identity/);
+  [{ source: 42 }, { kind: true }].forEach((fields) => {
+    const malformed = { ...stored(), ...fields } as unknown as StoredProjectionEvent;
+    assert.throws(() => planStoredEventEmbeddingProjections([malformed]), /Invalid stored event identity/);
+  });
+  const badText = { ...stored(), text: 42 } as unknown as StoredProjectionEvent;
+  assert.throws(() => planStoredEventEmbeddingProjections([badText]), /Invalid stored event text/);
+});
+
+test("a chunked document retains an explicit parent claim even without a parent vector", () => {
+  const short = stored({ id: "event:short", kind: "graph.node", extra: { node_id: "node:parent" } });
+  const long = stored({
+    ...short,
+    id: "event:long",
+    text: Array.from({ length: 3000 }, () => "Separate synthetic words cause chunking across this document.").join(" "),
+  });
+  const projectedLong = planStoredEventEmbeddingProjections([long]);
+  assert.ok(projectedLong.graph.some(({ chunk_count }) => chunk_count > 1));
+  assert.ok(projectedLong.graph.every(({ node_id }) => node_id !== "node:parent"));
+  assert.throws(() => planStoredEventEmbeddingProjections([short, long]), /Conflicting stored event owners/);
 });
 
 test("an ordinary sentence event cannot claim a generated sentence vector key", () => {
@@ -330,6 +369,9 @@ test("an explicit graph owner remains visible when its own sentence shadows its 
   const sentenceId = `shared-project:sentence:${computeTextHash(passage)}`;
   const shadowed = stored({ id: "event:shadowed", kind: "graph.node", extra: { node_id: sentenceId } });
   assert.throws(() => planStoredEventEmbeddingProjections([document, shadowed]), /Conflicting stored event owners/);
+  assert.throws(() => planStoredEventEmbeddingProjections([{
+    ...shadowed, text: `${passage} A second synthetic sentence changes the direct embedding input.`,
+  }]), /Conflicting stored event owners/);
 });
 
 test("ordinary ingest retains event admission and its graph topology writes", async () => {

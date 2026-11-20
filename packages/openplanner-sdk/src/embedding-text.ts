@@ -134,6 +134,7 @@ interface GraphProjectionPlan {
   readonly projectedGraphEdges: readonly GraphEdgePlan[];
   readonly graph: readonly GraphEmbeddingInput[];
   readonly shareableSentenceKeys: ReadonlySet<string>;
+  readonly explicitNode: { readonly key: string; readonly collidesWithSentence: boolean } | null;
 }
 
 interface DerivedGraphProjection {
@@ -144,6 +145,7 @@ interface DerivedGraphProjection {
 
 const emptyGraphPlan: GraphProjectionPlan = {
   derivedGraphNodes: [], projectedGraphEdges: [], graph: [], shareableSentenceKeys: new Set<string>(),
+  explicitNode: null,
 };
 
 /** Serialize topology metadata exactly as the existing ingestion writer stores it. */
@@ -266,14 +268,14 @@ function planExplicitGraphNode(ev: EventEnvelopeV1, ctx: EventGraphContext): Gra
   const derived = [...chunks, ...sentences];
   const embeddings = [direct, ...derived.map(({ embedding }) => embedding)].filter((input) => input !== null);
   const shareableSentenceKeys = new Set(sentences.map(({ node }) => node.nodeId));
-  // A sentence can shadow its own explicit key under normal last-write-wins.
-  // That key still has explicit provenance when checked across stored sources.
-  if (direct) shareableSentenceKeys.delete(direct.node_id);
+  // Keep the parent claim even when hydration emits only chunk vectors.
+  const collidesWithSentence = shareableSentenceKeys.delete(nodeId);
   return {
     derivedGraphNodes: derived.map(({ node }) => node),
     projectedGraphEdges: derived.map(({ edge }) => edge),
     graph: [...new Map(embeddings.map((input) => [input.node_id, input])).values()],
     shareableSentenceKeys,
+    explicitNode: { key: nodeId, collidesWithSentence },
   };
 }
 
@@ -312,7 +314,7 @@ export function planEventGraphProjections(ev: EventEnvelopeV1): GraphProjectionP
   return shouldIndexEventHotVectors(ev) ? planOrdinaryGraphNode(ev, ctx) : emptyGraphPlan;
 }
 
-export type StoredProjectionEvent = Readonly<Pick<EventDocument,
+export type StoredProjectionEvent = Readonly<{ readonly _id: unknown } & Pick<EventDocument,
   "id" | "ts" | "source" | "kind" | "project" | "session" | "message" | "role" | "author" | "model" | "text" | "extra"
 >>;
 
@@ -320,6 +322,15 @@ const derivedIdentityKeys = [
   "node_id", "node_kind", "label", "preview", "content_hash", "entity_key", "source_event_id", "source_kind",
   "parent_node_id", "chunk_index", "chunk_count", "derived_from_node_id",
 ] as const;
+
+const generatedGraphEventId = /^graph\.node:(?:derive|doc_chunk|sentence):/;
+
+function isStoredTopologyMirror(row: StoredProjectionEvent): boolean {
+  // The derived bulk writer chooses the string storage ID. Normal admission
+  // lets Mongo assign an ObjectId regardless of the caller's source string.
+  return row.kind === "graph.node" && row.source === "openplanner-derive" &&
+    row._id === row.id && generatedGraphEventId.test(row.id);
+}
 
 function matchesDerivedGraphNode(row: StoredProjectionEvent, node: DerivedGraphNodePlan): boolean {
   if (row.id !== node.id || row.text !== "" || row.project !== node.project || row.message !== node.label ||
@@ -329,10 +340,21 @@ function matchesDerivedGraphNode(row: StoredProjectionEvent, node: DerivedGraphN
   return derivedIdentityKeys.every((key) => isDeepStrictEqual(actual?.[key] ?? null, expected[key] ?? null));
 }
 
+function isNonBlankString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isValidStoredTimestamp(value: unknown): value is Date {
+  return value instanceof Date && Number.isFinite(value.getTime());
+}
+
 function storedEventEnvelope(row: StoredProjectionEvent): EventEnvelopeV1 {
-  if (typeof row.id !== "string" || !row.id.trim() || !row.source || !row.kind ||
-      !(row.ts instanceof Date) || !Number.isFinite(row.ts.getTime())) {
+  if (row._id == null || !isNonBlankString(row.id) || !isNonBlankString(row.source) || !isNonBlankString(row.kind) ||
+      !isValidStoredTimestamp(row.ts)) {
     throw new Error("Invalid stored event identity for embedding projection");
+  }
+  if (row.text != null && typeof row.text !== "string") {
+    throw new Error("Invalid stored event text for embedding projection");
   }
   return {
     schema: "openplanner.event.v1",
@@ -359,6 +381,27 @@ interface StoredGraphOrigin {
 interface StoredGraphCandidate {
   readonly input: GraphEmbeddingInput;
   readonly derivedSentence: boolean;
+}
+
+interface PlannedGraphSource {
+  readonly event: EventEnvelopeV1;
+  readonly plan: GraphProjectionPlan;
+}
+
+const conflictingGraphOwners = "Conflicting stored event owners for a graph embedding node";
+
+function verifyExplicitGraphOwners(planned: readonly PlannedGraphSource[]): void {
+  const owners = new Map<string, string>();
+  planned.forEach(({ event, plan }) => {
+    const claim = plan.explicitNode;
+    if (!claim) return;
+    if (claim.collidesWithSentence || owners.has(claim.key)) throw new Error(conflictingGraphOwners);
+    owners.set(claim.key, event.id);
+  });
+  planned.forEach(({ plan }) => plan.graph.forEach(({ node_id, source_event_id }) => {
+    const owner = owners.get(node_id);
+    if (owner && owner !== source_event_id) throw new Error(conflictingGraphOwners);
+  }));
 }
 
 function groupByKey<K, V>(values: readonly V[], key: (value: V) => K): ReadonlyMap<K, readonly V[]> {
@@ -397,7 +440,7 @@ function resolveGraphCandidate(candidates: readonly StoredGraphCandidate[], owne
   const [first] = candidates;
   if (candidates.length === 1) return { input: first.input, shared: null };
   if (!candidates.every((candidate) => sameDerivedSentence(first, candidate))) {
-    throw new Error("Conflicting stored event owners for a graph embedding node");
+    throw new Error(conflictingGraphOwners);
   }
   // Persisted topology identifies the representative where it exists. The
   // fallback sorts logical IDs so Mongo cursor order cannot change ownership.
@@ -419,10 +462,10 @@ export function planStoredEventEmbeddingProjections(rows: readonly StoredProject
     throw new Error("Duplicate stored event identity for embedding projection");
   }
   const events = rows.map((row) => ({ row, event: storedEventEnvelope(row) }));
-  const isMirror = ({ row }: { readonly row: StoredProjectionEvent }) =>
-    row.kind === "graph.node" && row.source === "openplanner-derive";
+  const isMirror = ({ row }: { readonly row: StoredProjectionEvent }) => isStoredTopologyMirror(row);
   const sources = events.filter((entry) => !isMirror(entry));
   const planned = sources.map(({ event }) => ({ event, plan: planEventGraphProjections(event) }));
+  verifyExplicitGraphOwners(planned);
   const derived = planned.flatMap(({ event, plan }) =>
     plan.derivedGraphNodes.map((node) => ({ eventId: event.id, node })),
   );
