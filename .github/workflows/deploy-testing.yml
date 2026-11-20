@@ -86,8 +86,6 @@ jobs:
       - testing-eligibility
     if: ${{ needs.testing-eligibility.outputs.should_deploy == 'true' }}
     steps:
-      # No recursive submodules: the file:/// openplanner-migration-tools
-      # submodule breaks checkout on hosted runners (same as deploy-staging).
       - name: Check out repository
         uses: actions/checkout@v5
         with:

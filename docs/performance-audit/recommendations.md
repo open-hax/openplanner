@@ -372,7 +372,7 @@ Store listener references and remove them before destroy:
 **Priority:** MEDIUM  
 **Effort:** 8 hours
 
-Follow the existing `openplanner-migration-tools` pattern:
+Use numbered migrations:
 1. Create numbered migration files
 2. Add `schema_migrations` tracking table
 3. Remove `ensure-schema!` from startup

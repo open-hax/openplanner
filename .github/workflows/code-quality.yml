@@ -18,9 +18,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # The file:/// openplanner-migration-tools submodule breaks recursive
-      # checkout on hosted runners; init only the GitHub-hosted submodules
-      # the inventory gate needs.
       - name: Init GitHub-hosted submodules for inventory
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"
@@ -47,7 +44,6 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # file:/// submodule breaks recursive checkout on hosted runners.
       - name: Init GitHub-hosted submodules
         run: |
           git config --global url."https://github.com/".insteadOf "git@github.com:"

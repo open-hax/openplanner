@@ -211,7 +211,7 @@ UPDATE memberships SET actor_id = ... WHERE COALESCE(...)
 
 This backfill UPDATE runs every boot even when already complete, rewriting rows and generating WAL traffic.
 
-**Recommended Fix:** Extract schema into proper numbered migration files (follow the existing `openplanner-migration-tools` pattern). Track migration version in a `schema_migrations` table and only run new migrations.
+**Recommended Fix:** Extract schema into numbered migration files. Track applied versions in a `schema_migrations` table and only run new migrations.
 
 ---
 

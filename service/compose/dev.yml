@@ -17,8 +17,6 @@ services:
         condition: service_healthy
       mongo-init:
         condition: service_completed_successfully
-      openplanner-migration-graph:
-        condition: service_healthy
       knoxx-redis:
         condition: service_healthy
     ports:
@@ -55,7 +53,6 @@ services:
       OPENPLANNER_HYDRATION_REDIS_URL: ${OPENPLANNER_HYDRATION_REDIS_URL:-redis://knoxx-redis:6379}
       OPENPLANNER_HYDRATION_LMDB_PATH: ${OPENPLANNER_DEV_HYDRATION_LMDB_PATH:-/app/openplanner-lake/dev/cache/source-hydration-lmdb}
       OPENPLANNER_HYDRATION_CACHE_TTL_MS: ${OPENPLANNER_HYDRATION_CACHE_TTL_MS:-18000000}
-      OPENPLANNER_MIGRATION_GRAPH_URL: ${OPENPLANNER_DEV_MIGRATION_GRAPH_URL:-}
       VEXX_BASE_URL: ${VEXX_BASE_URL:-}
       VEXX_API_KEY: ${VEXX_API_KEY:-}
       VEXX_DEVICE: ${VEXX_DEVICE:-NPU}

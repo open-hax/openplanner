@@ -107,7 +107,6 @@ shim; do not start host services from the Knoxx submodule.
 | HTTP port | `${OPENPLANNER_PORT:-7777}` | `${OPENPLANNER_DEV_PORT:-7778}` |
 | Mongo database | `${MONGODB_DB:-openplanner}` | `${OPENPLANNER_DEV_MONGODB_DB:-openplanner_dev}` |
 | Data dir | `./openplanner-lake` | `./openplanner-lake-dev` |
-| Migration graph | enabled by default | disabled unless `OPENPLANNER_DEV_MIGRATION_GRAPH_URL` is set |
 
 Do not run `openplanner` and `openplanner-dev` as interchangeable endpoints. Point clients at one deliberate base URL, usually:
 

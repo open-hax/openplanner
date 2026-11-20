@@ -60,59 +60,6 @@ services:
     networks:
       default: {}
       ai-infra: {}
-  openplanner-migration-graph:
-
-    build:
-      context: ../../../orgs/open-hax/openplanner/packages/stores/migrations/openplanner-migration-tools
-      dockerfile: Dockerfile
-    cpus: 0.5
-    cpuset: 2-21
-    depends_on:
-      mongodb:
-        condition: service_healthy
-      mongo-init:
-        condition: service_completed_successfully
-    environment:
-      OPENPLANNER_MIGRATION_GRAPH_HOST: 0.0.0.0
-      OPENPLANNER_MIGRATION_GRAPH_PORT: '7789'
-      OPENPLANNER_MONGODB_URI: mongodb://${OPENPLANNER_MONGO_APP_USERNAME:-openplanner}:${OPENPLANNER_MONGO_APP_PASSWORD:-change-me-openplanner-password}@mongodb:27017/${MONGODB_DB:-openplanner}?authSource=${MONGODB_DB:-openplanner}
-      OPENPLANNER_MONGODB_DB: ${MONGODB_DB:-openplanner}
-      OPENPLANNER_MONGO_EVENTS_COLLECTION: ${MONGODB_EVENTS_COLLECTION:-events}
-    expose:
-    - '7789'
-    healthcheck:
-      test:
-      - CMD-SHELL
-      - bash -lc 'cat < /dev/null > /dev/tcp/127.0.0.1/7789'
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    restart: unless-stopped
-    networks:
-      default: {}
-      knoxx-internal: {}
-    user: ${DOCKER_USER:-1000:1000}
-  openplanner-migration-worker:
-    image: curlimages/curl:8.10.1
-    cpus: 0.25
-    cpuset: 2-21
-    depends_on:
-      openplanner-migration-graph:
-        condition: service_healthy
-    entrypoint:
-    - /bin/sh
-    - -lc
-    command:
-    - "while true; do\n  curl -fsS -X POST http://openplanner-migration-graph:7789/v1/jobs/apply-tick \\\n    -H 'content-type: application/json' \\\n    --data \"{\\\"limit\\\":${OPENPLANNER_MIGRATION_APPLY_LIMIT:-10}}\" || true\n  sleep \"${OPENPLANNER_MIGRATION_APPLY_INTERVAL_SECONDS:-60}\"\ndone\n"
-    environment:
-      OPENPLANNER_MIGRATION_APPLY_LIMIT: ${OPENPLANNER_MIGRATION_APPLY_LIMIT:-10}
-      OPENPLANNER_MIGRATION_APPLY_INTERVAL_SECONDS: ${OPENPLANNER_MIGRATION_APPLY_INTERVAL_SECONDS:-60}
-    restart: unless-stopped
-    networks:
-      default: {}
-      knoxx-internal: {}
-    user: ${DOCKER_USER:-1000:1000}
   openplanner-graph-backfill-worker:
     image: curlimages/curl:8.10.1
     cpus: 0.25
@@ -194,8 +141,6 @@ services:
         condition: service_healthy
       mongo-init:
         condition: service_completed_successfully
-      openplanner-migration-graph:
-        condition: service_healthy
       knoxx-redis:
         condition: service_healthy
     # NOTE: do not publish a fixed host port here if you want horizontal scaling.
@@ -239,7 +184,6 @@ services:
       OPENPLANNER_HYDRATION_REDIS_URL: ${OPENPLANNER_HYDRATION_REDIS_URL:-redis://knoxx-redis:6379}
       OPENPLANNER_HYDRATION_LMDB_PATH: ${OPENPLANNER_HYDRATION_LMDB_PATH:-/app/openplanner-lake/cache/source-hydration-lmdb}
       OPENPLANNER_HYDRATION_CACHE_TTL_MS: ${OPENPLANNER_HYDRATION_CACHE_TTL_MS:-18000000}
-      OPENPLANNER_MIGRATION_GRAPH_URL: ${OPENPLANNER_MIGRATION_GRAPH_URL:-http://openplanner-migration-graph:7789}
       GRAPH_SEMANTIC_EDGE_DECAY_INTERVAL_MS: ${GRAPH_SEMANTIC_EDGE_DECAY_INTERVAL_MS:-3600000}
       GRAPH_SEMANTIC_EDGE_DECAY_LIMIT: ${GRAPH_SEMANTIC_EDGE_DECAY_LIMIT:-1000}
       VEXX_BASE_URL: ${VEXX_BASE_URL:-}
