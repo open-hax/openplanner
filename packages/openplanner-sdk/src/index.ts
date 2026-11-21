@@ -24,6 +24,8 @@ export type { ProtocolContext, Protocols, EventAdmission, SessionManagement, Ten
 
 export { ingestEvents, validateEvent, shouldIndexEventHotVectors } from "./ingest.js";
 export type { IngestContext, IngestLogger, IngestResult } from "./ingest.js";
+export { planStoredEventEmbeddingProjections } from "./embedding-text.js";
+export type { GraphEmbeddingInput, StoredProjectionEvent } from "./embedding-text.js";
 
 export { ftsSearchWithQuality, vectorSearchWithQuality, qualityMode } from "./search-core.js";
 export type { SearchContext, QualityMode } from "./search-core.js";
