@@ -246,7 +246,10 @@ function explicitGraphNodeSource(ev: EventEnvelopeV1) {
 
 function planExplicitGraphNode(ev: EventEnvelopeV1, ctx: EventGraphContext): GraphProjectionPlan {
   const { nodeId, body, label, extra } = explicitGraphNodeSource(ev);
-  if (!nodeId || !body) return emptyGraphPlan;
+  if (!nodeId) return emptyGraphPlan;
+  if (!body) {
+    return { ...emptyGraphPlan, explicitNode: { key: nodeId, collidesWithSentence: false } };
+  }
 
   const prepared = prepareIndexDocument({
     parentId: nodeId,

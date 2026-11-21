@@ -357,6 +357,21 @@ test("a chunked document retains an explicit parent claim even without a parent 
   assert.throws(() => planStoredEventEmbeddingProjections([short, long]), /Conflicting stored event owners/);
 });
 
+test("a topology-only graph record retains its node claim without emitting inputs", () => {
+  const extra = { node_id: "node:shared" };
+  const topology = stored({ id: "event:topology", kind: "graph.node", text: null, extra });
+  const withText = stored({ id: "event:with-text", kind: "graph.node", extra });
+  const ordinary = planEventGraphProjections({ ...envelope, kind: "graph.node", text: undefined, extra });
+  assert.deepEqual(ordinary.derivedGraphNodes, []);
+  assert.deepEqual(ordinary.projectedGraphEdges, []);
+  assert.deepEqual(ordinary.graph, []);
+  assert.deepEqual(planStoredEventEmbeddingProjections([topology]), {
+    hot: [], graph: [], sharedGraphSources: [],
+  });
+  assert.throws(() => planStoredEventEmbeddingProjections([topology, withText]), /Conflicting stored event owners/);
+  assert.throws(() => planStoredEventEmbeddingProjections([withText, topology]), /Conflicting stored event owners/);
+});
+
 test("an ordinary sentence event cannot claim a generated sentence vector key", () => {
   const document = stored({ id: "event:document", kind: "graph.node", extra: { node_id: "node:document" } });
   const sentenceId = `shared-project:sentence:${computeTextHash(passage)}`;
