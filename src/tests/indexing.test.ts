@@ -297,6 +297,43 @@ test("a caller-supplied source name does not give an admitted row mirror provena
     node_id === "node:caller" && source_event_id === caller.id));
 });
 
+test("restored direct graph text remains authoritative alongside a verified topology mirror", () => {
+  const caller = stored({
+    _id: "graph.node:derive:restored-caller",
+    id: "graph.node:derive:restored-caller",
+    source: "openplanner-derive",
+    kind: "graph.node",
+    extra: { node_id: "node:restored" },
+  });
+  const source = stored({ _id: envelope.id });
+  const [derived] = planEventGraphProjections(envelope).derivedGraphNodes;
+  assert.ok(derived);
+  const mirror = topologyMirror(derived);
+  const expected = planStoredEventEmbeddingProjections([{ ...caller, _id: new ObjectId() }, source]);
+  assert.deepEqual(planStoredEventEmbeddingProjections([caller, mirror, source]), expected);
+  assert.deepEqual(planStoredEventEmbeddingProjections([mirror, caller, source]), expected);
+  assert.ok(expected.graph.some(({ node_id, source_event_id }) =>
+    node_id === "node:restored" && source_event_id === caller.id));
+});
+
+test("blank reserved topology requires the derived writer envelope and owner evidence", () => {
+  const [derived] = planEventGraphProjections({
+    ...envelope, source_ref: { ...envelope.source_ref, project: undefined },
+  }).derivedGraphNodes;
+  assert.ok(derived);
+  const mirror = topologyMirror(derived);
+  const source = stored({ _id: envelope.id, project: null });
+  const expected = planStoredEventEmbeddingProjections([source]);
+  assert.deepEqual(planStoredEventEmbeddingProjections([source, mirror]), expected);
+  [{ ...mirror, text: null }, { ...mirror, role: "assistant" }].forEach((ambiguous) => {
+    assert.throws(() => planStoredEventEmbeddingProjections([source, ambiguous]), /lacks a unique verified source owner/);
+  });
+  const restored = Object.fromEntries(Object.entries(mirror).filter(([, value]) => value != null));
+  assert.deepEqual(planStoredEventEmbeddingProjections([source, restored as StoredProjectionEvent]), expected);
+  const mixed = { ...mirror, text: passage };
+  assert.throws(() => planStoredEventEmbeddingProjections([source, mixed]), /Conflicting stored event owners/);
+});
+
 test("shared sentence coverage retains both sources and prefers the verified topology owner", (t) => {
   const original = process.env.EMBED_PASSAGE_TEMPLATE;
   process.env.EMBED_PASSAGE_TEMPLATE = "{text}";

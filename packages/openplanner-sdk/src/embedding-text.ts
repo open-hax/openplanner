@@ -328,16 +328,18 @@ const derivedIdentityKeys = [
 
 const generatedGraphEventId = /^graph\.node:(?:derive|doc_chunk|sentence):/;
 
-function isStoredTopologyMirror(row: StoredProjectionEvent): boolean {
-  // The derived bulk writer chooses the string storage ID. Normal admission
-  // lets Mongo assign an ObjectId regardless of the caller's source string.
+function isStoredTopologyCandidate(row: StoredProjectionEvent): boolean {
+  // Kafka replay and JSONL import also assign the logical ID as the storage ID.
+  // The derived writer never stores direct text. Keep blank candidates apart
+  // until the stored writer envelope and a regenerated owner both match.
   return row.kind === "graph.node" && row.source === "openplanner-derive" &&
-    row._id === row.id && generatedGraphEventId.test(row.id);
+    row._id === row.id && generatedGraphEventId.test(row.id) && !isNonBlankString(row.text);
 }
 
 function matchesDerivedGraphNode(row: StoredProjectionEvent, node: DerivedGraphNodePlan): boolean {
-  if (row.id !== node.id || row.text !== "" || row.project !== node.project || row.message !== node.label ||
-      row.ts.getTime() !== node.ts.getTime()) return false;
+  const hasSourceMetadata = [row.session, row.role, row.author, row.model].some((value) => value != null);
+  if (row.id !== node.id || row.text !== "" || hasSourceMetadata || (row.project ?? null) !== node.project ||
+      row.message !== node.label || row.ts.getTime() !== node.ts.getTime()) return false;
   const actual = row.extra as Readonly<Record<string, unknown>> | null;
   const expected = derivedGraphNodeExtra(node);
   return derivedIdentityKeys.every((key) => isDeepStrictEqual(actual?.[key] ?? null, expected[key] ?? null));
@@ -459,21 +461,21 @@ function resolveGraphCandidate(candidates: readonly StoredGraphCandidate[], owne
  * can share a vector key. This function has no store or admission capabilities.
  */
 export function planStoredEventEmbeddingProjections(rows: readonly StoredProjectionEvent[]) {
-  // Mongo assigns storage IDs during admission. Projection identity uses the
-  // logical event ID shared with the normal ingest projection.
+  // Projection identity uses the logical event ID shared with ingest. Native
+  // admission and the restore paths may give that event different storage IDs.
   if (new Set(rows.map(({ id }) => id)).size !== rows.length) {
     throw new Error("Duplicate stored event identity for embedding projection");
   }
   const events = rows.map((row) => ({ row, event: storedEventEnvelope(row) }));
-  const isMirror = ({ row }: { readonly row: StoredProjectionEvent }) => isStoredTopologyMirror(row);
-  const sources = events.filter((entry) => !isMirror(entry));
+  const isTopologyCandidate = ({ row }: { readonly row: StoredProjectionEvent }) => isStoredTopologyCandidate(row);
+  const sources = events.filter((entry) => !isTopologyCandidate(entry));
   const planned = sources.map(({ event }) => ({ event, plan: planEventGraphProjections(event) }));
   verifyExplicitGraphOwners(planned);
   const derived = planned.flatMap(({ event, plan }) =>
     plan.derivedGraphNodes.map((node) => ({ eventId: event.id, node })),
   );
-  const mirrored = events.filter(isMirror).map(({ row }) => row);
-  const owners = verifiedDerivedOwners(mirrored, groupByKey(derived, ({ node }) => node.id));
+  const mirrorCandidates = events.filter(isTopologyCandidate).map(({ row }) => row);
+  const owners = verifiedDerivedOwners(mirrorCandidates, groupByKey(derived, ({ node }) => node.id));
   const graphCandidates = planned.flatMap(({ plan }) => plan.graph.map((input) => ({
     input,
     derivedSentence: plan.shareableSentenceKeys.has(input.node_id),
